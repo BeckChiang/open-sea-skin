@@ -367,11 +367,17 @@ const oceanColor = Fn(() => {
   const moonNdH = max(dot(N, moonH), 0);
   const moonSheen = vec3(0.62, 0.74, 1.0).mul(uMoonVisible)
     .mul(pow(moonNdH, 420).mul(1.7).add(pow(moonNdH, 36).mul(0.07)));
-  // starlight: a faint broad term that never fully disappears at night
-  col.addAssign(uShallowColor.mul(uNightF).mul(0.55));
+  // starlight haze: only at the grazing angle, where a real night sea picks up
+  // the whole sky. A flat term here washed the swell out into a milky fog as
+  // soon as the waves started moving.
+  const ndv = max(dot(N, V), 0);
+  const grazing = pow(float(1).sub(ndv), 2);
+  col.addAssign(uShallowColor.mul(uNightF).mul(grazing).mul(0.9));
   col.addAssign(spec);
   col.addAssign(moonSheen);
-  col.assign(mix(col, vec3(0.82, 0.88, 0.90), foam));
+  // foam picks up the sky, so a night sea shows dark foam instead of the
+  // daytime white that read as fog once the swell started breaking everywhere
+  col.assign(mix(col, vec3(0.82, 0.88, 0.90).mul(uSkyLight.mul(0.78).add(0.16)), foam));
 
   const horizonFade = smoothstep(150, 290, dist);
   col.assign(mix(col, uHorizonColor, horizonFade));
@@ -1018,7 +1024,7 @@ async function boot() {
     scene.add(sky);
 
     // boats live only in skin mode: they represent the running subagents
-    if (SKIN) boats = createBoats(scene);
+    if (SKIN) boats = createBoats(scene, camera);
 
     // real constellation dome on top of the shader's faint star haze
     if (SKIN) {
@@ -1150,21 +1156,31 @@ const BOAT_MAX = 12;
 // One hull always stays on the water: with no subagent running an empty sea
 // reads as "the fleet feature is broken", not as "no work in progress".
 const BOAT_BASE = 1;
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+// Boats close enough to overlap get pushed apart by this much, in world units.
+const BOAT_MIN_SEP = 3.4;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
+// camera the fleet is anchored to; set when the boats are created
+let boatCamera = null;
 const boatFade = new Float32Array(BOAT_MAX);
-// Fixed scatter so a boat keeps its spot between frames; golden-angle spread
-// keeps them from lining up as the count changes.
-const boatSlots = Array.from({ length: BOAT_MAX }, (_, index) => {
-  const radius = 12 + ((index * 11.3) % 30);
-  const angle = index * GOLDEN_ANGLE + 0.9;
+// A boat cruises inside the belt of sea the camera is actually looking at:
+// an absolute berth slides out of frame as the camera orbits and reads as
+// "the boat sailed off for good". Each boat keeps a lane, a heading and a slow
+// in/out drift, and turns around at the edge of the belt instead of leaving.
+const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
+  const spread = index / (BOAT_MAX - 1);
+  const distance = 16 + ((index * 7.3) % 15);
   return {
-    // keep every berth in front of the default camera (it sits at +z)
-    x: Math.cos(angle) * radius * 0.85,
-    z: -4 - Math.abs(Math.sin(angle)) * radius,
-    yaw: (index * 1.13) % (Math.PI * 2),
-    lag: index * 0.37,
+    lateral: (spread - 0.5) * 1.4,
+    base: distance,
+    distance,
+    speed: 0.14 + ((index * 0.09) % 0.2),
+    dir: index % 2 === 0 ? 1 : -1,
+    phase: index * 1.7,
+    // separation pushes accumulate here and decay, so boats ease apart instead
+    // of snapping every frame
+    pushX: 0,
+    pushZ: 0,
   };
 });
 
@@ -1194,7 +1210,8 @@ function seaStateAt(x, z, time, sea) {
 
 let boats = null;
 
-function createBoats(scene) {
+function createBoats(scene, cam) {
+  boatCamera = cam;
   const hullGeometry = new THREE.BoxGeometry(1.5, 0.32, 0.46);
   hullGeometry.translate(0, 0.1, 0);
   const mastGeometry = new THREE.BoxGeometry(0.05, 1.25, 0.05);
@@ -1239,25 +1256,103 @@ const BOAT_UP = new THREE.Vector3(0, 1, 0);
 const boatNormal = new THREE.Vector3();
 const boatTilt = new THREE.Quaternion();
 const boatYaw = new THREE.Quaternion();
+const boatForward = new THREE.Vector3();
+const boatRight = new THREE.Vector3();
+const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0 }));
+
+// Flat forward/right pair: the fleet rides the horizontal plane, so pitch is
+// handled by the swell normal instead of the camera's downward tilt.
+function boatAxes() {
+  if (boatCamera) boatCamera.getWorldDirection(boatForward);
+  else boatForward.set(0, 0, -1);
+  boatForward.y = 0;
+  if (boatForward.lengthSq() < 1e-6) boatForward.set(0, 0, -1);
+  boatForward.normalize();
+  boatRight.crossVectors(boatForward, BOAT_UP).normalize();
+}
 
 function updateBoats(dt) {
   if (!boats) return;
-  let active = 0;
+  boatAxes();
+  const originX = boatCamera ? boatCamera.position.x : 0;
+  const originZ = boatCamera ? boatCamera.position.z : 17;
+  const time = uTime.value;
+  let placedCount = 0;
+
   for (let index = 0; index < BOAT_MAX; index += 1) {
     const want = index < boatTarget ? 1 : 0;
     boatFade[index] += (want - boatFade[index]) * Math.min(1, dt * 2.6);
-    if (want === 0 && boatFade[index] < 0.01) boatFade[index] = 0;
+    if (want === 0 && boatFade[index] < 0.01) {
+      boatFade[index] = 0;
+      boatCruise[index].pushX = 0;
+      boatCruise[index].pushZ = 0;
+      continue;
+    }
     const fade = boatFade[index];
     if (fade <= 0) continue;
 
-    const slot = boatSlots[index];
-    const surface = seaStateAt(slot.x, slot.z, uTime.value - slot.lag, uSea.value);
+    const lane = boatCruise[index];
+    lane.lateral += lane.dir * lane.speed * dt;
+    if (lane.lateral > 0.95) { lane.lateral = 0.95; lane.dir = -1; }
+    if (lane.lateral < -0.95) { lane.lateral = -0.95; lane.dir = 1; }
+    lane.distance = lane.base + Math.sin(time * 0.045 + lane.phase) * 3.5;
+    lane.pushX *= 0.92;
+    lane.pushZ *= 0.92;
+
+    const across = lane.lateral * lane.distance * 0.5;
+    const placed = boatPlaced[placedCount];
+    placed.x = originX + boatForward.x * lane.distance + boatRight.x * across + lane.pushX;
+    placed.z = originZ + boatForward.z * lane.distance + boatRight.z * across + lane.pushZ;
+    placed.fade = fade;
+    placedCount += 1;
+  }
+
+  // Two relaxation passes are enough for 12 hulls and keep the cost at O(n²)
+  // with n = 12; pushes go back into the lane state so the fleet eases apart.
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (let i = 0; i < placedCount; i += 1) {
+      for (let j = i + 1; j < placedCount; j += 1) {
+        const a = boatPlaced[i];
+        const b = boatPlaced[j];
+        let dx = a.x - b.x;
+        let dz = a.z - b.z;
+        let distance = Math.hypot(dx, dz);
+        if (distance >= BOAT_MIN_SEP) continue;
+        if (distance < 1e-3) {
+          dx = Math.cos(i * 2.1);
+          dz = Math.sin(i * 2.1);
+          distance = 1;
+        }
+        const push = (BOAT_MIN_SEP - distance) / 2;
+        const ux = (dx / distance) * push;
+        const uz = (dz / distance) * push;
+        const laneA = boatCruise[i];
+        const laneB = boatCruise[j];
+        laneA.pushX += ux;
+        laneA.pushZ += uz;
+        laneB.pushX -= ux;
+        laneB.pushZ -= uz;
+        a.x += ux;
+        a.z += uz;
+        b.x -= ux;
+        b.z -= uz;
+      }
+    }
+  }
+
+  let active = 0;
+  for (let index = 0; index < placedCount; index += 1) {
+    const placed = boatPlaced[index];
+    const surface = seaStateAt(placed.x, placed.z, time, uSea.value);
     boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
     boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
-    boatYaw.setFromAxisAngle(BOAT_UP, slot.yaw);
+    // heading follows the lane direction, so a boat reads as sailing somewhere
+    const lane = boatCruise[index];
+    const heading = Math.atan2(boatRight.x * lane.dir, boatRight.z * lane.dir);
+    boatYaw.setFromAxisAngle(BOAT_UP, heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
-    boatDummy.position.set(slot.x, surface.y - 0.08, slot.z);
-    boatDummy.scale.setScalar((0.5 + 0.5 * fade) * 2.2);
+    boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
+    boatDummy.scale.setScalar((0.5 + 0.5 * placed.fade) * 2.2);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);

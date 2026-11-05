@@ -38,7 +38,8 @@ for (const banner of ['SECTION 10 · FLEET', 'SECTION 11 · STAR DOME']) {
 
 test('boat and star state is declared at module scope', () => {
   const names = [
-    'BOAT_MAX', 'GOLDEN_ANGLE', 'boatTarget', 'boatShown', 'boatFade', 'boatSlots',
+    'BOAT_MAX', 'BOAT_BASE', 'BOAT_MIN_SEP', 'boatTarget', 'boatShown', 'boatFade',
+    'boatCamera', 'boatCruise', 'boatPlaced', 'boatAxes',
     'starLayer', 'STAR_RADIUS', 'uStarGlow', 'uMeteorGlow',
     'createBoats', 'updateBoats', 'createStarLayer', 'updateStarDome',
   ]

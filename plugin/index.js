@@ -41,6 +41,49 @@ function readService(ctx, key) {
 }
 
 const STATUS_RUNNING = 'running'
+// The skin polls the roster every 4 s; one observation per child per window
+// keeps a long-lived child from being folded over and over.
+const RUNNING_TTL_MS = 2500
+const OBSERVE_LIMIT = 24
+const runningCache = new Map()
+
+function disposeObservation(observation) {
+  if (!observation) return
+  try {
+    const asyncDispose = observation[Symbol.asyncDispose]
+    if (typeof asyncDispose === 'function') {
+      Promise.resolve(asyncDispose.call(observation)).catch(() => {})
+      return
+    }
+    const dispose = observation[Symbol.dispose]
+    if (typeof dispose === 'function') dispose.call(observation)
+    else if (typeof observation.dispose === 'function') observation.dispose()
+  } catch {}
+}
+
+// A child session is "running" while it has an open turn, and subagentTiming
+// is exactly that: `active` is present until the child reaches turn/end. The
+// catalog entry carries no running flag, and the parent's own team membership
+// is not a child, so neither can be counted directly.
+async function childRunning(ctx, childId, signal) {
+  const now = Date.now()
+  const cached = runningCache.get(childId)
+  if (cached !== undefined && now - cached.at < RUNNING_TTL_MS) return cached.running
+  const query = readService(ctx, 'sessionQuery')
+  if (!query || typeof query.observeSession !== 'function') return false
+  let observation
+  try {
+    observation = await query.observeSession(childId, { signal, projectionMode: 'all' })
+    const timing = observation?.projections?.values?.subagentTiming
+    const running = timing !== undefined && timing !== null && timing.active !== undefined
+    runningCache.set(childId, { running, at: now })
+    return running
+  } catch {
+    return false
+  } finally {
+    disposeObservation(observation)
+  }
+}
 
 function describeShip(entry, fallbackId) {
   const id = entry?.sessionId ?? entry?.id ?? entry?.childId ?? fallbackId ?? null
@@ -62,26 +105,40 @@ async function serveFleet(ctx, req, res) {
     running: 0,
     ships: [],
     children: [],
+    childStates: [],
     members: [],
   }
   try {
     const subagents = readService(ctx, 'subagents')
     const agents = readService(ctx, 'agents')
     const teams = readService(ctx, 'agentTeams')
+    const query = readService(ctx, 'sessionQuery')
     payload.services = {
       subagents: Boolean(subagents),
+      sessionQuery: Boolean(query),
       agents: Boolean(agents),
       agentTeams: Boolean(teams),
     }
 
     if (sessionId && subagents && typeof subagents.listChildren === 'function') {
-      const listed = await subagents.listChildren(sessionId, AbortSignal.timeout(2500))
-      const list = await listed
-      payload.children = Array.isArray(list)
-        ? list.slice(0, 40).map((entry, index) => describeShip(entry, `child-${index}`))
-        : []
+      const signal = AbortSignal.timeout(2500)
+      const listed = await subagents.listChildren(sessionId, signal)
+      const entries = Array.isArray(listed) ? listed.slice(0, 40) : []
+      payload.children = entries.map((entry, index) => describeShip(entry, `child-${index}`))
+      payload.childStates = await Promise.all(
+        payload.children.slice(0, OBSERVE_LIMIT).map(async (child) => ({
+          id: child.id,
+          title: child.title,
+          running: child.id ? await childRunning(ctx, child.id, signal) : false,
+        })),
+      )
+      payload.ships = payload.childStates
+        .filter((state) => state.running && state.id)
+        .map((state) => ({ id: state.id, title: state.title, status: STATUS_RUNNING }))
     }
 
+    // Members stay in the payload for diagnosis only: the list contains the
+    // parent agent itself, which would count as one phantom boat forever.
     if (sessionId && teams && agents && typeof agents.get === 'function'
       && typeof teams.listMembers === 'function') {
       const agent = agents.get(sessionId)
@@ -94,16 +151,6 @@ async function serveFleet(ctx, req, res) {
       }
     }
 
-    // one boat per distinct running worker: a teammate can show up in both
-    // lists, so dedupe by id before counting
-    const seen = new Set()
-    for (const ship of [...payload.children, ...payload.members]) {
-      if (ship.status !== STATUS_RUNNING) continue
-      const key = ship.id ?? ship.title
-      if (!key || seen.has(key)) continue
-      seen.add(key)
-      payload.ships.push(ship)
-    }
     payload.running = payload.ships.length
     payload.ok = true
   } catch (error) {
