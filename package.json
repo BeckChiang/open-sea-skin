@@ -1,6 +1,6 @@
 {
   "name": "open-sea-skin",
-  "version": "1.2.7",
+  "version": "1.3.0",
   "type": "module",
   "description": "实时海洋皮肤 · Realtime ocean theme for DeepSeek Harness Desktop and Web",
   "repository": {
@@ -32,6 +32,7 @@
     "cordis.patch.yml",
     "native-dist/loader.js",
     "native-dist/ocean.js",
+    "native-dist/solar.js",
     "native-dist/skin.html",
     "native-dist/styles.css",
     "native-dist/vendor/**/*",
