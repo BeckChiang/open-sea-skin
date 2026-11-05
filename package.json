@@ -42,7 +42,9 @@
     "README.md",
     "README.zh.md",
     "README.en.md",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "native-dist/sky-astro.js",
+    "native-dist/stars-data.js"
   ],
   "dsh": {
     "bundle": {

@@ -25,6 +25,8 @@ const COPIES = [
   // Optional helper modules: copied when present, never required.
   ['shared/solar.js', 'native-dist/solar.js'],
   ['shared/sky.js', 'native-dist/sky.js'],
+  ['shared/sky-astro.js', 'native-dist/sky-astro.js'],
+  ['shared/stars-data.js', 'native-dist/stars-data.js'],
 ]
 
 let drifted = false
@@ -33,7 +35,8 @@ for (const [from, to] of COPIES) {
   try {
     source = await readFile(join(root, from))
   } catch (error) {
-    if (error?.code === 'ENOENT' && (from === 'shared/solar.js' || from === 'shared/sky.js')) continue
+    const optional = ['shared/solar.js', 'shared/sky.js', 'shared/sky-astro.js', 'shared/stars-data.js'].includes(from)
+    if (error?.code === 'ENOENT' && optional) continue
     throw error
   }
   let current = null

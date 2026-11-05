@@ -8,13 +8,16 @@
 //
 // No three.js dependency: imported by the renderer and unit tested directly.
 
+// Starlit night. The sea keeps enough lift to stay legible as water (the moon
+// sheen in ocean.js is what makes it read as a surface); the horizon carries a
+// faint airglow. Both stay >10x darker than DUSK — see tests/sky.test.mjs.
 export const NIGHT = {
-  zenith: [0.004, 0.008, 0.026],
-  horizon: [0.012, 0.03, 0.075],
+  zenith: [0.006, 0.012, 0.032],
+  horizon: [0.016, 0.042, 0.1],
   sun: [0.0, 0.0, 0.0],
   sunIntensity: 0,
-  deep: [0.002, 0.008, 0.018],
-  shallow: [0.006, 0.022, 0.04],
+  deep: [0.01, 0.024, 0.045],
+  shallow: [0.024, 0.055, 0.085],
 };
 
 export const DUSK = {

@@ -18,6 +18,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     panel: '__open-sea-skin-panel__',
   });
 
+  // Host half of the skin: live roster of running subagents (one boat each).
+  const FLEET_PATH = '/open-sea-skin/fleet';
+
   const DEFAULTS = Object.freeze({
     enabled: true,
     sea: 45,
@@ -40,6 +43,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     colCenter: Object.freeze({ on: true, level: 'medium' }),
     colRight: Object.freeze({ on: true, level: 'weak' }),
     perf: false,
+    boats: true,
   });
 
   // Blur strength per column, sent to the ocean as a 0..1 weight.
@@ -63,6 +67,14 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secSkin: '皮肤',
       secWave: '波浪',
       secSun: '日照',
+      secBoat: '船',
+      boats: '显示船只',
+      boatNote: '船的数量等于当前正在运行的子智能体，随进程增减。',
+      boatIdle: '当前没有运行中的子智能体',
+      boatCount: '正在运行 {n} 个子智能体',
+      boatLoading: '读取中…',
+      boatOffline: '读不到子智能体列表（接口未启用？）',
+      boatOff: '已关闭船只',
       secGlass: '毛玻璃',
       waveSource: '驱动来源',
       manualSea: '手动波浪',
@@ -109,6 +121,14 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secSkin: 'Skin',
       secWave: 'Waves',
       secSun: 'Sunlight',
+      secBoat: 'Boats',
+      boats: 'Show boats',
+      boatNote: 'One boat per running subagent; the fleet follows them live.',
+      boatIdle: 'No subagent running right now',
+      boatCount: '{n} subagent(s) running',
+      boatLoading: 'Reading…',
+      boatOffline: 'Subagent roster unavailable (endpoint off?)',
+      boatOff: 'Boats off',
       secGlass: 'Frosted glass',
       waveSource: 'Driven by',
       manualSea: 'Manual sea state',
@@ -199,6 +219,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       colCenter: normalizeColumn(source.colCenter, DEFAULTS.colCenter),
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
       perf: source.perf === true,
+      boats: source.boats !== false,
     };
   }
 
@@ -507,6 +528,59 @@ ${blurCss(state)}`;
       post({ type: 'oss-glass', mode: state.glassMode, perf: state.perf, rects: active ? measureColumns() : [] });
     };
 
+    // ---- fleet: one boat per running subagent -------------------------------
+    let fleetTimer = 0;
+    let fleetInFlight = false;
+    let fleetCount = -1;
+
+    const boatOutEl = () => document.getElementById(`${IDS.panel}-${'boat-out'}`);
+
+    const postFleet = (count) => {
+      const shown = state.boats && state.enabled ? count : 0;
+      if (shown === fleetCount) return;
+      fleetCount = shown;
+      post({ type: 'oss-fleet', count: shown });
+    };
+
+    const setBoatNote = (text) => {
+      const el = boatOutEl();
+      if (el) el.textContent = text;
+    };
+
+    const pollFleet = async () => {
+      if (!state.boats || fleetInFlight) return;
+      const snapshot = readMetrics();
+      const sessionId = snapshot && snapshot.sessionId;
+      if (!sessionId) {
+        setBoatNote(copy.boatLoading);
+        return;
+      }
+      fleetInFlight = true;
+      try {
+        const response = await fetch(`${FLEET_PATH}?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+        const data = await response.json();
+        const count = Math.max(0, Math.min(12, Number(data && data.running) || 0));
+        postFleet(count);
+        if (data && data.ok === true) setBoatNote(count > 0 ? copy.boatCount.replace('{n}', String(count)) : copy.boatIdle);
+        else setBoatNote(`${copy.boatOffline} ${data && data.error ? `(${data.error})` : ''}`.trim());
+      } catch {
+        setBoatNote(copy.boatOffline);
+      } finally {
+        fleetInFlight = false;
+      }
+    };
+
+    const startFleetEngine = () => {
+      stopFleetEngine();
+      void pollFleet();
+      fleetTimer = window.setInterval(() => { void pollFleet(); }, 4000);
+    };
+
+    const stopFleetEngine = () => {
+      if (fleetTimer) window.clearInterval(fleetTimer);
+      fleetTimer = 0;
+    };
+
     let waveTimer = 0;
     let glassTimer = 0;
     let seaValue = state.sea;
@@ -651,6 +725,7 @@ ${blurCss(state)}`;
         postGlass();
         postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         startWaveEngine();
+        startFleetEngine();
         if (glassTimer) window.clearInterval(glassTimer);
         glassTimer = window.setInterval(postGlass, 1500);
       }, { once: true });
@@ -716,6 +791,12 @@ ${blurCss(state)}`;
           <p class="oss-sub" data-copy="sunNote"></p>
         </div>
         <div class="oss-sec">
+          <p class="oss-caption" data-copy="secBoat"></p>
+          ${switchRow(pid('boats'), 'boats')}
+          <p class="oss-sub" id="${pid('boat-out')}"></p>
+          <p class="oss-sub" data-copy="boatNote"></p>
+        </div>
+        <div class="oss-sec">
           <p class="oss-caption" data-copy="secGlass"></p>
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
           ${switchRow(pid('perf'), 'perf')}
@@ -748,6 +829,7 @@ ${blurCss(state)}`;
       const enabledBox = panel.querySelector(`#${pid('enabled')}`);
       const moonBox = panel.querySelector(`#${pid('moon')}`);
       const perfBox = panel.querySelector(`#${pid('perf')}`);
+      const boatsBox = panel.querySelector(`#${pid('boats')}`);
       const latInput = panel.querySelector(`#${pid('lat')}`);
       const lonInput = panel.querySelector(`#${pid('lon')}`);
       const resetBtn = panel.querySelector('.oss-reset');
@@ -781,6 +863,7 @@ ${blurCss(state)}`;
         enabledBox.checked = state.enabled;
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
+        if (boatsBox) boatsBox.checked = state.boats;
         setSeg(segWave, state.waveMode);
         setSeg(segSun, state.sunMode);
         setSeg(segStars, state.stars);
@@ -966,6 +1049,11 @@ ${blurCss(state)}`;
         void save({ moon: moonBox.checked });
         postSun();
       });
+      on(boatsBox, 'change', () => {
+        void save({ boats: boatsBox.checked });
+        if (!boatsBox.checked) postFleet(0);
+        else void pollFleet();
+      });
       on(perfBox, 'change', () => {
         void save({ perf: perfBox.checked });
         postGlass();
@@ -1008,6 +1096,7 @@ ${blurCss(state)}`;
     const unmount = () => {
       panelOpen = false;
       stopWaveEngine();
+      stopFleetEngine();
       if (glassTimer) window.clearInterval(glassTimer);
       glassTimer = 0;
       placementObserver?.disconnect();
@@ -1112,9 +1201,10 @@ ${blurCss(state)}`;
     colCenter: 'ossColCenter',
     colRight: 'ossColRight',
     perf: 'ossPerf',
+    boats: 'ossBoats',
   });
 
-  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'perf']);
+  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'perf', 'boats']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
   const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'clouds', 'glassMode']);
 

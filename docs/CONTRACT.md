@@ -86,3 +86,22 @@
 - `glassMode === 'css'`：按栏输出 `backdrop-filter: blur(<px>) saturate(1.1..1.3)` 与半透明底色；`render` 模式**不得**输出 backdrop-filter。
 - 两栏/三栏的选择器沿用 1.2.7 已有语义标记（`[data-slot="sidebar"]`、`[data-slot="main.conversation"]`、`[data-rightbar-col]`、`.dshDesktopSidebarSurface` 等），不要新增 CSS-module 哈希。
 - 分区遮罩与 `rects` 必须同源：rect 由父页对同一选择器做 `getBoundingClientRect()` 得到，避免「模糊位置」与「半透明区域」错位。
+
+## 4 · 船（oss-fleet）
+
+宿主半（`plugin/index.js`）暴露 `GET /open-sea-skin/fleet?session=<id>`，返回：
+
+```json
+{ "ok": true, "running": 2, "ships": [{ "id": "…", "title": "…", "status": "running" }], "services": { "subagents": true, "agents": true, "agentTeams": true } }
+```
+
+- 口径：**正在运行**的子智能体（`status === 'running'`），不累计；同一 worker 在 children 与 team members 里重复出现时按 id 去重。
+- 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
+- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe；`count` 上限 12（渲染端 `BOAT_MAX`）。
+- 渲染端在 `SECTION 9`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜，进出场用 `boatFade` 做缩放淡入淡出，船灯亮度跟 `uNightF`。
+
+## 5 · 星空与流星
+
+- `shared/stars-data.js`：d3-celestial 的 88 星座 / 150 折线 / 893 点（BSD-3-Clause），坐标已换成 `[RA 0..360, Dec -90..90]`。
+- `shared/sky-astro.js`：GMST + 球面地平转换 + 顶点去重 + 亮度映射，纯函数。
+- 渲染端 `SECTION 10`：`LineSegments` 画星座连线、`Points` 画顶点恒星，每 5 s 按当前 LST / 纬度重算一次（15°/h ≈ 0.02°/5s，肉眼不可辨）；不透明度 = 星空档位 × 夜间因子 × 月光压制；地平线下的点被推到 y=-6000 自然隐藏。流星是复用的一条 2 点线段，随机间隔 4–13 s、时长 0.55–1.15 s。

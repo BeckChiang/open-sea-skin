@@ -21,6 +21,10 @@ import {
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
 import { skyFromElevation, manualElevationDeg, manualAzimuthDeg } from './sky.js';
+import { CONSTELLATION_LINES } from './stars-data.js';
+import {
+  constellationVertices, equatorialToHorizontal, localSiderealTime
+} from './sky-astro.js';
 import {
   sunPosition, moonPosition,
   cloudCoverOf, starLevelOf, starIntensityOf
@@ -89,6 +93,8 @@ const uSunDir = uniform(new THREE.Vector3(0, 0.5, -0.87));
 const uSunColor = uniform(new THREE.Vector3(1, 1, 1));
 // ambient term that dims clouds, and anything else that must not glow at night
 const uSkyLight = uniform(1);
+// 1 at full night, 0 at/above the horizon: gates night-only water terms
+const uNightF = uniform(0);
 const uHorizonColor = uniform(new THREE.Vector3(1, 1, 1));
 const uZenithColor = uniform(new THREE.Vector3(1, 1, 1));
 const uDeepColor = uniform(new THREE.Vector3(1, 1, 1));
@@ -353,7 +359,17 @@ const oceanColor = Fn(() => {
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(max(dot(N, V), 0)), 5)));
   col.assign(mix(col, skyColor(R.normalize(), fresnel.greaterThan(0.25), float(0)), fresnel));
 
+  // moon sheen: a cool glitter path plus a broad glow, so a clear night sea
+  // reads as water instead of a black void (uMoonVisible is 0 when the moon is
+  // down, which keeps the deep-night look untouched on moonless nights).
+  const moonH = normalize(uMoonDir.add(V));
+  const moonNdH = max(dot(N, moonH), 0);
+  const moonSheen = vec3(0.62, 0.74, 1.0).mul(uMoonVisible)
+    .mul(pow(moonNdH, 420).mul(1.7).add(pow(moonNdH, 36).mul(0.07)));
+  // starlight: a faint broad term that never fully disappears at night
+  col.addAssign(uShallowColor.mul(uNightF).mul(0.55));
   col.addAssign(spec);
+  col.addAssign(moonSheen);
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), foam));
 
   const horizonFade = smoothstep(150, 290, dist);
@@ -386,6 +402,7 @@ function applyElevation(elevationDeg, azimuthDeg) {
   uShallowColor.value.set(sky.shallow[0], sky.shallow[1], sky.shallow[2]);
   uSunColor.value.set(sky.sun[0], sky.sun[1], sky.sun[2]);
   uSkyLight.value = sky.skyLight;
+  uNightF.value = 1 - sky.horizonF;
 
   sunElevationDeg = elevationDeg;
   sunAzimuthDeg = azimuthDeg;
@@ -790,6 +807,10 @@ if (SKIN) {
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
+    if (d && d.type === 'oss-fleet') {
+      const count = Number(d.count);
+      if (Number.isFinite(count)) boatTarget = Math.max(0, Math.min(BOAT_MAX, Math.round(count)));
+    }
   });
   // tiny debug hook for automated checks (contract §3.6)
   window.__ossState = () => ({
@@ -812,6 +833,10 @@ if (SKIN) {
     renderScale,
     reducedMotion: REDUCED_MOTION,
     lowEndDevice: LOW_END_DEVICE,
+    stars: starLayer ? starLayer.starsOpacity : 0,
+    meteor: starLayer ? starLayer.meteor.active : false,
+    boats: boatShown,
+    boatTarget,
     elapsed: uTime.value,
     manualTimeOfDay,
   });
@@ -861,6 +886,8 @@ function animate(now) {
 
   uTime.value += dt * (REDUCED_MOTION ? 0.12 : 1);
   controls.update();
+  if (SKIN) updateBoats(dt);
+  if (SKIN) updateStarDome(now, dt);
 
   // frame cap: skip work when the display fires faster than 60 Hz
   if (now - lastRenderAt < FRAME_MS - 0.5) return;
@@ -971,8 +998,324 @@ async function boot() {
     sky.frustumCulled = false;
     scene.add(sky);
 
+    // boats live only in skin mode: they represent the running subagents
+    if (SKIN) boats = createBoats(scene);
+
+    // real constellation dome on top of the shader's faint star haze
+    if (SKIN) {
+      try {
+        starLayer = createStarLayer(scene);
+      } catch (error) {
+        console.warn('[open-sea-skin] star dome disabled', error);
+        starLayer = null;
+      }
+    }
+
     // --- post-processing: scene pass + TSL bloom + optional frosted glass ---
-    postProcessing = new THREE.PostProcessing(renderer);
+  
+// ---------------------------------------------------------------------------
+// SECTION 9 · FLEET · one boat per running subagent (host roster -> message)
+// ---------------------------------------------------------------------------
+
+const BOAT_MAX = 12;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+let boatTarget = 0;
+let boatShown = 0;
+const boatFade = new Float32Array(BOAT_MAX);
+// Fixed scatter so a boat keeps its spot between frames; golden-angle spread
+// keeps them from lining up as the count changes.
+const boatSlots = Array.from({ length: BOAT_MAX }, (_, index) => {
+  const radius = 15 + ((index * 13.7) % 42);
+  const angle = index * GOLDEN_ANGLE + 0.9;
+  return {
+    // keep every berth in front of the default camera (it sits at +z)
+    x: Math.cos(angle) * radius * 0.9,
+    z: -6 - Math.abs(Math.sin(angle)) * radius,
+    yaw: (index * 1.13) % (Math.PI * 2),
+    lag: index * 0.37,
+  };
+});
+
+// CPU mirror of waveSurface(): boats ride the exact swell the shader draws.
+function seaStateAt(x, z, time, sea) {
+  let y = 0;
+  let tx = 1, ty = 0, tz = 0;
+  let bx = 0, by = 0, bz = 1;
+  for (const w of GERSTNER_DEFS) {
+    const f = w.k * (w.dx * x + w.dy * z - time * w.c);
+    const a = w.a0 * sea;
+    const s = Math.sin(f);
+    const co = Math.cos(f);
+    const ak = a * w.k;
+    const aks = ak * s;
+    const akc = ak * co;
+    y += a * s;
+    tx -= aks * w.dx * w.dx; ty += akc * w.dx; tz -= aks * w.dx * w.dy;
+    bx -= aks * w.dx * w.dy; by += akc * w.dy; bz -= aks * w.dy * w.dy;
+  }
+  const nx = by * tz - bz * ty;
+  const ny = bz * tx - bx * tz;
+  const nz = bx * ty - by * tx;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  return { y, nx: nx / len, ny: ny / len, nz: nz / len };
+}
+
+let boats = null;
+
+function createBoats(scene) {
+  const hullGeometry = new THREE.BoxGeometry(1.5, 0.32, 0.46);
+  hullGeometry.translate(0, 0.1, 0);
+  const mastGeometry = new THREE.BoxGeometry(0.05, 1.25, 0.05);
+  mastGeometry.translate(0.02, 0.75, 0);
+  const sailGeometry = new THREE.BufferGeometry();
+  sailGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    -0.3, 0, 0,
+    0.55, 0, 0,
+    0.02, 1.15, 0,
+  ]), 3));
+  sailGeometry.computeVertexNormals();
+  sailGeometry.translate(0, 0.36, 0);
+  const lanternGeometry = new THREE.SphereGeometry(0.075, 8, 6);
+  lanternGeometry.translate(-0.45, 0.42, 0);
+
+  const make = (geometry, colorNode, side = THREE.FrontSide) => {
+    const material = new THREE.MeshBasicNodeMaterial();
+    material.colorNode = colorNode;
+    material.side = side;
+    const mesh = new THREE.InstancedMesh(geometry, material, BOAT_MAX);
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(mesh);
+    return mesh;
+  };
+
+  // same sky light as the water, so boats dim with the scene instead of glowing
+  const lit = uSkyLight.mul(0.9).add(0.08);
+  return {
+    hull: make(hullGeometry, vec3(0.18, 0.21, 0.26).mul(lit)),
+    mast: make(mastGeometry, vec3(0.28, 0.24, 0.2).mul(lit)),
+    sail: make(sailGeometry, vec3(0.9, 0.89, 0.84).mul(lit), THREE.DoubleSide),
+    lantern: make(lanternGeometry, vec3(1.0, 0.68, 0.3).mul(uNightF.mul(1.5).add(0.12))),
+  };
+}
+
+const boatDummy = new THREE.Object3D();
+const BOAT_UP = new THREE.Vector3(0, 1, 0);
+const boatNormal = new THREE.Vector3();
+const boatTilt = new THREE.Quaternion();
+const boatYaw = new THREE.Quaternion();
+
+function updateBoats(dt) {
+  if (!boats) return;
+  let active = 0;
+  for (let index = 0; index < BOAT_MAX; index += 1) {
+    const want = index < boatTarget ? 1 : 0;
+    boatFade[index] += (want - boatFade[index]) * Math.min(1, dt * 2.6);
+    if (want === 0 && boatFade[index] < 0.01) boatFade[index] = 0;
+    const fade = boatFade[index];
+    if (fade <= 0) continue;
+
+    const slot = boatSlots[index];
+    const surface = seaStateAt(slot.x, slot.z, uTime.value - slot.lag, uSea.value);
+    boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
+    boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
+    boatYaw.setFromAxisAngle(BOAT_UP, slot.yaw);
+    boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
+    boatDummy.position.set(slot.x, surface.y - 0.08, slot.z);
+    boatDummy.scale.setScalar((0.35 + 0.65 * fade) * 1.7);
+    boatDummy.updateMatrix();
+
+    boats.hull.setMatrixAt(active, boatDummy.matrix);
+    boats.mast.setMatrixAt(active, boatDummy.matrix);
+    boats.sail.setMatrixAt(active, boatDummy.matrix);
+    boats.lantern.setMatrixAt(active, boatDummy.matrix);
+    active += 1;
+  }
+
+  boatShown = active;
+  for (const part of [boats.hull, boats.mast, boats.sail, boats.lantern]) {
+    part.count = active;
+    part.instanceMatrix.needsUpdate = true;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// SECTION 10 · STAR DOME · real constellations, twinkling, and meteors
+// ---------------------------------------------------------------------------
+
+const STAR_RADIUS = 3200;
+const STAR_GRADES = { off: 0, low: 0.4, mid: 0.7, high: 1 };
+const DEG_TO_RAD = Math.PI / 180;
+
+let starLayer = null;
+
+function createStarLayer(scene) {
+  const vertices = constellationVertices(CONSTELLATION_LINES);
+  const starCount = vertices.length;
+  const starRA = new Float32Array(starCount);
+  const starDec = new Float32Array(starCount);
+  for (let i = 0; i < starCount; i += 1) {
+    starRA[i] = vertices[i].raDeg;
+    starDec[i] = vertices[i].decDeg;
+  }
+
+  // One segment per polyline edge; raw points are fine here because the extra
+  // vertices cost nothing next to a line width.
+  const segments = [];
+  for (const line of CONSTELLATION_LINES) {
+    const points = line.points || line;
+    for (let i = 1; i < points.length; i += 1) {
+      segments.push(points[i - 1], points[i]);
+    }
+  }
+  const segmentCount = segments.length;
+
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 3), 3));
+  const starMaterial = new THREE.PointsMaterial({
+    color: 0xdfe9ff,
+    size: 2.6,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const stars = new THREE.Points(starGeometry, starMaterial);
+  stars.frustumCulled = false;
+  stars.renderOrder = 2;
+  scene.add(stars);
+
+  const lineGeometry = new THREE.BufferGeometry();
+  lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 3), 3));
+  const lineMaterial = new THREE.LineBasicMaterial({
+    color: 0x8fb7d8,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+  lines.frustumCulled = false;
+  lines.renderOrder = 2;
+  scene.add(lines);
+
+  // a single reusable streak: a meteor is a short bright segment
+  const meteorGeometry = new THREE.BufferGeometry();
+  meteorGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const meteorMaterial = new THREE.LineBasicMaterial({
+    color: 0xfff2d0,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const meteor = new THREE.Line(meteorGeometry, meteorMaterial);
+  meteor.frustumCulled = false;
+  meteor.renderOrder = 3;
+  scene.add(meteor);
+
+  return {
+    stars, lines, meteor,
+    starRA, starDec,
+    segmentRA: Float32Array.from(segments, (p) => p[0]),
+    segmentDec: Float32Array.from(segments, (p) => p[1]),
+    segmentCount,
+    starCount,
+    starsOpacity: 0,
+    lastSky: -1e9,
+    meteor: { active: false, elapsed: 0, duration: 1, next: 5, from: new THREE.Vector3(), to: new THREE.Vector3() },
+  };
+}
+
+function starDirection(raDeg, decDeg, latDeg, lstDeg, out) {
+  const horiz = equatorialToHorizontal(raDeg, decDeg, latDeg, lstDeg);
+  if (horiz.altDeg <= 0) {
+    out.set(0, -6000, 0);
+    return out;
+  }
+  const alt = horiz.altDeg * DEG_TO_RAD;
+  const az = horiz.azDeg * DEG_TO_RAD;
+  const ce = Math.cos(alt);
+  return out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az)).multiplyScalar(STAR_RADIUS);
+}
+
+const starDirA = new THREE.Vector3();
+
+function updateStarDome(now, dt) {
+  if (!starLayer) return;
+  const layer = starLayer;
+  const grade = STAR_GRADES[starsSetting] ?? 0.7;
+  // stars fade with daylight and are washed out by a bright moon
+  const visible = grade * Math.max(0, Math.min(1, uNightF.value * 1.15 - moonBrightness * 0.35));
+  const targetOpacity = visible;
+  layer.starsOpacity += (targetOpacity - layer.starsOpacity) * 0.08;
+  layer.stars.material.opacity = layer.starsOpacity * 0.95;
+  layer.lines.material.opacity = layer.starsOpacity * 0.5;
+
+  // 15 deg/hour: a 5 s refresh is a 0.02 deg step, i.e. invisible
+  if (now - layer.lastSky > 5000) {
+    layer.lastSky = now;
+    const date = new Date();
+    const lst = localSiderealTime(date, sunLon);
+    const lat = sunLat;
+    const starPositions = layer.stars.geometry.getAttribute('position');
+    for (let i = 0; i < layer.starCount; i += 1) {
+      starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
+      starPositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
+    }
+    starPositions.needsUpdate = true;
+
+    const linePositions = layer.lines.geometry.getAttribute('position');
+    for (let i = 0; i < layer.segmentCount; i += 1) {
+      starDirection(layer.segmentRA[i], layer.segmentDec[i], lat, lst, starDirA);
+      linePositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
+    }
+    linePositions.needsUpdate = true;
+  }
+
+  // meteors: random streaks that only exist at night
+  const meteor = layer.meteor;
+  const meteorPositions = layer.meteor.geometry.getAttribute('position');
+  const elapsed = now / 1000;
+  if (meteor.active) {
+    meteor.elapsed += dt;
+    const progress = Math.min(1, meteor.elapsed / meteor.duration);
+    // head runs along the path, tail trails it
+    const head = meteor.from.clone().lerp(meteor.to, progress);
+    const tail = meteor.from.clone().lerp(meteor.to, Math.max(0, progress - 0.35));
+    meteorPositions.setXYZ(0, tail.x, tail.y, tail.z);
+    meteorPositions.setXYZ(1, head.x, head.y, head.z);
+    meteorPositions.needsUpdate = true;
+    layer.meteor.material.opacity = layer.starsOpacity * Math.sin(progress * Math.PI);
+    if (progress >= 1) {
+      meteor.active = false;
+      meteor.next = elapsed + 4 + Math.random() * 9;
+    }
+  } else {
+    layer.meteor.material.opacity = 0;
+    if (elapsed > meteor.next && layer.starsOpacity > 0.25) {
+      const startAz = Math.random() * Math.PI * 2;
+      const startAlt = (25 + Math.random() * 40) * DEG_TO_RAD;
+      const travel = (10 + Math.random() * 16) * DEG_TO_RAD;
+      const dirAz = startAz + Math.PI * (0.5 + Math.random() * 0.5);
+      meteor.from.set(
+        Math.cos(startAlt) * Math.sin(startAz), Math.sin(startAlt), -Math.cos(startAlt) * Math.cos(startAz),
+      ).multiplyScalar(STAR_RADIUS);
+      const endAlt = Math.max(4 * DEG_TO_RAD, startAlt - travel * 0.55);
+      meteor.to.set(
+        Math.cos(endAlt) * Math.sin(dirAz), Math.sin(endAlt), -Math.cos(endAlt) * Math.cos(dirAz),
+      ).multiplyScalar(STAR_RADIUS);
+      meteor.active = true;
+      meteor.elapsed = 0;
+      meteor.duration = 0.55 + Math.random() * 0.6;
+    }
+  }
+}
+
+  postProcessing = new THREE.PostProcessing(renderer);
     const scenePass = pass(scene, camera);
     const sceneColor = scenePass.getTextureNode('output');
     const bloomStrength = SKIN ? (LOW_END_DEVICE ? 0.18 : 0.28) : 0.4;
