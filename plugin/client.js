@@ -74,6 +74,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatCount: '正在运行 {n} 个子智能体',
       boatLoading: '读取中…',
       boatOffline: '读不到子智能体列表（接口未启用？）',
+      boatStale: '宿主插件还是旧版，先按右上角刷新按钮或重启桌面端',
       boatOff: '已关闭船只',
       secGlass: '毛玻璃',
       waveSource: '驱动来源',
@@ -128,6 +129,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatCount: '{n} subagent(s) running',
       boatLoading: 'Reading…',
       boatOffline: 'Subagent roster unavailable (endpoint off?)',
+      boatStale: 'Host plugin is stale: press the header refresh button, or restart',
       boatOff: 'Boats off',
       secGlass: 'Frosted glass',
       waveSource: 'Driven by',
@@ -561,7 +563,14 @@ ${blurCss(state)}`;
         const data = await response.json();
         const count = Math.max(0, Math.min(12, Number(data && data.running) || 0));
         postFleet(count);
-        if (data && data.ok === true) setBoatNote(count > 0 ? copy.boatCount.replace('{n}', String(count)) : copy.boatIdle);
+        // A host build from before the per-child observation answers without
+        // sessionQuery, and its `running` counts the parent agent, so the fleet
+        // would silently sit at one boat forever. Say it instead of guessing.
+        const hostFresh = !!(data && data.services && data.services.sessionQuery === true);
+        if (data && data.ok === true) {
+          if (!hostFresh) setBoatNote(copy.boatStale);
+          else setBoatNote(count > 0 ? copy.boatCount.replace('{n}', String(count)) : copy.boatIdle);
+        }
         else setBoatNote(`${copy.boatOffline} ${data && data.error ? `(${data.error})` : ''}`.trim());
       } catch {
         setBoatNote(copy.boatOffline);
