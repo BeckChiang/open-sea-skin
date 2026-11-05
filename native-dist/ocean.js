@@ -20,8 +20,9 @@ import {
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
+import { skyFromElevation, manualElevationDeg, manualAzimuthDeg } from './sky.js';
 import {
-  sunPosition, moonPosition, daylightFromElevation,
+  sunPosition, moonPosition,
   cloudCoverOf, starLevelOf, starIntensityOf
 } from './solar.js';
 
@@ -362,68 +363,35 @@ const oceanColor = Fn(() => {
 // SECTION 6 · TIME OF DAY (CPU palettes)
 // ----------------------------------------------------------------------------
 
-const DAY = {
-  zenith: [0.07, 0.20, 0.42],
-  horizon: [0.52, 0.68, 0.82],
-  sun: [1.0, 0.93, 0.80],
-  sunIntensity: 1.6,
-  deep: [0.015, 0.09, 0.11],
-  shallow: [0.06, 0.32, 0.36],
-};
-
-const DUSK = {
-  zenith: [0.03, 0.05, 0.16],
-  horizon: [0.85, 0.36, 0.16],
-  sun: [1.0, 0.42, 0.14],
-  sunIntensity: 2.6,
-  deep: [0.02, 0.045, 0.075],
-  shallow: [0.09, 0.15, 0.20],
-};
-
 const lerp = (a, b, t) => a + (b - a) * t;
-const smoothstep01 = (a, b, x) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
-const mixRGB = (target, dusk, day, t) => {
-  target.set(lerp(dusk[0], day[0], t), lerp(dusk[1], day[1], t), lerp(dusk[2], day[2], t));
-};
 
-function timeOfDayLabel(t) {
-  if (t < 0.12) return 'DUSK';
-  if (t < 0.30) return 'GOLDEN HOUR';
-  if (t < 0.62) return 'AFTERNOON';
-  return 'MIDDAY';
+// Single sky model: everything is driven by the real sun elevation (see
+// shared/sky.js). horizonF = 0 deep night, 1 at/above the horizon; dayF = 0 at
+// the horizon, 1 once the sun is 12 deg up. DUSK sits exactly at the horizon so
+// the 1.2.7 sunset look is preserved, and a real NIGHT fills in below -18 deg.
+function applyElevation(elevationDeg, azimuthDeg) {
+  const el = elevationDeg * DEG;
+  const az = azimuthDeg * DEG;
+  const ce = Math.cos(el);
+  const se = Math.sin(el);
+  uSunDir.value.set(ce * Math.sin(az), se, -ce * Math.cos(az));
+
+  const sky = skyFromElevation(elevationDeg);
+  uZenithColor.value.set(sky.zenith[0], sky.zenith[1], sky.zenith[2]);
+  uHorizonColor.value.set(sky.horizon[0], sky.horizon[1], sky.horizon[2]);
+  uDeepColor.value.set(sky.deep[0], sky.deep[1], sky.deep[2]);
+  uShallowColor.value.set(sky.shallow[0], sky.shallow[1], sky.shallow[2]);
+  uSunColor.value.set(sky.sun[0], sky.sun[1], sky.sun[2]);
+
+  sunElevationDeg = elevationDeg;
+  sunAzimuthDeg = azimuthDeg;
 }
 
+// Manual slider / legacy 720 s cycle: t 0..1 spans deep night (0) through
+// sunset (~0.28) to afternoon (1). 1.2.7 mapped 0..1 onto DUSK..daylight only.
 function applyTimeOfDay(t) {
   currentDaylight = Math.min(100, Math.max(0, t * 100));
-  const elevation = lerp(-0.05, 0.62, t);
-  const azimuth = lerp(-0.9, 0.9, t);
-  const ce = Math.cos(elevation);
-  const se = Math.sin(elevation);
-  const sa = Math.sin(azimuth);
-  const ca = Math.cos(azimuth);
-  uSunDir.value.set(ce * sa, se, -ce * ca);
-
-  const daylight = smoothstep01(0.0, 0.42, elevation);
-
-  mixRGB(uZenithColor.value, DUSK.zenith, DAY.zenith, daylight);
-  mixRGB(uHorizonColor.value, DUSK.horizon, DAY.horizon, daylight);
-  mixRGB(uDeepColor.value, DUSK.deep, DAY.deep, daylight);
-  mixRGB(uShallowColor.value, DUSK.shallow, DAY.shallow, daylight);
-
-  const intensity = lerp(2.6, 1.6, daylight);
-  uSunColor.value.set(
-    lerp(DUSK.sun[0], DAY.sun[0], daylight) * intensity,
-    lerp(DUSK.sun[1], DAY.sun[1], daylight) * intensity,
-    lerp(DUSK.sun[2], DAY.sun[2], daylight) * intensity
-  );
-
-  // reported back through __ossState(); overwritten with the true values in
-  // real-sun mode right after the call
-  sunElevationDeg = elevation * RAD;
-  sunAzimuthDeg = azimuth * RAD;
+  applyElevation(manualElevationDeg(t), manualAzimuthDeg(t));
 }
 
 // ----------------------------------------------------------------------------
@@ -431,13 +399,6 @@ function applyTimeOfDay(t) {
 // Uniforms only: the sky shader is compiled once and never rebuilt at runtime.
 // Azimuth basis matches applyTimeOfDay: 0° = north = -z, 90° = east = +x.
 // ----------------------------------------------------------------------------
-
-function applySunDirection(elevationDeg, azimuthDeg) {
-  const el = elevationDeg * DEG;
-  const az = azimuthDeg * DEG;
-  const ce = Math.cos(el);
-  uSunDir.value.set(ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az));
-}
 
 function syncMoon(now) {
   const moon = moonPosition(new Date(now), sunLat, sunLon);
@@ -478,10 +439,7 @@ function syncStars() {
 function refreshSky(now) {
   if (sunMode === 'real') {
     const sun = sunPosition(new Date(now), sunLat, sunLon);
-    sunElevationDeg = sun.elevationDeg;
-    sunAzimuthDeg = sun.azimuthDeg;
-    applyTimeOfDay(daylightFromElevation(sun.elevationDeg) / 100);
-    applySunDirection(sun.elevationDeg, sun.azimuthDeg);
+    applyElevation(sun.elevationDeg, sun.azimuthDeg);
   }
   syncMoon(now);
   syncStars();

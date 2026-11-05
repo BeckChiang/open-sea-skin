@@ -24,6 +24,7 @@ const COPIES = [
   ['shared/styles.css', 'native-dist/styles.css'],
   // Optional helper modules: copied when present, never required.
   ['shared/solar.js', 'native-dist/solar.js'],
+  ['shared/sky.js', 'native-dist/sky.js'],
 ]
 
 let drifted = false
@@ -32,7 +33,7 @@ for (const [from, to] of COPIES) {
   try {
     source = await readFile(join(root, from))
   } catch (error) {
-    if (error?.code === 'ENOENT' && from === 'shared/solar.js') continue
+    if (error?.code === 'ENOENT' && (from === 'shared/solar.js' || from === 'shared/sky.js')) continue
     throw error
   }
   let current = null

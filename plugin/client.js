@@ -30,8 +30,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     amountFull: 10,
     smooth: 4,
     sunMode: 'real',
-    lat: 31.23,
-    lon: 121.47,
+    lat: 30.59,
+    lon: 114.31,
     moon: true,
     stars: 'mid',
     clouds: 'mid',
@@ -75,6 +75,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       manualTime: '手动日照',
       lat: '纬度',
       lon: '经度',
+      locate: '使用我的位置',
+      locateBusy: '定位中…',
+      locateOk: '已更新坐标',
+      locateFail: '定位失败，请手动填经纬度',
       moon: '显示月亮',
       stars: '星空',
       clouds: '云量',
@@ -117,6 +121,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       manualTime: 'Manual daylight',
       lat: 'Latitude',
       lon: 'Longitude',
+      locate: 'Use my location',
+      locateBusy: 'Locating…',
+      locateOk: 'Coordinates updated',
+      locateFail: 'Location unavailable, type it manually',
       moon: 'Show moon',
       stars: 'Stars',
       clouds: 'Clouds',
@@ -145,6 +153,17 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
   }
 
+  // The lab build first shipped with Shanghai as the default location. Anyone
+  // who never touched the field still carries that pair, so treat it as
+  // "unset" once and migrate to the current default.
+  const LEGACY_DEFAULT_LOCATION = { lat: 31.23, lon: 121.47 };
+  function legacyDefaultLocation(source) {
+    return (
+      Number(source.lat) === LEGACY_DEFAULT_LOCATION.lat &&
+      Number(source.lon) === LEGACY_DEFAULT_LOCATION.lon
+    );
+  }
+
   const BLUR_LEVEL_NAMES = Object.keys(BLUR_LEVELS);
   const WAVE_MODES = ['manual', 'throughput', 'amount'];
 
@@ -170,8 +189,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       amountFull: clamp(source.amountFull, 1, 100, DEFAULTS.amountFull),
       smooth: clamp(source.smooth, 2, 8, DEFAULTS.smooth),
       sunMode: source.sunMode === 'manual' ? 'manual' : 'real',
-      lat: clamp(source.lat, -90, 90, DEFAULTS.lat),
-      lon: clamp(source.lon, -180, 180, DEFAULTS.lon),
+      lat: legacyDefaultLocation(source) ? DEFAULTS.lat : clamp(source.lat, -90, 90, DEFAULTS.lat),
+      lon: legacyDefaultLocation(source) ? DEFAULTS.lon : clamp(source.lon, -180, 180, DEFAULTS.lon),
       moon: source.moon !== false,
       stars: GRADE_LEVELS.includes(source.stars) ? source.stars : DEFAULTS.stars,
       clouds: GRADE_LEVELS.includes(source.clouds) ? source.clouds : DEFAULTS.clouds,
@@ -373,6 +392,9 @@ ${blurCss(state)}`;
 #${IDS.panel} .oss-mini { width:100%; min-width:0; padding:5px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#eef4f6; font-size:11px; font-variant-numeric:tabular-nums; }
 #${IDS.panel} .oss-mini:disabled { opacity:.45; }
 #${IDS.panel} .oss-sub { margin-top:7px; font-size:10px; line-height:1.65; color:rgba(255,255,255,.55); }
+#${IDS.panel} .oss-locate { flex:0 0 auto; width:auto; cursor:pointer; padding:5px 10px; }
+#${IDS.panel} .oss-locate:hover { border-color:rgba(255,255,255,.34); background:rgba(255,255,255,.12); }
+#${IDS.panel} .oss-locate-out { margin:0; }
 #${IDS.panel} .oss-col { margin-top:10px; }
 #${IDS.panel} .oss-col-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; font-size:11px; color:rgba(255,255,255,.72); }
 #${IDS.panel} .oss-col-head input[type='checkbox'] { width:14px; height:14px; margin:0; accent-color:#8fe9e4; cursor:pointer; }
@@ -687,6 +709,7 @@ ${blurCss(state)}`;
           ${rangeRow(pid('time-range'), 'manualTime', 0, 100, 1)}
           <div class="oss-inline"><label for="${pid('lat')}" data-copy="lat"></label><input class="oss-mini" id="${pid('lat')}" type="number" step="0.01" min="-90" max="90" /></div>
           <div class="oss-inline"><label for="${pid('lon')}" data-copy="lon"></label><input class="oss-mini" id="${pid('lon')}" type="number" step="0.01" min="-180" max="180" /></div>
+          <div class="oss-row"><button type="button" class="oss-mini oss-locate" id="${pid('locate')}" data-copy="locate"></button><span class="oss-sub oss-locate-out" id="${pid('locate-out')}"></span></div>
           ${switchRow(pid('moon'), 'moon')}
           ${segRow(pid('stars'), 'stars', gradeOptions)}
           ${segRow(pid('clouds'), 'clouds', gradeOptions)}
@@ -868,6 +891,35 @@ ${blurCss(state)}`;
           input.value = String(state[key]);
           void save({ [key]: state[key] });
           postSun();
+        });
+      }
+      const locateBtn = panel.querySelector(`#${pid('locate')}`);
+      const locateOut = panel.querySelector(`#${pid('locate-out')}`);
+      if (locateBtn) {
+        on(locateBtn, 'click', () => {
+          const geo = globalThis.navigator && globalThis.navigator.geolocation;
+          if (!geo || typeof geo.getCurrentPosition !== 'function') {
+            locateOut.textContent = copy.locateFail;
+            return;
+          }
+          locateOut.textContent = copy.locateBusy;
+          geo.getCurrentPosition(
+            (position) => {
+              const lat = Math.round(position.coords.latitude * 100) / 100;
+              const lon = Math.round(position.coords.longitude * 100) / 100;
+              state.lat = clamp(lat, -90, 90, DEFAULTS.lat);
+              state.lon = clamp(lon, -180, 180, DEFAULTS.lon);
+              if (latInput) latInput.value = String(state.lat);
+              if (lonInput) lonInput.value = String(state.lon);
+              locateOut.textContent = copy.locateOk;
+              void save({ lat: state.lat, lon: state.lon });
+              postSun();
+            },
+            () => {
+              locateOut.textContent = copy.locateFail;
+            },
+            { timeout: 8000, maximumAge: 600000 }
+          );
         });
       }
 
