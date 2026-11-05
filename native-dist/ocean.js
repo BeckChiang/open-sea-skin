@@ -1150,6 +1150,10 @@ const STAR_GRADES = { off: 0, low: 0.4, mid: 0.7, high: 1 };
 const DEG_TO_RAD = Math.PI / 180;
 
 let starLayer = null;
+// glow uniforms are module-scope so the layer can be skipped without leaving
+// dangling material state behind
+const uStarGlow = uniform(0);
+const uMeteorGlow = uniform(0);
 
 function createStarLayer(scene) {
   const vertices = constellationVertices(CONSTELLATION_LINES);
@@ -1174,15 +1178,14 @@ function createStarLayer(scene) {
 
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 3), 3));
-  const starMaterial = new THREE.PointsMaterial({
-    color: 0xdfe9ff,
+  const starMaterial = new THREE.PointsNodeMaterial({
     size: 2.6,
     sizeAttenuation: false,
     transparent: true,
-    opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
+  starMaterial.colorNode = vec3(0.86, 0.91, 1.0).mul(uStarGlow);
   const stars = new THREE.Points(starGeometry, starMaterial);
   stars.frustumCulled = false;
   stars.renderOrder = 2;
@@ -1190,13 +1193,12 @@ function createStarLayer(scene) {
 
   const lineGeometry = new THREE.BufferGeometry();
   lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 3), 3));
-  const lineMaterial = new THREE.LineBasicMaterial({
-    color: 0x8fb7d8,
+  const lineMaterial = new THREE.LineBasicNodeMaterial({
     transparent: true,
-    opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
+  lineMaterial.colorNode = vec3(0.5, 0.68, 0.86).mul(uStarGlow);
   const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -1205,13 +1207,12 @@ function createStarLayer(scene) {
   // a single reusable streak: a meteor is a short bright segment
   const meteorGeometry = new THREE.BufferGeometry();
   meteorGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-  const meteorMaterial = new THREE.LineBasicMaterial({
-    color: 0xfff2d0,
+  const meteorMaterial = new THREE.LineBasicNodeMaterial({
     transparent: true,
-    opacity: 0,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
+  meteorMaterial.colorNode = vec3(1.0, 0.95, 0.82).mul(uMeteorGlow);
   const meteor = new THREE.Line(meteorGeometry, meteorMaterial);
   meteor.frustumCulled = false;
   meteor.renderOrder = 3;
@@ -1252,8 +1253,7 @@ function updateStarDome(now, dt) {
   const visible = grade * Math.max(0, Math.min(1, uNightF.value * 1.15 - moonBrightness * 0.35));
   const targetOpacity = visible;
   layer.starsOpacity += (targetOpacity - layer.starsOpacity) * 0.08;
-  layer.stars.material.opacity = layer.starsOpacity * 0.95;
-  layer.lines.material.opacity = layer.starsOpacity * 0.5;
+  uStarGlow.value = layer.starsOpacity * 0.9;
 
   // 15 deg/hour: a 5 s refresh is a 0.02 deg step, i.e. invisible
   if (now - layer.lastSky > 5000) {
@@ -1289,13 +1289,13 @@ function updateStarDome(now, dt) {
     meteorPositions.setXYZ(0, tail.x, tail.y, tail.z);
     meteorPositions.setXYZ(1, head.x, head.y, head.z);
     meteorPositions.needsUpdate = true;
-    layer.meteor.material.opacity = layer.starsOpacity * Math.sin(progress * Math.PI);
+    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 1.4;
     if (progress >= 1) {
       meteor.active = false;
       meteor.next = elapsed + 4 + Math.random() * 9;
     }
   } else {
-    layer.meteor.material.opacity = 0;
+    uMeteorGlow.value = 0;
     if (elapsed > meteor.next && layer.starsOpacity > 0.25) {
       const startAz = Math.random() * Math.PI * 2;
       const startAlt = (25 + Math.random() * 40) * DEG_TO_RAD;

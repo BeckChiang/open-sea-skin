@@ -75,7 +75,8 @@ async function serveFleet(ctx, req, res) {
     }
 
     if (sessionId && subagents && typeof subagents.listChildren === 'function') {
-      const list = await subagents.listChildren(sessionId, AbortSignal.timeout(2500))
+      const listed = await subagents.listChildren(sessionId, AbortSignal.timeout(2500))
+      const list = await listed
       payload.children = Array.isArray(list)
         ? list.slice(0, 40).map((entry, index) => describeShip(entry, `child-${index}`))
         : []
@@ -85,7 +86,8 @@ async function serveFleet(ctx, req, res) {
       && typeof teams.listMembers === 'function') {
       const agent = agents.get(sessionId)
       if (agent) {
-        const list = teams.listMembers(agent)
+        const listed = await teams.listMembers(agent)
+        const list = await listed
         payload.members = Array.isArray(list)
           ? list.slice(0, 40).map((entry, index) => describeShip(entry, `member-${index}`))
           : []
