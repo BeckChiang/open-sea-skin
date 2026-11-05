@@ -15,7 +15,7 @@ import * as THREE from './vendor/three.webgpu.js';
 import {
   Fn, pass, uniform, uniformArray, texture, uv, float, vec2, vec3, vec4, If,
   sin, cos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
-  smoothstep, length, reflect, passTexture,
+  attribute, smoothstep, length, reflect, passTexture,
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
@@ -23,7 +23,8 @@ import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
 import { skyFromElevation, manualElevationDeg, manualAzimuthDeg } from './sky.js';
 import { CONSTELLATION_LINES } from './stars-data.js';
 import {
-  constellationVertices, equatorialToHorizontal, localSiderealTime
+  constellationVertices, equatorialToHorizontal, localSiderealTime,
+  starBrightnessFromDegree
 } from './sky-astro.js';
 import {
   sunPosition, moonPosition,
@@ -809,7 +810,9 @@ if (SKIN) {
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
     if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
-      if (Number.isFinite(count)) boatTarget = Math.max(0, Math.min(BOAT_MAX, Math.round(count)));
+      if (Number.isFinite(count)) {
+        boatTarget = Math.max(BOAT_BASE, Math.min(BOAT_MAX, Math.round(count)));
+      }
     }
   });
   // tiny debug hook for automated checks (contract §3.6)
@@ -1144,19 +1147,22 @@ async function boot() {
 // ---------------------------------------------------------------------------
 
 const BOAT_MAX = 12;
+// One hull always stays on the water: with no subagent running an empty sea
+// reads as "the fleet feature is broken", not as "no work in progress".
+const BOAT_BASE = 1;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-let boatTarget = 0;
+let boatTarget = BOAT_BASE;
 let boatShown = 0;
 const boatFade = new Float32Array(BOAT_MAX);
 // Fixed scatter so a boat keeps its spot between frames; golden-angle spread
 // keeps them from lining up as the count changes.
 const boatSlots = Array.from({ length: BOAT_MAX }, (_, index) => {
-  const radius = 15 + ((index * 13.7) % 42);
+  const radius = 12 + ((index * 11.3) % 30);
   const angle = index * GOLDEN_ANGLE + 0.9;
   return {
     // keep every berth in front of the default camera (it sits at +z)
-    x: Math.cos(angle) * radius * 0.9,
-    z: -6 - Math.abs(Math.sin(angle)) * radius,
+    x: Math.cos(angle) * radius * 0.85,
+    z: -4 - Math.abs(Math.sin(angle)) * radius,
     yaw: (index * 1.13) % (Math.PI * 2),
     lag: index * 0.37,
   };
@@ -1201,7 +1207,7 @@ function createBoats(scene) {
   ]), 3));
   sailGeometry.computeVertexNormals();
   sailGeometry.translate(0, 0.36, 0);
-  const lanternGeometry = new THREE.SphereGeometry(0.075, 8, 6);
+  const lanternGeometry = new THREE.SphereGeometry(0.09, 8, 6);
   lanternGeometry.translate(-0.45, 0.42, 0);
 
   const make = (geometry, colorNode, side = THREE.FrontSide) => {
@@ -1216,13 +1222,15 @@ function createBoats(scene) {
     return mesh;
   };
 
-  // same sky light as the water, so boats dim with the scene instead of glowing
-  const lit = uSkyLight.mul(0.9).add(0.08);
+  // Boats follow the water's brightness but never drop to it: at midnight the
+  // sail keeps a moonlight edge, which is what makes the silhouette readable.
+  const lit = uSkyLight.mul(0.8).add(0.05).add(uNightF.mul(0.3));
+  const hullLit = uSkyLight.mul(0.8).add(0.04).add(uNightF.mul(0.12));
   return {
-    hull: make(hullGeometry, vec3(0.18, 0.21, 0.26).mul(lit)),
-    mast: make(mastGeometry, vec3(0.28, 0.24, 0.2).mul(lit)),
-    sail: make(sailGeometry, vec3(0.9, 0.89, 0.84).mul(lit), THREE.DoubleSide),
-    lantern: make(lanternGeometry, vec3(1.0, 0.68, 0.3).mul(uNightF.mul(1.5).add(0.12))),
+    hull: make(hullGeometry, vec3(0.17, 0.2, 0.25).mul(hullLit)),
+    mast: make(mastGeometry, vec3(0.26, 0.22, 0.19).mul(lit)),
+    sail: make(sailGeometry, vec3(0.95, 0.94, 0.9).mul(lit), THREE.DoubleSide),
+    lantern: make(lanternGeometry, vec3(1.0, 0.72, 0.34).mul(uNightF.mul(1.7).add(0.12))),
   };
 }
 
@@ -1249,7 +1257,7 @@ function updateBoats(dt) {
     boatYaw.setFromAxisAngle(BOAT_UP, slot.yaw);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
     boatDummy.position.set(slot.x, surface.y - 0.08, slot.z);
-    boatDummy.scale.setScalar((0.35 + 0.65 * fade) * 1.7);
+    boatDummy.scale.setScalar((0.5 + 0.5 * fade) * 2.2);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);
@@ -1302,29 +1310,57 @@ function createStarLayer(scene) {
   }
   const segmentCount = segments.length;
 
+  // Per-star attributes carry what the eye reads as a real sky: brightness that
+  // follows the stick-figure junctions, a slow twinkle per star, and a colour
+  // that drifts between warm white and blue-white.
+  const starGlowAttr = new Float32Array(starCount);
+  const starPhaseAttr = new Float32Array(starCount);
+  const starHueAttr = new Float32Array(starCount);
+  for (let i = 0; i < starCount; i += 1) {
+    const degree = Number(vertices[i].degree) || 1;
+    starGlowAttr[i] = Math.min(1, 0.3 + 0.85 * starBrightnessFromDegree(degree));
+    starPhaseAttr[i] = Math.random() * Math.PI * 2;
+    starHueAttr[i] = Math.random();
+  }
+
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 3), 3));
+  starGeometry.setAttribute('aGlow', new THREE.BufferAttribute(starGlowAttr, 1));
+  starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhaseAttr, 1));
+  starGeometry.setAttribute('aHue', new THREE.BufferAttribute(starHueAttr, 1));
+
+  const aGlow = attribute('aGlow', 'float');
+  const aPhase = attribute('aPhase', 'float');
+  const aHue = attribute('aHue', 'float');
+  // 1.5 rad/s reads as scintillation; anything faster looks like blinking
+  const twinkle = sin(uTime.mul(1.5).add(aPhase)).mul(0.3).add(0.7);
   const starMaterial = new THREE.PointsNodeMaterial({
-    size: 2.6,
+    size: 3.0,
     sizeAttenuation: false,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  starMaterial.colorNode = vec3(0.86, 0.91, 1.0).mul(uStarGlow);
+  starMaterial.colorNode = mix(vec3(1.0, 0.93, 0.84), vec3(0.72, 0.83, 1.0), aHue)
+    .mul(aGlow).mul(twinkle).mul(uStarGlow);
   const stars = new THREE.Points(starGeometry, starMaterial);
   stars.frustumCulled = false;
   stars.renderOrder = 2;
   scene.add(stars);
 
+  const lineGlowAttr = new Float32Array(segmentCount);
   const lineGeometry = new THREE.BufferGeometry();
   lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 3), 3));
+  lineGeometry.setAttribute('aLineGlow', new THREE.BufferAttribute(lineGlowAttr, 1));
   const lineMaterial = new THREE.LineBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  lineMaterial.colorNode = vec3(0.5, 0.68, 0.86).mul(uStarGlow);
+  // Connections must not turn the sky into a wireframe: dim, and faded out
+  // near the horizon where they would fight the sea glow.
+  lineMaterial.colorNode = vec3(0.42, 0.56, 0.84)
+    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(0.3);
   const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -1350,6 +1386,7 @@ function createStarLayer(scene) {
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
+    lineGlow: lineGlowAttr,
     segmentCount,
     starCount,
     starsOpacity: 0,
@@ -1358,8 +1395,11 @@ function createStarLayer(scene) {
   };
 }
 
+let lastAltDeg = 0;
+
 function starDirection(raDeg, decDeg, latDeg, lstDeg, out) {
   const horiz = equatorialToHorizontal(raDeg, decDeg, latDeg, lstDeg);
+  lastAltDeg = horiz.altDeg;
   if (horiz.altDeg <= 0) {
     out.set(0, -6000, 0);
     return out;
@@ -1399,8 +1439,12 @@ function updateStarDome(now, dt) {
     for (let i = 0; i < layer.segmentCount; i += 1) {
       starDirection(layer.segmentRA[i], layer.segmentDec[i], lat, lst, starDirA);
       linePositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
+      // fade the connecting lines in over the first 14 degrees of altitude,
+      // so they disappear into the horizon haze instead of stopping abruptly
+      layer.lineGlow[i] = Math.max(0, Math.min(1, lastAltDeg / 14));
     }
     linePositions.needsUpdate = true;
+    layer.lines.geometry.getAttribute('aLineGlow').needsUpdate = true;
   }
 
   // meteors: random streaks that only exist at night
