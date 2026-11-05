@@ -22,8 +22,10 @@
 | `stars` | `off`/`low`/`mid`/`high` | `mid` | 星空密度 |
 | `clouds` | `off`/`low`/`mid`/`high` | `mid` | 云量 |
 | `glassMode` | `render` / `css` | `render` | 毛玻璃实现方式 |
-| `colLeft` / `colCenter` / `colRight` | `{on:bool, level:'off'\|'weak'\|'medium'\|'strong', opacity:40–90}` | 左 `{true,'weak',60}`、中 `{true,'medium',55}`、右 `{true,'weak',60}` | 分栏玻璃 |
+| `colLeft` / `colCenter` / `colRight` | `{on:bool, level:'off'\|'weak'\|'medium'\|'strong'}` | 左 `{true,'weak'}`、中 `{true,'medium'}`、右 `{true,'weak'}` | 分栏玻璃开关与模糊档 |
 | `perf` | bool | false | 高性能模式：全部模糊关闭 |
+
+> 分栏不透明度：1.2.7 的外壳是**单一 frame 一次上色**，三栏各自 alpha 需要改成逐栏自绘并重写整套 token 覆盖，回归风险远大于收益。因此不透明度保持**全局一项**（沿用 `glass` 40–90），三栏只控制「是否毛玻璃 + 模糊档」。要逐栏 alpha 需另立任务。
 
 ## 2. 父页 → iframe 消息
 
