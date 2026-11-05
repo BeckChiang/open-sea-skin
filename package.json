@@ -33,6 +33,7 @@
     "native-dist/loader.js",
     "native-dist/ocean.js",
     "native-dist/solar.js",
+    "native-dist/sky.js",
     "native-dist/skin.html",
     "native-dist/styles.css",
     "native-dist/vendor/**/*",
