@@ -1169,14 +1169,17 @@ const boatFade = new Float32Array(BOAT_MAX);
 // in/out drift, and turns around at the edge of the belt instead of leaving.
 const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   const spread = index / (BOAT_MAX - 1);
-  const distance = 16 + ((index * 7.3) % 15);
+  const base = 14 + ((index * 7.3) % 13);
   return {
-    lateral: (spread - 0.5) * 1.4,
-    base: distance,
-    distance,
-    speed: 0.14 + ((index * 0.09) % 0.2),
-    dir: index % 2 === 0 ? 1 : -1,
-    phase: index * 1.7,
+    // Each boat sails its own ellipse in front of the camera. A lane that only
+    // ran left and right turned around on the spot, which read as a toy sliding
+    // back and forth; an ellipse keeps the heading rotating all the way round.
+    phase: spread * Math.PI * 2 + index * 0.7,
+    base,
+    radiusRight: 5 + ((index * 1.7) % 3.4),
+    radiusBack: 2 + ((index * 1.1) % 2.2),
+    // 0.10–0.19 rad/s: one lap takes 33–63 s
+    speed: 0.1 + ((index * 0.037) % 0.09),
     // separation pushes accumulate here and decay, so boats ease apart instead
     // of snapping every frame
     pushX: 0,
@@ -1258,7 +1261,7 @@ const boatTilt = new THREE.Quaternion();
 const boatYaw = new THREE.Quaternion();
 const boatForward = new THREE.Vector3();
 const boatRight = new THREE.Vector3();
-const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0 }));
+const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0, heading: 0 }));
 
 // Flat forward/right pair: the fleet rides the horizontal plane, so pitch is
 // handled by the swell normal instead of the camera's downward tilt.
@@ -1292,17 +1295,23 @@ function updateBoats(dt) {
     if (fade <= 0) continue;
 
     const lane = boatCruise[index];
-    lane.lateral += lane.dir * lane.speed * dt;
-    if (lane.lateral > 0.95) { lane.lateral = 0.95; lane.dir = -1; }
-    if (lane.lateral < -0.95) { lane.lateral = -0.95; lane.dir = 1; }
-    lane.distance = lane.base + Math.sin(time * 0.045 + lane.phase) * 3.5;
+    const angle = lane.phase + time * lane.speed;
     lane.pushX *= 0.92;
     lane.pushZ *= 0.92;
 
-    const across = lane.lateral * lane.distance * 0.5;
+    const across = Math.sin(angle) * lane.radiusRight;
+    const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
+    // Tangent of the ellipse in the camera's flat frame: the boat has to point
+    // where it is actually going, otherwise it sails sideways or stern first.
+    const vx = boatRight.x * Math.cos(angle) * lane.radiusRight
+      - boatForward.x * Math.sin(angle) * lane.radiusBack;
+    const vz = boatRight.z * Math.cos(angle) * lane.radiusRight
+      - boatForward.z * Math.sin(angle) * lane.radiusBack;
     const placed = boatPlaced[placedCount];
-    placed.x = originX + boatForward.x * lane.distance + boatRight.x * across + lane.pushX;
-    placed.z = originZ + boatForward.z * lane.distance + boatRight.z * across + lane.pushZ;
+    placed.x = originX + boatForward.x * ahead + boatRight.x * across + lane.pushX;
+    placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
+    // the hull's bow is local +X, so yaw has to land +X on the tangent
+    placed.heading = Math.atan2(-vz, vx);
     placed.fade = fade;
     // the placement slot is not the lane slot: keep the boat's own lane so the
     // separation pushes and the heading go back to the boat that owns them
@@ -1350,9 +1359,7 @@ function updateBoats(dt) {
     boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
     boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
     // heading follows the lane direction, so a boat reads as sailing somewhere
-    const lane = boatCruise[placed.lane];
-    const heading = Math.atan2(boatRight.x * lane.dir, boatRight.z * lane.dir);
-    boatYaw.setFromAxisAngle(BOAT_UP, heading);
+    boatYaw.setFromAxisAngle(BOAT_UP, placed.heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
     boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
     boatDummy.scale.setScalar((0.5 + 0.5 * placed.fade) * 2.2);
