@@ -1029,8 +1029,118 @@ async function boot() {
 
     // --- post-processing: scene pass + TSL bloom + optional frosted glass ---
   
+
+  postProcessing = new THREE.PostProcessing(renderer);
+    const scenePass = pass(scene, camera);
+    const sceneColor = scenePass.getTextureNode('output');
+    const bloomStrength = SKIN ? (LOW_END_DEVICE ? 0.18 : 0.28) : 0.4;
+    const sceneBloom = bloom(sceneColor, bloomStrength, 0.3, 0.9);
+    if (SKIN) {
+      // contract §3.5: any failure here must keep the clear image on screen
+      try {
+        glassNode = new GlassBlurNode(sceneColor);
+      } catch (err) {
+        glassNode = null;
+        warnGlass(err);
+      }
+    }
+    postProcessing.outputNode = buildComposite(sceneColor, sceneBloom, glassNode);
+
+    // --- orbit controls -----------------------------------------------------
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 4;
+    controls.maxDistance = 120;
+    controls.minPolarAngle = 0.15;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.target.set(0, 1.5, 0);
+    controls.autoRotate = !REDUCED_MOTION;
+    controls.autoRotateSpeed = SKIN ? 0.12 : 0.25; // skin: extra-slow ambient drift
+    controls.update();
+
+    // --- UI bindings (full-page mode only) ----------------------------------
+    if (!SKIN) {
+      if (REDUCED_MOTION) {
+        driftButton.classList.remove('active');
+        driftButton.setAttribute('aria-pressed', 'false');
+      }
+      const onSeaInput = () => {
+        const v = Number(seaSlider.value);
+        seaValue.textContent = String(v).padStart(2, '0');
+        uSea.value = 0.25 + (v / 100) * 1.5;
+      };
+      const onTimeInput = () => {
+        applyTimeOfDay(Number(timeSlider.value) / 100);
+        timeLabel.textContent = timeOfDayLabel(Number(timeSlider.value) / 100);
+      };
+      seaSlider.addEventListener('input', onSeaInput);
+      timeSlider.addEventListener('input', onTimeInput);
+      driftButton.addEventListener('click', () => {
+        controls.autoRotate = !controls.autoRotate;
+        driftButton.classList.toggle('active', controls.autoRotate);
+        driftButton.setAttribute('aria-pressed', controls.autoRotate ? 'true' : 'false');
+      });
+      onSeaInput();
+      onTimeInput(); // t = 0.55 -> AFTERNOON
+    } else {
+      // skin mode: saved 波浪大小/日光 from the host content script
+      if (SKIN_SEA !== null) {
+        uSea.value = 0.25 + (SKIN_SEA / 100) * 1.5;
+      }
+      applyTimeOfDay(SKIN_TIME !== null ? SKIN_TIME / 100 : 0.55);
+      if (SKIN_TIME !== null) {
+        // a pinned 日光 from the url means "manual", the live sky must not fight it
+        sunMode = 'manual';
+        manualTimeOfDay = true;
+      }
+      // sun/moon/stars/clouds come from the real clock until the host says otherwise
+      refreshSky(Date.now());
+    }
+
+    // --- lifecycle: resize ---------------------------------------------------
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      applyResolutionScale(renderScale);
+    });
+
+    // --- lifecycle: pause when the tab is hidden -------------------------------
+    document.addEventListener('visibilitychange', () => {
+      if (!loopStarted) return;
+      if (document.hidden) {
+        renderer.setAnimationLoop(null);
+      } else {
+        lastFrameTime = performance.now();
+        lastRenderAt = 0;
+        renderer.setAnimationLoop(animate);
+      }
+    });
+
+    // --- initialize the GPU and start rendering --------------------------------
+    await renderer.init();
+
+    if (renderer.backend.isWebGPUBackend !== true) {
+      // WebGPU 不可用时 three 自动回退 WebGL2 backend：两种 backend 都允许渲染
+      // （2026-08-23 webgui 冒烟测试：用户浏览器无 WebGPU → 纯 WebGPU 检查导致初始化失败）。
+      PIXEL_RATIO_CAP = 1.0;
+      BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
+      FRAME_RATE_CAP = 30;
+      FRAME_MS = 1000 / FRAME_RATE_CAP;
+      TARGET_FPS = 28;
+      renderScale = 0.6;
+      applyResolutionScale(renderScale);
+    }
+
+    loopStarted = true;
+    renderer.setAnimationLoop(animate);
+  } catch (err) {
+    showInitError(err);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// SECTION 9 · FLEET · one boat per running subagent (host roster -> message)
+// SECTION 10 · FLEET · one boat per running subagent (host roster -> message)
 // ---------------------------------------------------------------------------
 
 const BOAT_MAX = 12;
@@ -1158,7 +1268,7 @@ function updateBoats(dt) {
 
 
 // ---------------------------------------------------------------------------
-// SECTION 10 · STAR DOME · real constellations, twinkling, and meteors
+// SECTION 11 · STAR DOME · real constellations, twinkling, and meteors
 // ---------------------------------------------------------------------------
 
 const STAR_RADIUS = 3200;
@@ -1329,115 +1439,6 @@ function updateStarDome(now, dt) {
       meteor.elapsed = 0;
       meteor.duration = 0.55 + Math.random() * 0.6;
     }
-  }
-}
-
-  postProcessing = new THREE.PostProcessing(renderer);
-    const scenePass = pass(scene, camera);
-    const sceneColor = scenePass.getTextureNode('output');
-    const bloomStrength = SKIN ? (LOW_END_DEVICE ? 0.18 : 0.28) : 0.4;
-    const sceneBloom = bloom(sceneColor, bloomStrength, 0.3, 0.9);
-    if (SKIN) {
-      // contract §3.5: any failure here must keep the clear image on screen
-      try {
-        glassNode = new GlassBlurNode(sceneColor);
-      } catch (err) {
-        glassNode = null;
-        warnGlass(err);
-      }
-    }
-    postProcessing.outputNode = buildComposite(sceneColor, sceneBloom, glassNode);
-
-    // --- orbit controls -----------------------------------------------------
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.minDistance = 4;
-    controls.maxDistance = 120;
-    controls.minPolarAngle = 0.15;
-    controls.maxPolarAngle = Math.PI * 0.495;
-    controls.target.set(0, 1.5, 0);
-    controls.autoRotate = !REDUCED_MOTION;
-    controls.autoRotateSpeed = SKIN ? 0.12 : 0.25; // skin: extra-slow ambient drift
-    controls.update();
-
-    // --- UI bindings (full-page mode only) ----------------------------------
-    if (!SKIN) {
-      if (REDUCED_MOTION) {
-        driftButton.classList.remove('active');
-        driftButton.setAttribute('aria-pressed', 'false');
-      }
-      const onSeaInput = () => {
-        const v = Number(seaSlider.value);
-        seaValue.textContent = String(v).padStart(2, '0');
-        uSea.value = 0.25 + (v / 100) * 1.5;
-      };
-      const onTimeInput = () => {
-        applyTimeOfDay(Number(timeSlider.value) / 100);
-        timeLabel.textContent = timeOfDayLabel(Number(timeSlider.value) / 100);
-      };
-      seaSlider.addEventListener('input', onSeaInput);
-      timeSlider.addEventListener('input', onTimeInput);
-      driftButton.addEventListener('click', () => {
-        controls.autoRotate = !controls.autoRotate;
-        driftButton.classList.toggle('active', controls.autoRotate);
-        driftButton.setAttribute('aria-pressed', controls.autoRotate ? 'true' : 'false');
-      });
-      onSeaInput();
-      onTimeInput(); // t = 0.55 -> AFTERNOON
-    } else {
-      // skin mode: saved 波浪大小/日光 from the host content script
-      if (SKIN_SEA !== null) {
-        uSea.value = 0.25 + (SKIN_SEA / 100) * 1.5;
-      }
-      applyTimeOfDay(SKIN_TIME !== null ? SKIN_TIME / 100 : 0.55);
-      if (SKIN_TIME !== null) {
-        // a pinned 日光 from the url means "manual", the live sky must not fight it
-        sunMode = 'manual';
-        manualTimeOfDay = true;
-      }
-      // sun/moon/stars/clouds come from the real clock until the host says otherwise
-      refreshSky(Date.now());
-    }
-
-    // --- lifecycle: resize ---------------------------------------------------
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      applyResolutionScale(renderScale);
-    });
-
-    // --- lifecycle: pause when the tab is hidden -------------------------------
-    document.addEventListener('visibilitychange', () => {
-      if (!loopStarted) return;
-      if (document.hidden) {
-        renderer.setAnimationLoop(null);
-      } else {
-        lastFrameTime = performance.now();
-        lastRenderAt = 0;
-        renderer.setAnimationLoop(animate);
-      }
-    });
-
-    // --- initialize the GPU and start rendering --------------------------------
-    await renderer.init();
-
-    if (renderer.backend.isWebGPUBackend !== true) {
-      // WebGPU 不可用时 three 自动回退 WebGL2 backend：两种 backend 都允许渲染
-      // （2026-08-23 webgui 冒烟测试：用户浏览器无 WebGPU → 纯 WebGPU 检查导致初始化失败）。
-      PIXEL_RATIO_CAP = 1.0;
-      BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
-      FRAME_RATE_CAP = 30;
-      FRAME_MS = 1000 / FRAME_RATE_CAP;
-      TARGET_FPS = 28;
-      renderScale = 0.6;
-      applyResolutionScale(renderScale);
-    }
-
-    loopStarted = true;
-    renderer.setAnimationLoop(animate);
-  } catch (err) {
-    showInitError(err);
   }
 }
 
