@@ -55,6 +55,7 @@ node --check plugin/client.js            # 语法
 node tests/solar.test.mjs                # 天文函数 12 个用例
 node tests/sky.test.mjs                  # 夜/黄昏/昼色板 9 个用例
 node tests/structure.test.mjs            # 模块作用域结构 5 个用例
+node tests/fleet.test.mjs                # /fleet 计数口径 5 个用例
 ```
 （不要用 `node --test tests/`——本机沙箱不允许 `--test` 起子进程，报 `spawn EPERM`。）
 
@@ -66,3 +67,9 @@ node tests/structure.test.mjs            # 模块作用域结构 5 个用例
 2. **SECTION 被插进 `boot()`**：船与星空两节曾被 splice 到天空球与 post-processing 之间，于是 `const BOAT_MAX` 等变成 boot 局部量——`boot()` 调 `createBoats()` 时撞 TDZ（`Cannot access 'BOAT_MAX' before initialization`），boot 中止，玻璃节点也没建。现已移到 `boot();` 之前的模块作用域（SECTION 10/11），并由 `tests/structure.test.mjs` 守住：两个 section 横幅上方最近的非空非注释行必须是顶格 `}`，且相关声明必须以 `const`/`let`/`function` 出现在行首。
 
 `node --check` 查不出这类错误（语法合法），只能靠结构测试。另外 `/open-sea-skin/fleet` 路由由宿主插件注册，改 `plugin/index.js` 后**必须完全重启桌面端**，刷新页面不够。
+
+## 船数与夜海（2026-11-05，第二次修「灰白」之后）
+
+- **船数对齐顶部栏**：顶部栏用 `runningSubagentCount`，判据是子会话「有未结束的 turn」。而 `subagents.listChildren()` 返回的 catalog 条目只有 `{id, createdAt, mode, label?}`，没有 running 字段；`agentTeams.listMembers()` 里还含父智能体自己。旧的实现把两者混着数，结果永远是 1 艘幽灵船。现在逐个 `sessionQuery.observeSession(childId, { projectionMode: 'all' })` 读 `subagentTiming.active`，members 只当诊断字段。改这个文件要**完全重启桌面端**。
+- **夜海发雾**：夜里海面加过两项平坦亮色（0.55 的星光项 + 写死亮灰的浪花），浪一起来就糊成一层奶白。星光项改成掠射角项 `grazing = (1 - N·V)^2`，浪花色改为 `vec3(0.82,0.88,0.90) * (uSkyLight*0.78 + 0.16)`，白天的观感不变、夜里跟着天光变暗。
+- **船不再飘走**：原来每艘船有固定的世界坐标 berth，镜头一转就出画。现在船沿相机前侧的可见带巡航，到边缘折返，两轮分离避碰。

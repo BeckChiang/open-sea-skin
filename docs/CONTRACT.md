@@ -92,13 +92,20 @@
 宿主半（`plugin/index.js`）暴露 `GET /open-sea-skin/fleet?session=<id>`，返回：
 
 ```json
-{ "ok": true, "running": 2, "ships": [{ "id": "…", "title": "…", "status": "running" }], "services": { "subagents": true, "agents": true, "agentTeams": true } }
+{ "ok": true, "running": 2,
+  "ships": [{ "id": "…", "title": "…", "status": "running" }],
+  "children": [{ "id": "…", "title": "…", "status": "" }],
+  "childStates": [{ "id": "…", "title": "…", "running": true }],
+  "members": [],
+  "services": { "subagents": true, "sessionQuery": true, "agents": true, "agentTeams": true } }
 ```
 
-- 口径：**正在运行**的子智能体（`status === 'running'`），不累计；同一 worker 在 children 与 team members 里重复出现时按 id 去重。
+- 口径：**正在运行**的子智能体，不累计；且必须与侧边栏「正在运行 N 个子智能体」一致。
+- 判定方法：`subagentCatalog` 条目只有 `{id, createdAt, mode, label?}`，**没有 running 字段**；而 team members 里包含父智能体自己。所以逐个 `sessionQuery.observeSession(childId, { projectionMode: 'all' })`，读 `projections.values.subagentTiming.active`——有 open turn 就是 running，`lastTurnCompleted` 后就不是。每个 child 结果缓存 2.5 s（轮询间隔 4 s），observation 用 `Symbol.asyncDispose`/`Symbol.dispose` 释放；最多观察 24 个 child。
+- `members` 只作为诊断字段保留，不参与计数（否则父智能体永远贡献一艘幽灵船）。
 - 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
-- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe；`count` 上限 12（渲染端 `BOAT_MAX`）。
-- 渲染端在 `SECTION 9`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜，进出场用 `boatFade` 做缩放淡入淡出，船灯亮度跟 `uNightF`。
+- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe；`count` 上限 12（渲染端 `BOAT_MAX`），下限 1（常驻一艘 `BOAT_BASE`）。
+- 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船沿相机前侧的可见带巡航（`boatCruise`：横向 `lateral` 在 ±0.95 间折返、`base` 16–30 前后漂移），到边缘掉头而不是飞出画面；两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，所以是稳定避碰而不是抖动。
 
 ## 5 · 星空与流星
 
