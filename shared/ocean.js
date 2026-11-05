@@ -87,6 +87,8 @@ const uTime = uniform(0);
 const uSea = uniform(0.25 + (45 / 100) * 1.5);
 const uSunDir = uniform(new THREE.Vector3(0, 0.5, -0.87));
 const uSunColor = uniform(new THREE.Vector3(1, 1, 1));
+// ambient term that dims clouds, and anything else that must not glow at night
+const uSkyLight = uniform(1);
 const uHorizonColor = uniform(new THREE.Vector3(1, 1, 1));
 const uZenithColor = uniform(new THREE.Vector3(1, 1, 1));
 const uDeepColor = uniform(new THREE.Vector3(1, 1, 1));
@@ -285,7 +287,8 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     const low = float(0.62).add(float(CLOUD_COVER_BASELINE).sub(uCloudCover).mul(0.55));
     const density = clamp(uCloudCover.div(CLOUD_COVER_BASELINE), 0, 1);
     const cover = band.mul(smoothstep(low, low.add(0.33), cloudNoise));
-    const cloudColor = mix(vec3(0.92, 0.90, 0.87), uSunColor.mul(0.5), 0.45);
+    // 1.2.7 used a fixed bright cloud tint and looked like daylight at night
+    const cloudColor = mix(vec3(0.92, 0.90, 0.87).mul(uSkyLight), uSunColor.mul(0.5), 0.45);
     col.assign(mix(col, cloudColor, cover.mul(0.6).mul(density)));
   });
 
@@ -382,6 +385,7 @@ function applyElevation(elevationDeg, azimuthDeg) {
   uDeepColor.value.set(sky.deep[0], sky.deep[1], sky.deep[2]);
   uShallowColor.value.set(sky.shallow[0], sky.shallow[1], sky.shallow[2]);
   uSunColor.value.set(sky.sun[0], sky.sun[1], sky.sun[2]);
+  uSkyLight.value = sky.skyLight;
 
   sunElevationDeg = elevationDeg;
   sunAzimuthDeg = azimuthDeg;

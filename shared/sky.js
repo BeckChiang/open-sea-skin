@@ -55,17 +55,22 @@ const mix3 = (night, dusk, day, horizonF, dayF) => [
 /**
  * @param {number} elevationDeg sun elevation above the horizon, degrees
  * @returns {{horizonF:number, dayF:number, zenith:number[], horizon:number[],
- *   deep:number[], shallow:number[], sun:number[], sunIntensity:number}}
+ *   deep:number[], shallow:number[], sun:number[], sunIntensity:number,
+ *   skyLight:number}}
  */
 export function skyFromElevation(elevationDeg) {
   const horizonF = smoothstep01(NIGHT_FULL_DEG, 0, elevationDeg);
   const dayF = smoothstep01(0, DAY_FULL_DEG, elevationDeg);
   const sunIntensity = lerp(lerp(NIGHT.sunIntensity, DUSK.sunIntensity, horizonF), DAY.sunIntensity, dayF);
+  // how much ambient light reaches clouds / foam: 0.04 at deep night, 0.55 at
+  // the horizon, 1 in full daylight
+  const skyLight = lerp(0.04, lerp(0.55, 1, dayF), horizonF);
   const sunRGB = mix3(NIGHT.sun, DUSK.sun, DAY.sun, horizonF, dayF);
   return {
     horizonF,
     dayF,
     sunIntensity,
+    skyLight,
     zenith: mix3(NIGHT.zenith, DUSK.zenith, DAY.zenith, horizonF, dayF),
     horizon: mix3(NIGHT.horizon, DUSK.horizon, DAY.horizon, horizonF, dayF),
     deep: mix3(NIGHT.deep, DUSK.deep, DAY.deep, horizonF, dayF),

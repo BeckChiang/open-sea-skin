@@ -86,6 +86,18 @@ test('manual slider spans night -> sunset -> day', () => {
   assert.ok(manualAzimuthDeg(0) < 0 && manualAzimuthDeg(1) > 0)
 })
 
+test('ambient light dims clouds at night but not in daylight', () => {
+  assert.equal(skyFromElevation(-57.7).skyLight, 0.04)
+  assert.ok(skyFromElevation(0).skyLight > 0.4 && skyFromElevation(0).skyLight < 0.7)
+  assert.equal(skyFromElevation(45).skyLight, 1)
+  let prev = -1
+  for (let elev = -18; elev <= 12; elev += 1) {
+    const value = skyFromElevation(elev).skyLight
+    assert.ok(value >= prev - 1e-9, `skyLight dropped at ${elev}°`)
+    prev = value
+  }
+})
+
 test('colours stay in a sane 0..~1 range', () => {
   for (let elev = -90; elev <= 90; elev += 5) {
     const sky = skyFromElevation(elev)
