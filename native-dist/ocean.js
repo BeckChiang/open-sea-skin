@@ -13,13 +13,17 @@
 
 import * as THREE from './vendor/three.webgpu.js';
 import {
-  Fn, pass, uniform, float, vec2, vec3, vec4, If,
+  Fn, pass, uniform, uniformArray, texture, uv, float, vec2, vec3, vec4, If,
   sin, cos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
-  smoothstep, length, reflect,
+  smoothstep, length, reflect, passTexture,
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
+import {
+  sunPosition, moonPosition, daylightFromElevation,
+  cloudCoverOf, starLevelOf, starIntensityOf
+} from './solar.js';
 
 // skin mode: bare background, auto time-of-day, low-power, no UI chrome
 const SKIN = new URL(import.meta.url).searchParams.get('skin') === '1';
@@ -40,6 +44,40 @@ const LOW_END_DEVICE = QUALITY === 'low' || (QUALITY === 'auto' && (
   || ('deviceMemory' in navigator && Number(navigator.deviceMemory) <= 4)
 ));
 
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+const NUMBER_QUERY = (key, min, max, fallback) => {
+  if (!SKIN_QUERY.has(key)) return fallback;
+  const value = Number(SKIN_QUERY.get(key));
+  return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
+};
+
+// ----------------------------------------------------------------------------
+// SECTION 0 · SKY / GLASS STATE (contract §2.2 and §2.3)
+// Everything below is driven by uniforms only: switching any of it at runtime
+// re-binds constants, it never recompiles a shader.
+// ----------------------------------------------------------------------------
+
+// sunMode: 'real' -> solar.js once per second, 'manual' -> the t from oss-sun
+let sunMode = SKIN_QUERY.get('sunMode') === 'manual' ? 'manual' : 'real';
+let sunLat = NUMBER_QUERY('lat', -90, 90, 31.23);
+let sunLon = NUMBER_QUERY('lon', -180, 180, 121.47);
+let moonEnabled = true;
+let starsSetting = 'mid';
+let cloudsSetting = 'mid';
+// reported back through window.__ossState()
+let sunElevationDeg = 0;
+let sunAzimuthDeg = 0;
+let moonElevationDeg = 0;
+let moonBrightness = 0;
+let starsIntensity = 0;
+let cloudCover = cloudCoverOf(cloudsSetting);
+let sunClock = 0;
+
+const SKY_LEVELS = ['off', 'low', 'mid', 'high'];
+
+const GLASS_MAX_RECTS = 3;
+
 // ----------------------------------------------------------------------------
 // SECTION 1 · SHARED UNIFORMS
 // ----------------------------------------------------------------------------
@@ -52,6 +90,27 @@ const uHorizonColor = uniform(new THREE.Vector3(1, 1, 1));
 const uZenithColor = uniform(new THREE.Vector3(1, 1, 1));
 const uDeepColor = uniform(new THREE.Vector3(1, 1, 1));
 const uShallowColor = uniform(new THREE.Vector3(1, 1, 1));
+
+// Sky extras (contract §2.2). The defaults reproduce the 1.2.7 frame exactly:
+// no moon, no stars, and uCloudCover 0.55 maps to the old 0.62/0.95 threshold.
+const CLOUD_COVER_BASELINE = 0.55;
+const uMoonDir = uniform(new THREE.Vector3(0, 0.35, 0.94));
+const uMoonRight = uniform(new THREE.Vector3(1, 0, 0));
+const uMoonVisible = uniform(0);
+const uMoonPhaseCos = uniform(1);
+const uStars = uniform(0);
+const uCloudCover = uniform(CLOUD_COVER_BASELINE);
+
+// Frosted-glass columns (contract §2.3): 3 rects of (x0, y0, x1, y1) + level.
+const uGlassRects = uniformArray([
+  new THREE.Vector4(0, 0, 0, 0),
+  new THREE.Vector4(0, 0, 0, 0),
+  new THREE.Vector4(0, 0, 0, 0),
+]);
+const uGlassLevels = uniformArray([0, 0, 0]);
+const uGlassActive = uniform(0);
+const uGlassEdge = uniform(0.0035);
+const uGlassSpread = uniform(2);
 
 // ----------------------------------------------------------------------------
 // SECTION 2 · GERSTNER SWELL (identical to the standalone site)
@@ -160,9 +219,20 @@ const detailHeight = Fn(([xz, time]) => {
 // SECTION 4 · SHARED ANALYTIC SKY
 // cloudMask gates the cloud FBM: the dome always passes 1, the ocean only
 // pays for cloud noise where the reflection is actually visible.
+// astro (1 on the dome, 0 in the water reflection) keeps the hash star field
+// off the ocean both for looks and for fill rate.
 // ----------------------------------------------------------------------------
 
-const skyColor = Fn(([dir, cloudMask]) => {
+// scalar hash for the star cells (same sine-fold trick as hash2 above)
+const hash31 = Fn(([p]) => fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))).mul(43758.5453)));
+
+const STAR_SCALE = 190;        // cells per radian: ~0.3° per cell
+const STAR_SIZE = 0.19;        // cell-space radius of one star
+const MOON_DISC_RADIUS = 0.012; // radians, ~0.7° (a little larger than the real 0.26°)
+const MOON_DISC_IN = 0.99986;
+const MOON_DISC_OUT = 0.99993;
+
+const skyColor = Fn(([dir, cloudMask, astro]) => {
   const d = dir; // Both callers supply a normalized direction.
   const up = clamp(d.y, -0.15, 1);
   const col = mix(uHorizonColor, uZenithColor, pow(max(up, 0), 0.42)).toVar();
@@ -173,18 +243,54 @@ const skyColor = Fn(([dir, cloudMask]) => {
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18));
   col.addAssign(uSunColor.mul(smoothstep(0.9994, 0.9998, s)).mul(30));
 
+  // moon: phase-shaped disc + halo, gated by uMoonVisible (brightness, 0..1)
+  If(uMoonVisible.greaterThan(0.002), () => {
+    const md = dot(d, uMoonDir);
+    const disc = smoothstep(MOON_DISC_IN, MOON_DISC_OUT, md);
+    const halo = pow(max(md, 0), 260).mul(0.05)
+      .add(smoothstep(0.999, 0.99986, md).mul(0.06));
+    // local axis across the disc; computed on the CPU so a moon near the
+    // zenith cannot produce a degenerate normalize()
+    const mx = dot(d.sub(uMoonDir.mul(md)), uMoonRight).div(MOON_DISC_RADIUS).toVar();
+    const lit = smoothstep(-0.22, 0.22, mx.add(uMoonPhaseCos));
+    const moonColor = mix(vec3(0.10, 0.12, 0.16), vec3(1, 0.97, 0.9), lit);
+    const moonGlow = pow(uMoonVisible, 0.5);
+    col.addAssign(moonColor.mul(disc).mul(moonGlow).mul(2.2));
+    col.addAssign(vec3(0.55, 0.62, 0.78).mul(halo).mul(moonGlow));
+  });
+
+  // stars: one hash point per direction cell, faded near the horizon
+  If(uStars.mul(astro).greaterThan(0.001), () => {
+    const p = d.mul(STAR_SCALE);
+    const cell = floor(p);
+    const local = fract(p).sub(0.5);
+    const hx = hash31(cell);
+    const hy = hash31(cell.add(vec3(19.3, 7.7, 41.1)));
+    const hg = hash31(cell.add(vec3(53.1, 29.9, 11.7)));
+    const dist = length(local.xy.sub(vec2(hx, hy).sub(0.5).mul(0.62)));
+    const core = float(1).sub(smoothstep(0, STAR_SIZE, dist));
+    const gate = smoothstep(0.972, 0.9985, hg);
+    const twinkle = sin(uTime.mul(hg.mul(2.4).add(1.3)).add(hx.mul(29.7))).mul(0.22).add(0.78);
+    const altitude = smoothstep(0.02, 0.32, d.y);
+    col.addAssign(vec3(0.86, 0.92, 1).mul(core).mul(gate).mul(twinkle).mul(altitude).mul(uStars).mul(2.2));
+  });
+
   // clouds only inside the low band: skips one FBM for most sky pixels
   const band = smoothstep(0.03, 0.16, d.y).mul(smoothstep(0.6, 0.22, d.y));
   If(band.mul(cloudMask).greaterThan(0.001), () => {
     const proj = d.xz.div(d.y.add(0.18)).mul(0.55);
     const cloudNoise = clamp(fbm(proj.add(vec2(uTime.mul(0.006), uTime.mul(0.003)))).mul(0.5).add(0.5), 0, 1);
-    const cover = band.mul(smoothstep(0.62, 0.95, cloudNoise));
+    // uCloudCover 0.55 reproduces the 1.2.7 threshold (0.62 -> 0.95) and opacity
+    const low = float(0.62).add(float(CLOUD_COVER_BASELINE).sub(uCloudCover).mul(0.55));
+    const density = clamp(uCloudCover.div(CLOUD_COVER_BASELINE), 0, 1);
+    const cover = band.mul(smoothstep(low, low.add(0.33), cloudNoise));
     const cloudColor = mix(vec3(0.92, 0.90, 0.87), uSunColor.mul(0.5), 0.45);
-    col.assign(mix(col, cloudColor, cover.mul(0.6)));
+    col.assign(mix(col, cloudColor, cover.mul(0.6).mul(density)));
   });
 
   return col;
 });
+
 
 // ----------------------------------------------------------------------------
 // SECTION 5 · OCEAN MATERIAL
@@ -241,7 +347,7 @@ const oceanColor = Fn(() => {
   const R = reflect(V.negate(), N).toVar();
   R.y.assign(max(R.y, 0.04));
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(max(dot(N, V), 0)), 5)));
-  col.assign(mix(col, skyColor(R.normalize(), fresnel.greaterThan(0.25)), fresnel));
+  col.assign(mix(col, skyColor(R.normalize(), fresnel.greaterThan(0.25), float(0)), fresnel));
 
   col.addAssign(spec);
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), foam));
@@ -313,7 +419,93 @@ function applyTimeOfDay(t) {
     lerp(DUSK.sun[1], DAY.sun[1], daylight) * intensity,
     lerp(DUSK.sun[2], DAY.sun[2], daylight) * intensity
   );
+
+  // reported back through __ossState(); overwritten with the true values in
+  // real-sun mode right after the call
+  sunElevationDeg = elevation * RAD;
+  sunAzimuthDeg = azimuth * RAD;
 }
+
+// ----------------------------------------------------------------------------
+// SECTION 6B · REAL SUN / MOON / STARS (contract §2.2)
+// Uniforms only: the sky shader is compiled once and never rebuilt at runtime.
+// Azimuth basis matches applyTimeOfDay: 0° = north = -z, 90° = east = +x.
+// ----------------------------------------------------------------------------
+
+function applySunDirection(elevationDeg, azimuthDeg) {
+  const el = elevationDeg * DEG;
+  const az = azimuthDeg * DEG;
+  const ce = Math.cos(el);
+  uSunDir.value.set(ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az));
+}
+
+function syncMoon(now) {
+  const moon = moonPosition(new Date(now), sunLat, sunLon);
+  moonElevationDeg = moon.elevationDeg;
+  moonBrightness = moonEnabled ? moon.brightness : 0;
+  uMoonVisible.value = moonBrightness;
+
+  const el = moon.elevationDeg * DEG;
+  const az = moon.azimuthDeg * DEG;
+  const ce = Math.cos(el);
+  uMoonDir.value.set(ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az));
+
+  // terminator: cos(phase) is +1 at full moon and -1 at new moon. Mirroring it
+  // is the same as mirroring the disc, so the lit limb always faces the sun.
+  const phaseCos = Math.cos(moon.phase01 * Math.PI * 2);
+  let rightX = uMoonDir.value.z;
+  let rightZ = -uMoonDir.value.x;
+  const horizontal = Math.hypot(rightX, rightZ);
+  if (horizontal < 1e-4) {
+    // moon (almost) overhead: any horizontal axis will do
+    rightX = 1;
+    rightZ = 0;
+  } else {
+    rightX /= horizontal;
+    rightZ /= horizontal;
+  }
+  uMoonRight.value.set(rightX, 0, rightZ);
+  const sunOnRight = rightX * uSunDir.value.x + rightZ * uSunDir.value.z;
+  uMoonPhaseCos.value = sunOnRight < 0 ? -phaseCos : phaseCos;
+}
+
+function syncStars() {
+  starsIntensity = starIntensityOf(sunElevationDeg, starsSetting, moonBrightness);
+  uStars.value = starsIntensity;
+}
+
+// once per second in real mode (contract: no 720 s sine cycle)
+function refreshSky(now) {
+  if (sunMode === 'real') {
+    const sun = sunPosition(new Date(now), sunLat, sunLon);
+    sunElevationDeg = sun.elevationDeg;
+    sunAzimuthDeg = sun.azimuthDeg;
+    applyTimeOfDay(daylightFromElevation(sun.elevationDeg) / 100);
+    applySunDirection(sun.elevationDeg, sun.azimuthDeg);
+  }
+  syncMoon(now);
+  syncStars();
+}
+
+function applySunMessage(d) {
+  if (d.mode === 'real' || d.mode === 'manual') sunMode = d.mode;
+  const lat = Number(d.lat);
+  const lon = Number(d.lon);
+  if (Number.isFinite(lat) && lat >= -90 && lat <= 90) sunLat = lat;
+  if (Number.isFinite(lon) && lon >= -180 && lon <= 180) sunLon = lon;
+  if (typeof d.moon === 'boolean') moonEnabled = d.moon;
+  if (SKY_LEVELS.indexOf(d.stars) >= 0) starsSetting = d.stars;
+  if (SKY_LEVELS.indexOf(d.clouds) >= 0) cloudsSetting = d.clouds;
+  uCloudCover.value = cloudCoverOf(cloudsSetting);
+  cloudCover = uCloudCover.value;
+  if (sunMode === 'manual') {
+    manualTimeOfDay = d.auto !== true;
+    const t = Number(d.t);
+    if (Number.isFinite(t) && t >= 0 && t <= 100) applyTimeOfDay(t / 100);
+  }
+  refreshSky(Date.now());
+}
+
 
 // ----------------------------------------------------------------------------
 // SECTION 7 · DOM REFERENCES (absent in skin mode)
@@ -364,6 +556,257 @@ function revealUI() {
   document.body.classList.add('ready'); // skin mode: fades the ocean in
 }
 
+// ----------------------------------------------------------------------------
+// SECTION 8B · RENDERER-SIDE FROSTED GLASS (contract §2.3 / §3)
+// Structure follows upstream BloomNode: TempNode subclass + RenderTargets +
+// a separable blur material + passTexture(), rendered from updateBefore().
+// ----------------------------------------------------------------------------
+
+const GLASS_KERNEL = 9;
+const GLASS_WEIGHTS = (() => {
+  // gaussian, 9 taps, normalised so the centre + both sides integrate to 1
+  const sigma = GLASS_KERNEL / 3;
+  const weights = [];
+  let total = 0;
+  for (let i = 0; i < GLASS_KERNEL; i++) {
+    const weight = Math.exp(-(i * i) / (2 * sigma * sigma));
+    weights.push(weight);
+    total += i === 0 ? weight : weight * 2;
+  }
+  return weights.map((weight) => weight / total);
+})();
+
+const glassQuad = new THREE.QuadMesh();
+const glassDrawSize = new THREE.Vector2();
+let glassSavedState;
+
+class GlassBlurNode extends THREE.TempNode {
+  constructor(inputNode) {
+    super('vec4');
+    this.inputNode = inputNode;
+    this.invSize = uniform(new THREE.Vector2(1, 1));
+    this.direction = uniform(new THREE.Vector2(1, 0));
+    this.colorTexture = texture(null);
+    this.targetH = new THREE.RenderTarget(1, 1, { depthBuffer: false, type: THREE.HalfFloatType });
+    this.targetV = new THREE.RenderTarget(1, 1, { depthBuffer: false, type: THREE.HalfFloatType });
+    this.targetH.texture.name = 'OpenSea.glassH';
+    this.targetV.texture.name = 'OpenSea.glassV';
+    this.targetH.texture.generateMipmaps = false;
+    this.targetV.texture.generateMipmaps = false;
+    this._textureOutput = passTexture(this, this.targetV.texture);
+    this._materialH = null;
+    this._materialV = null;
+    this._width = 0;
+    this._height = 0;
+    this.active = false;
+    this.updateBeforeType = THREE.NodeUpdateType.FRAME;
+  }
+
+  getTextureNode() {
+    return this._textureOutput;
+  }
+
+  // half resolution, like the bloom chain: the blur is low frequency anyway
+  setSize(width, height) {
+    const w = Math.max(1, Math.round(width / 2));
+    const h = Math.max(1, Math.round(height / 2));
+    if (w === this._width && h === this._height) return;
+    this._width = w;
+    this._height = h;
+    this.targetH.setSize(w, h);
+    this.targetV.setSize(w, h);
+    this.invSize.value.set(1 / w, 1 / h);
+  }
+
+  // mirrored 9-tap gaussian along this.direction
+  _blurNode(sampleAt) {
+    const step = this.invSize.mul(this.direction).mul(uGlassSpread);
+    return Fn(() => {
+      const coord = uv();
+      const sum = sampleAt(coord).rgb.mul(GLASS_WEIGHTS[0]).toVar();
+      for (let i = 1; i < GLASS_KERNEL; i++) {
+        const offset = step.mul(float(i));
+        sum.addAssign(sampleAt(coord.add(offset)).add(sampleAt(coord.sub(offset))).mul(GLASS_WEIGHTS[i]));
+      }
+      return vec4(sum, 1);
+    });
+  }
+
+  setup(builder) {
+    const context = builder.getSharedContext();
+    if (!this._materialH) {
+      // pass 1 samples the scene pass directly, which also gives the node the
+      // graph edge that orders it after the scene render
+      this._materialH = new THREE.NodeMaterial();
+      this._materialH.name = 'OpenSea.glassBlurH';
+      this._materialH.fragmentNode = this._blurNode((coord) => this.inputNode.sample(coord))().context(context);
+      this._materialH.needsUpdate = true;
+    }
+    if (!this._materialV) {
+      this._materialV = new THREE.NodeMaterial();
+      this._materialV.name = 'OpenSea.glassBlurV';
+      this._materialV.fragmentNode = this._blurNode((coord) => this.colorTexture.sample(coord))().context(context);
+      this._materialV.needsUpdate = true;
+    }
+    return this._textureOutput;
+  }
+
+  updateBefore(frame) {
+    // inactive: no render targets touched, no extra sampling at all
+    if (!this.active || !this._materialH || !this._materialV) return;
+    if (!this.inputNode || !this.inputNode.value) {
+      // the scene pass has not produced a texture: stay on the clear image
+      this.active = false;
+      glassActive = false;
+      uGlassActive.value = 0;
+      warnGlass(new Error('scene texture unavailable'));
+      return;
+    }
+    const { renderer } = frame;
+    glassSavedState = THREE.RendererUtils.resetRendererState(renderer, glassSavedState);
+    renderer.getDrawingBufferSize(glassDrawSize);
+    this.setSize(glassDrawSize.width, glassDrawSize.height);
+
+    this.direction.value.set(1, 0);
+    glassQuad.material = this._materialH;
+    renderer.setRenderTarget(this.targetH);
+    glassQuad.render(renderer);
+
+    this.colorTexture.value = this.targetH.texture;
+    this.direction.value.set(0, 1);
+    glassQuad.material = this._materialV;
+    renderer.setRenderTarget(this.targetV);
+    glassQuad.render(renderer);
+
+    THREE.RendererUtils.restoreRendererState(renderer, glassSavedState);
+  }
+}
+
+// weight = max over the three columns, smoothstepped at every edge, so a pixel
+// outside every rect gets exactly 0 and therefore keeps the clear image
+const glassWeight = Fn(() => {
+  const coord = uv();
+  const edge = uGlassEdge;
+  const weight = float(0).toVar();
+  for (let i = 0; i < GLASS_MAX_RECTS; i++) {
+    const rect = uGlassRects.element(i);
+    const level = uGlassLevels.element(i);
+    const inside = smoothstep(float(0), edge, coord.x.sub(rect.x))
+      .mul(smoothstep(float(0), edge, rect.z.sub(coord.x)))
+      .mul(smoothstep(float(0), edge, coord.y.sub(rect.y)))
+      .mul(smoothstep(float(0), edge, rect.w.sub(coord.y)));
+    weight.assign(max(weight, inside.mul(level)));
+  }
+  return clamp(weight.mul(uGlassActive), 0, 1);
+});
+
+function buildComposite(sceneColor, sceneBloom, glassNode) {
+  if (!glassNode) return sceneColor.add(sceneBloom);
+  const blurred = glassNode.getTextureNode();
+  const composite = Fn(() => {
+    const rgb = sceneColor.add(sceneBloom).rgb.toVar();
+    const weight = glassWeight();
+    If(weight.greaterThan(0.001), () => {
+      rgb.assign(mix(rgb, blurred.sample(uv()).rgb, weight));
+    });
+    return vec4(rgb, 1);
+  });
+  return composite();
+}
+
+const glassRectState = [
+  { x0: 0, y0: 0, x1: 0, y1: 0, level: 0 },
+  { x0: 0, y0: 0, x1: 0, y1: 0, level: 0 },
+  { x0: 0, y0: 0, x1: 0, y1: 0, level: 0 },
+];
+let glassNode = null;
+let glassActive = false;
+let glassWarned = false;
+let glassScaleCapped = false;
+
+function warnGlass(err) {
+  if (glassWarned) return;
+  glassWarned = true;
+  console.warn('[OPEN SEA SKIN] frosted glass disabled, keeping the clear image:', err);
+}
+
+const GLASS_LEVELS = { off: 0, weak: 0.35, medium: 0.7, strong: 1 };
+
+function glassLevelOf(level) {
+  if (typeof level === 'number' && Number.isFinite(level)) return Math.min(1, Math.max(0, level));
+  return Object.prototype.hasOwnProperty.call(GLASS_LEVELS, level) ? GLASS_LEVELS[level] : 0;
+}
+
+// accepts both the contract shape ({ mode, perf }) and the host's older
+// { active } shorthand; rects arrive normalised 0..1 but CSS px are tolerated
+function applyGlassMessage(d) {
+  const requested = d.mode === 'css' ? false
+    : d.mode === 'render' ? true
+      : d.active === true;
+  const wanted = requested && d.perf !== true;
+  const rects = [];
+  if (wanted && Array.isArray(d.rects)) {
+    for (const rect of d.rects) {
+      if (!rect || rects.length >= GLASS_MAX_RECTS) break;
+      const x0 = Math.min(rect.x0, rect.x1);
+      const x1 = Math.max(rect.x0, rect.x1);
+      const y0 = Math.min(rect.y0, rect.y1);
+      const y1 = Math.max(rect.y0, rect.y1);
+      const level = glassLevelOf(rect.level);
+      if (![x0, y0, x1, y1].every((v) => Number.isFinite(v)) || level <= 0) continue;
+      const px = x1 > 1.5 || y1 > 1.5;
+      const w = px ? window.innerWidth || 1 : 1;
+      const h = px ? window.innerHeight || 1 : 1;
+      // uv() is bottom-up, the host measures columns top-down: flip y here
+      const ya = clamp01(1 - y1 / h);
+      const yb = clamp01(1 - y0 / h);
+      rects.push({
+        x0: clamp01(x0 / w), y0: ya, x1: clamp01(x1 / w), y1: yb, level,
+      });
+    }
+  }
+  applyGlass(wanted && rects.length > 0, rects);
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function applyGlass(active, rects) {
+  const effective = active === true && glassNode !== null;
+  if (active === true && glassNode === null) warnGlass(new Error('blur node unavailable'));
+
+  for (let i = 0; i < GLASS_MAX_RECTS; i++) {
+    const src = effective ? rects[i] : null;
+    const dst = glassRectState[i];
+    dst.x0 = src ? src.x0 : 0;
+    dst.y0 = src ? src.y0 : 0;
+    dst.x1 = src ? src.x1 : 0;
+    dst.y1 = src ? src.y1 : 0;
+    dst.level = src ? src.level : 0;
+    uGlassRects.array[i].set(dst.x0, dst.y0, dst.x1, dst.y1);
+    uGlassLevels.array[i] = dst.level;
+  }
+  glassActive = effective;
+  uGlassActive.value = effective ? 1 : 0;
+  if (glassNode) glassNode.active = effective;
+
+  // contract §3.4: cap (not floor) the adaptive resolution while blur runs
+  SCALE_CAP = effective ? 0.7 : 1;
+  if (effective && renderer && renderScale > SCALE_CAP) {
+    renderScale = SCALE_CAP;
+    glassScaleCapped = true;
+    applyResolutionScale(renderScale);
+  } else if (!effective && glassScaleCapped) {
+    // blur off again: hand the full ratio back to the adaptive controller
+    glassScaleCapped = false;
+    if (renderer && renderScale < 1) {
+      renderScale = 1;
+      applyResolutionScale(renderScale);
+    }
+  }
+}
+
 // skin controls: the host page sends 波浪大小/日光 adjustments here
 if (SKIN) {
   window.addEventListener('message', (ev) => {
@@ -377,20 +820,38 @@ if (SKIN) {
       if (Number.isFinite(sea) && sea >= 0 && sea <= 100) {
         uSea.value = 0.25 + (sea / 100) * 1.5;
       }
-      if (Number.isFinite(t) && t >= 0 && t <= 100) {
+      // In `real` mode the sky is driven by solar.js; a host that keeps
+      // posting t (sea updates arrive at 4 Hz) must not overwrite it.
+      if (Number.isFinite(t) && t >= 0 && t <= 100 && sunMode === 'manual') {
         applyTimeOfDay(t / 100);
       }
     }
+    if (d && d.type === 'oss-sun') applySunMessage(d);
+    if (d && d.type === 'oss-glass') applyGlassMessage(d);
   });
-  // tiny debug hook for automated checks
+  // tiny debug hook for automated checks (contract §3.6)
   window.__ossState = () => ({
     sea: uSea.value,
     daylight: currentDaylight,
-    elapsed: uTime.value,
-    manualTimeOfDay,
+    sunElevationDeg,
+    sunAzimuthDeg,
+    moonElevationDeg,
+    moonBrightness,
+    starsIntensity,
+    cloudCover,
+    blurRects: glassRectState.map((rect) => ({
+      x0: rect.x0, y0: rect.y0, x1: rect.x1, y1: rect.y1, level: rect.level,
+    })),
+    blurActive: glassActive,
+    sunMode,
+    moonEnabled,
+    stars: starsSetting,
+    clouds: cloudsSetting,
     renderScale,
     reducedMotion: REDUCED_MOTION,
     lowEndDevice: LOW_END_DEVICE,
+    elapsed: uTime.value,
+    manualTimeOfDay,
   });
 }
 
@@ -423,6 +884,8 @@ let FRAME_MS = 1000 / FRAME_RATE_CAP;
 let TARGET_FPS = REDUCED_MOTION ? 18 : LOW_END_DEVICE ? 28 : SKIN ? 40 : 55;
 const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.5 : 0.55;
 let renderScale = 1;
+// contract §3.4: the frosted glass caps the adaptive scale, it never raises it
+let SCALE_CAP = 1;
 
 function applyResolutionScale(scale) {
   renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
@@ -462,16 +925,22 @@ function animate(now) {
       if (fpsNow < TARGET_FPS - 8 && renderScale > MIN_SCALE) {
         renderScale = Math.max(MIN_SCALE, +(renderScale * 0.92).toFixed(3));
         applyResolutionScale(renderScale);
-      } else if (fpsNow > TARGET_FPS + 8 && renderScale < 1) {
-        renderScale = Math.min(1, +(renderScale * 1.06).toFixed(3));
+      } else if (fpsNow > TARGET_FPS + 8 && renderScale < SCALE_CAP) {
+        renderScale = Math.min(SCALE_CAP, +(renderScale * 1.06).toFixed(3));
         applyResolutionScale(renderScale);
       }
     }
   }
 
-  // skin mode: slowly cycle the whole day so the background keeps evolving
-  // (only while the user hasn't pinned 日光 from the injected panel)
-  if (SKIN && !manualTimeOfDay) {
+  // skin mode: real sun follows the clock (contract §2.2 forbids the 720 s
+  // sine cycle); a manual 日光 pin falls through to the slow legacy cycle
+  if (SKIN && sunMode === 'real') {
+    sunClock += dt;
+    if (sunClock >= 1) {
+      sunClock = 0;
+      refreshSky(Date.now());
+    }
+  } else if (SKIN && !manualTimeOfDay) {
     skinTimeWindow += dt;
     if (skinTimeWindow >= 0.25) {
       skinTimeWindow = 0;
@@ -529,7 +998,7 @@ async function boot() {
 
     // --- sky dome ------------------------------------------------------------
     const skyMaterial = new THREE.MeshBasicNodeMaterial();
-    skyMaterial.colorNode = skyColor(normalize(positionWorld), float(1));
+    skyMaterial.colorNode = skyColor(normalize(positionWorld), float(1), float(1));
     skyMaterial.side = THREE.BackSide;
     skyMaterial.depthWrite = false;
 
@@ -540,12 +1009,22 @@ async function boot() {
     sky.frustumCulled = false;
     scene.add(sky);
 
-    // --- post-processing: scene pass + TSL bloom ----------------------------
+    // --- post-processing: scene pass + TSL bloom + optional frosted glass ---
     postProcessing = new THREE.PostProcessing(renderer);
     const scenePass = pass(scene, camera);
     const sceneColor = scenePass.getTextureNode('output');
     const bloomStrength = SKIN ? (LOW_END_DEVICE ? 0.18 : 0.28) : 0.4;
-    postProcessing.outputNode = sceneColor.add(bloom(sceneColor, bloomStrength, 0.3, 0.9));
+    const sceneBloom = bloom(sceneColor, bloomStrength, 0.3, 0.9);
+    if (SKIN) {
+      // contract §3.5: any failure here must keep the clear image on screen
+      try {
+        glassNode = new GlassBlurNode(sceneColor);
+      } catch (err) {
+        glassNode = null;
+        warnGlass(err);
+      }
+    }
+    postProcessing.outputNode = buildComposite(sceneColor, sceneBloom, glassNode);
 
     // --- orbit controls -----------------------------------------------------
     controls = new OrbitControls(camera, renderer.domElement);
@@ -590,6 +1069,13 @@ async function boot() {
         uSea.value = 0.25 + (SKIN_SEA / 100) * 1.5;
       }
       applyTimeOfDay(SKIN_TIME !== null ? SKIN_TIME / 100 : 0.55);
+      if (SKIN_TIME !== null) {
+        // a pinned 日光 from the url means "manual", the live sky must not fight it
+        sunMode = 'manual';
+        manualTimeOfDay = true;
+      }
+      // sun/moon/stars/clouds come from the real clock until the host says otherwise
+      refreshSky(Date.now());
     }
 
     // --- lifecycle: resize ---------------------------------------------------
