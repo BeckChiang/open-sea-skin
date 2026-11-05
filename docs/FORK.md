@@ -53,5 +53,16 @@ plugin_manager install_bundle link:C:/Users/recko/DSH/plugins/open-sea-skin-lab
 node scripts/build-runtime.mjs --check   # shared/ 与 native-dist/ 是否同步
 node --check plugin/client.js            # 语法
 node tests/solar.test.mjs                # 天文函数 12 个用例
+node tests/sky.test.mjs                  # 夜/黄昏/昼色板 9 个用例
+node tests/structure.test.mjs            # 模块作用域结构 5 个用例
 ```
 （不要用 `node --test tests/`——本机沙箱不允许 `--test` 起子进程，报 `spawn EPERM`。）
+
+## 两次「整屏灰白」的成因（2026-11-05）
+
+`animate()` 里先 `updateBoats()` / `updateStarDome()`，最后才 `postProcessing.render()`；任何一帧抛错画布就永远不提交，界面只剩白色底。两次崩溃都属这一类：
+
+1. **`meteor` 键重名**：`createStarLayer()` 的返回对象字面量里 `meteor` 写了两次（流星 `Line` 与流星状态机），后者覆盖前者，`updateStarDome()` 读 `layer.meteor.geometry` 得到 `undefined`。现改为 `meteorLine: meteor`，并给船/星空两层的更新各自套 `try/catch`，单层失效不再连坐渲染循环。
+2. **SECTION 被插进 `boot()`**：船与星空两节曾被 splice 到天空球与 post-processing 之间，于是 `const BOAT_MAX` 等变成 boot 局部量——`boot()` 调 `createBoats()` 时撞 TDZ（`Cannot access 'BOAT_MAX' before initialization`），boot 中止，玻璃节点也没建。现已移到 `boot();` 之前的模块作用域（SECTION 10/11），并由 `tests/structure.test.mjs` 守住：两个 section 横幅上方最近的非空非注释行必须是顶格 `}`，且相关声明必须以 `const`/`let`/`function` 出现在行首。
+
+`node --check` 查不出这类错误（语法合法），只能靠结构测试。另外 `/open-sea-skin/fleet` 路由由宿主插件注册，改 `plugin/index.js` 后**必须完全重启桌面端**，刷新页面不够。
