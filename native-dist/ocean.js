@@ -1258,7 +1258,7 @@ const boatTilt = new THREE.Quaternion();
 const boatYaw = new THREE.Quaternion();
 const boatForward = new THREE.Vector3();
 const boatRight = new THREE.Vector3();
-const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0 }));
+const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0 }));
 
 // Flat forward/right pair: the fleet rides the horizontal plane, so pitch is
 // handled by the swell normal instead of the camera's downward tilt.
@@ -1304,6 +1304,9 @@ function updateBoats(dt) {
     placed.x = originX + boatForward.x * lane.distance + boatRight.x * across + lane.pushX;
     placed.z = originZ + boatForward.z * lane.distance + boatRight.z * across + lane.pushZ;
     placed.fade = fade;
+    // the placement slot is not the lane slot: keep the boat's own lane so the
+    // separation pushes and the heading go back to the boat that owns them
+    placed.lane = index;
     placedCount += 1;
   }
 
@@ -1326,8 +1329,8 @@ function updateBoats(dt) {
         const push = (BOAT_MIN_SEP - distance) / 2;
         const ux = (dx / distance) * push;
         const uz = (dz / distance) * push;
-        const laneA = boatCruise[i];
-        const laneB = boatCruise[j];
+        const laneA = boatCruise[a.lane];
+        const laneB = boatCruise[b.lane];
         laneA.pushX += ux;
         laneA.pushZ += uz;
         laneB.pushX -= ux;
@@ -1347,7 +1350,7 @@ function updateBoats(dt) {
     boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
     boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
     // heading follows the lane direction, so a boat reads as sailing somewhere
-    const lane = boatCruise[index];
+    const lane = boatCruise[placed.lane];
     const heading = Math.atan2(boatRight.x * lane.dir, boatRight.z * lane.dir);
     boatYaw.setFromAxisAngle(BOAT_UP, heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
