@@ -886,8 +886,24 @@ function animate(now) {
 
   uTime.value += dt * (REDUCED_MOTION ? 0.12 : 1);
   controls.update();
-  if (SKIN) updateBoats(dt);
-  if (SKIN) updateStarDome(now, dt);
+  // a throw here would kill the animation loop and leave an unpresented (white)
+  // canvas, so each optional layer degrades on its own instead
+  if (SKIN && boats) {
+    try {
+      updateBoats(dt);
+    } catch (err) {
+      boats = null;
+      console.warn('[open-sea-skin] boats disabled', err);
+    }
+  }
+  if (SKIN && starLayer) {
+    try {
+      updateStarDome(now, dt);
+    } catch (err) {
+      starLayer = null;
+      console.warn('[open-sea-skin] star dome disabled', err);
+    }
+  }
 
   // frame cap: skip work when the display fires faster than 60 Hz
   if (now - lastRenderAt < FRAME_MS - 0.5) return;
@@ -1219,7 +1235,8 @@ function createStarLayer(scene) {
   scene.add(meteor);
 
   return {
-    stars, lines, meteor,
+    // NOTE: `meteor` is the state machine below, so the Line needs its own key
+    stars, lines, meteorLine: meteor,
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
@@ -1278,7 +1295,7 @@ function updateStarDome(now, dt) {
 
   // meteors: random streaks that only exist at night
   const meteor = layer.meteor;
-  const meteorPositions = layer.meteor.geometry.getAttribute('position');
+  const meteorPositions = layer.meteorLine.geometry.getAttribute('position');
   const elapsed = now / 1000;
   if (meteor.active) {
     meteor.elapsed += dt;
