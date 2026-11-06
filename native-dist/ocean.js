@@ -1116,7 +1116,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.15';
+const OCEAN_BUILD = 'lab-1.5.16';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1326,11 +1326,9 @@ const BOAT_MAX = 12;
 // One hull always stays on the water: an empty sea reads as "the fleet feature
 // is broken", not as "no work in progress".
 const BOAT_BASE = 1;
-// Sweep band and depth, as fractions of the frame. The parent sends the bottom
-// edge of the chat column (waterTop); hulls ride just below it.
-const BOAT_EDGE_FRAC = 1.15;
+// How far apart two hulls must stay on screen, and how fast they slide in and
+// out of the open water band the parent measures for us.
 const BOAT_MIN_SEP_FRAC = 0.075;
-// How fast a hull slides across the frame when it enters or leaves.
 const BOAT_ENTER_RATE = 0.95;
 const BOAT_EXIT_RATE = 0.72;
 // How far ahead of the bow we sample the swell to read the slope it is climbing.
@@ -1343,6 +1341,9 @@ let boats = null;
 // Bottom of the chat column as a fraction of the frame height: everything below
 // this line is open water with no sheet of glass over it.
 let waterTop = 0.84;
+// Left edge of the conversation column: the water the fleet may use ends here,
+// because the column (and the composer under it) is drawn over the sea.
+let waterLeft = 0.3;
 const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, heading: 0, dirX: 0, dirZ: -1, lane: 0 }));
 const boatSpots = [];
 let boatError = '';
@@ -1366,11 +1367,10 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     // because the swell has to be able to speed a boat up and slow it down
     angle: phase,
     surge: 1,
-    // horizontal band: centre and amplitude in frame fractions
-    center: 0.56 - (index % 2) * 0.05,
-    amp: 0.33 + (index % 3) * 0.02,
+    // horizontal slot inside the open water: three hulls spread across it
+    slot: [0.18, 0.5, 0.82][index % 3],
     // vertical offset from the water line, so three lanes do not sit on one row
-    depth: (index % 3) * 0.028,
+    depth: (index % 3) * 0.022,
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
     side: index % 2 === 0 ? 1 : -1,
@@ -1483,7 +1483,9 @@ function seaPointAt(sx, sy, out) {
 
 function applyWaterMessage(data) {
   const top = Number(data && data.top);
+  const left = Number(data && data.left);
   if (Number.isFinite(top)) waterTop = Math.max(0.5, Math.min(0.94, top));
+  if (Number.isFinite(left)) waterLeft = Math.max(0.12, Math.min(0.85, left));
 }
 
 function updateBoats(dt) {
@@ -1512,21 +1514,32 @@ function updateBoats(dt) {
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
     const laneExit = BOAT_EXIT_RATE * (0.8 + (index % 3) * 0.1);
 
+    // The fleet may only use water the page leaves uncovered: left of the chat
+    // column, below the sidebar. Anything to the right is behind the glass and
+    // unreadable, which is what "three drawn, one visible" looked like.
+    const bandLeft = 0.03;
+    const bandRight = Math.max(bandLeft + 0.12, waterLeft - 0.03);
+    const span = bandRight - bandLeft;
+    const offLeft = -(bandLeft + 0.06);
+    const offRight = waterLeft + 0.06 - bandRight;
+
     if (want) {
       if (!lane.shown) {
-        // start beyond an edge and sail in, so nothing ever pops into the middle
+        // start just past an edge and sail in, so nothing ever pops into the middle
         lane.shown = true;
-        lane.awayFrac = (lane.exitFrom || lane.side) * BOAT_EDGE_FRAC;
+        lane.awayFrac = (lane.exitFrom || lane.side) > 0 ? offRight : offLeft;
         lane.exitFrom = 0;
       }
       lane.exitSide = 0;
       lane.awayFrac += (0 - lane.awayFrac) * Math.min(1, dt * laneEnter);
     } else {
       if (lane.exitSide === 0) {
-        lane.exitSide = Math.sign(lane.amp + lane.awayFrac) || lane.side;
+        // leave by the edge the hull is nearer to
+        lane.exitSide = lane.slot > 0.5 || lane.awayFrac > 0 ? 1 : -1;
       }
-      lane.awayFrac += (lane.exitSide * BOAT_EDGE_FRAC - lane.awayFrac) * Math.min(1, dt * laneExit);
-      if (Math.abs(lane.awayFrac) >= BOAT_EDGE_FRAC - 0.08) {
+      const offTarget = lane.exitSide > 0 ? offRight : offLeft;
+      lane.awayFrac += (offTarget - lane.awayFrac) * Math.min(1, dt * laneExit);
+      if (Math.abs(lane.awayFrac) >= Math.abs(offTarget) - 0.02) {
         lane.exitFrom = lane.exitSide;
         lane.shown = false;
         lane.exitSide = 0;
@@ -1537,11 +1550,9 @@ function updateBoats(dt) {
     }
 
     const sweep = Math.sin(angle);
-    const sx = lane.center + sweep * lane.amp + lane.awayFrac + lane.pushFrac;
-    const sy = Math.max(
-      waterTop + 0.02,
-      Math.min(0.965, waterTop + 0.035 + lane.depth + Math.sin(angle * 1.7 + index) * 0.012),
-    );
+    const frac = Math.max(0, Math.min(1, lane.slot + sweep * 0.3));
+    const sx = bandLeft + frac * span + lane.awayFrac + lane.pushFrac;
+    const sy = Math.max(waterTop + 0.02, Math.min(0.965, waterTop + 0.03 + lane.depth));
     spots.push({ lane, index, sx, sy });
   }
 

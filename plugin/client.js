@@ -644,28 +644,42 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     // The conversation card covers the middle of the screen down to a height that
     // changes with the session, so the surface cannot guess where open water
-    // begins. Measure it here and let the fleet place itself below that line.
+    // begins. Measure it here: hulls go into the water that is left uncovered —
+    // to the left of the conversation column, below the sidebar.
     let waterKey = '';
+    const pickColumn = (key) => COLUMN_SELECTORS[key]
+      .map((selector) => document.querySelector(selector))
+      .find((candidate) => {
+        if (!(candidate instanceof HTMLElement)) return false;
+        const rect = candidate.getBoundingClientRect();
+        return rect.width > 8 && rect.height > 8;
+      });
+
     const measureWater = () => {
+      const width = window.innerWidth || 1;
       const height = window.innerHeight || 1;
-      const element = COLUMN_SELECTORS.colCenter
-        .map((selector) => document.querySelector(selector))
-        .find((candidate) => {
-          if (!(candidate instanceof HTMLElement)) return false;
-          const rect = candidate.getBoundingClientRect();
-          return rect.width > 8 && rect.height > 8;
-        });
-      const fallback = 0.84;
-      if (!(element instanceof HTMLElement)) return fallback;
-      const top = element.getBoundingClientRect().bottom / height + 0.015;
-      return Math.max(0.5, Math.min(0.94, top));
+      const centre = pickColumn('colCenter');
+      const left = pickColumn('colLeft');
+      const centreRect = centre instanceof HTMLElement ? centre.getBoundingClientRect() : null;
+      const leftRect = left instanceof HTMLElement ? left.getBoundingClientRect() : null;
+      // water starts under whatever hangs lowest on the left, and ends where the
+      // conversation column begins: everything to the right of that is glass
+      const top = leftRect ? leftRect.bottom / height + 0.015 : 0.55;
+      const edge = centreRect ? centreRect.left / width - 0.01 : 0.30;
+      return {
+        top: Math.max(0.45, Math.min(0.93, top)),
+        left: Math.max(0.12, Math.min(0.85, edge)),
+      };
     };
 
     const postWater = () => {
-      const top = Number(measureWater().toFixed(3));
-      if (String(top) === waterKey) return;
-      waterKey = String(top);
-      post({ type: 'oss-water', top });
+      const water = measureWater();
+      const top = Number(water.top.toFixed(3));
+      const left = Number(water.left.toFixed(3));
+      const key = `${top}:${left}`;
+      if (key === waterKey) return;
+      waterKey = key;
+      post({ type: 'oss-water', top, left });
     };
 
     // ---- fleet: one boat per subagent in the open conversation --------------
@@ -1659,7 +1673,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.15';
+  const SKIN_BUILD = 'lab-1.5.16';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
