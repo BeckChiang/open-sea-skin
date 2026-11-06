@@ -38,7 +38,7 @@ for (const banner of ['SECTION 10 · FLEET', 'SECTION 11 · STAR DOME']) {
 
 test('boat and star state is declared at module scope', () => {
   const names = [
-    'BOAT_MAX', 'BOAT_BASE', 'BOAT_MIN_SEP', 'boatTarget', 'boatShown', 'boatFade',
+    'BOAT_MAX', 'BOAT_BASE', 'BOAT_MIN_SEP', 'boatTarget', 'boatShown',
     'boatCamera', 'boatCruise', 'boatPlaced', 'boatAxes',
     'starLayer', 'STAR_RADIUS', 'uStarGlow', 'uMeteorGlow',
     'createBoats', 'updateBoats', 'createStarLayer', 'updateStarDome',
@@ -82,4 +82,18 @@ test('the sea level is followed over time, not snapped on every message', () => 
   assert.ok(source.includes('uSea.value += (seaGoal - uSea.value) * (1 - Math.exp(-dt / SEA_FOLLOW_TAU))'))
   assert.equal(source.includes('uSea.value = 0.25 + (sea / 100) * 1.5'), false, 'the message handler must set the goal only')
   assert.ok(source.includes('let seaGoal = uSea.value;'), 'the goal needs module-level state')
+})
+
+test('boats enter and leave across the frame edge, by the nearer side', () => {
+  // Entrances used to start at a fixed 26 units, which is inside the frame on a
+  // wide window, so hulls appeared mid-screen; the offset now comes from the
+  // camera frustum at the boat's own depth.
+  assert.ok(source.includes('boatApproachOffset(ahead)'), 'the off-stage offset must be derived from the view')
+  assert.equal(source.includes('BOAT_APPROACH'), false, 'no fixed approach distance left behind')
+  assert.ok(source.includes('lane.away = lane.side * offStage'), 'a hull is parked past the edge before it is drawn')
+  assert.ok(
+    source.includes('lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side'),
+    'a departure must pick the edge the hull is actually nearer to',
+  )
+  assert.ok(source.includes('lane.shown = false'), 'the hull is dropped only once it is outside the frame')
 })

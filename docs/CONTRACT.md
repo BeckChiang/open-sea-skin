@@ -106,7 +106,11 @@
 - 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
 - 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe，`count` = `children.length`（clamp 0..12，渲染端再按 `BOAT_BASE`/`BOAT_MAX` 收边）；`sessionId` 一变立即重拉，不用等下一轮。宿主返回的是旧形状（没有 `children`）时，面板显示「宿主半是旧版本，需要重启」提示。
 - 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base = 15 + ((i*7.3) % 11)` 即 15–25、`radiusRight = 3 + ((i*1.3) % 4)`、`radiusBack = 1.5 + ((i*1.1) % 2)`、角速度 0.10–0.19 rad/s 即静水下一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
-- **进出场不能用缩放做**（那样会「凭空冒出/凭空消失」）：`boatFade` 0..1 同时驱动「离航道多远」——`across = sin(angle)*radiusRight + side*(1-fade)*BOAT_APPROACH(26)`，各船 `side` 左右交替，所以船是**从画面左/右侧横着开进来、又横着开出去**；朝向把这段横向速度算进航向（`lateralSpeed`），来船船头朝你、离船船头朝外。缩放只做最后收尾（`tail = min(1, fade*2.5)`），保证消失时已经是小点而不是满尺寸突然不见。各船到达速率不同（0.9–1.35）且离场略快（1.3–1.7），一起增加/切换会话时是多艘各自驶入而不是整体瞬变。
+- **进出场只靠横向位移，不用缩放**（缩放会「凭空冒出/凭空消失」）：每艘船有一个带符号的横向偏移 `lane.away`——巡航时为 0，出场时等于 `±offStage`。`offStage = boatApproachOffset(ahead) = |ahead| * tan(fov/2) * aspect + BOAT_MARGIN(6)`，即**按相机视锥在该深度的半宽算**，所以入场点是画面左/右边缘外侧一点，宽窗口下也不会「直接出现在中间」。
+  - 入场：船被需要而 `lane.shown === false` 时，先把它停在 `lane.side * offStage`（此时还没被绘制），再按 `BOAT_ENTER_RATE = 0.95 /s × (0.85 + (i%4)*0.1)` 指数逼近 0，于是它是**从一侧边缘横着驶入**。
+  - 出场：`lane.exitSide` 在开始离开的那一刻按 `Math.sign(laneAcross + lane.away)` 取**离船最近的一侧**（而不是入场时分配的那侧），按 `BOAT_EXIT_RATE = 0.72 /s × (0.8 + (i%3)*0.1)` 驶出；只有当 `|lane.away| >= offStage - 1`（已在画面外）才 `lane.shown = false` 丢弃该实例，所以消失永远发生在画面之外。
+  - 朝向把横向速度算进航向：`awaySpeed = (away - lastAway) / dt`，`vx/vz` 各加 `boatRight * awaySpeed`，来船船头朝你、离船船头朝外，不会横着平移。
+- **会话切换以新会话为准，且允许过渡**：`boatTarget` 一变，多出来的船按上面的出场规则驶离，缺的船从边缘驶入；若某艘船还没完全离开就又变回需要的状态，它只是从当前位置被拉回航道（`lane.away` 连续，不重置），不会瞬移。
 - **速度来自浪，不来自秒表**：轨道角是逐帧积分 `lane.angle += dt * lane.speed * cruise * lane.surge`，不是 `phase + time * speed`。`cruise = 0.65 + 0.95 * seaNorm`（`seaNorm = (uSea-0.25)/1.5`，静水慢、大浪快）；`surge` 由船头前方 2.4 单位处的水面高差（`BOAT_PROBE`）算出——下坡加速、上坡减速，钳在 0.7–1.5 并按 3/s 平滑（避免小碎浪抖速度）。所以浪高变化时船速真会跟着变，而不是恒速绕圈。
 - **每次轮询都发，不做去重**：iframe 帧每次加载都从 `BOAT_BASE`（1 艘）起步，也可能被重载，所以数字没变也必须发；只发变化量会让海面一直停在它出生时的数量上。
 - **轮询挂在波浪 tick 上**：`stepWave`（250 ms）里每 4 s `void pollFleet()`，会话 id 一变立刻重取一次。船数不靠独立 `setInterval`——切会话时界面重挂载容易把单独的定时器留在旧会话上，而波浪 tick 是页面唯一常驻的循环。

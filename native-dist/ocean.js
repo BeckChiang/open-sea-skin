@@ -1174,11 +1174,16 @@ const BOAT_MAX = 12;
 const BOAT_BASE = 1;
 // Boats close enough to overlap get pushed apart by this much, in world units.
 const BOAT_MIN_SEP = 3.4;
-// How far outside the frame a boat sits while it arrives or leaves, in world
-// units measured sideways from its lane. Distance rather than scale carries the
-// transition: a boat that grows and shrinks in place reads as a pop, one that
-// sails in and out across the edge of the screen does not.
-const BOAT_APPROACH = 26;
+// How far outside the frame a boat sits while it arrives or leaves: measured
+// from the camera's own frustum at the boat's depth, so an entrance really starts
+// at the left or right edge instead of somewhere mid-screen on a wide window.
+// A hull's width of margin keeps the first visible moment at the edge itself.
+const BOAT_MARGIN = 6;
+// Sideways travel rates (per second, exponential): arrivals sail in at a walking
+// pace and departures are a touch slower, so a boat is seen to leave the frame
+// rather than blink out of it.
+const BOAT_ENTER_RATE = 0.95;
+const BOAT_EXIT_RATE = 0.72;
 // Distance used to read the wave slope under a boat, in world units. Long enough
 // to see a swell face, short enough that a hull smaller than the wavelength.
 const BOAT_PROBE = 2.4;
@@ -1186,7 +1191,16 @@ let boatTarget = BOAT_BASE;
 let boatShown = 0;
 // camera the fleet is anchored to; set when the boats are created
 let boatCamera = null;
-const boatFade = new Float32Array(BOAT_MAX);
+
+// Half the visible width at a given depth, plus a margin: a boat placed there is
+// just outside the frame, which is where every entrance and exit happens.
+function boatApproachOffset(ahead) {
+  const fov = ((boatCamera && boatCamera.fov) || 45) * (Math.PI / 180);
+  const aspect = (boatCamera && boatCamera.aspect)
+    || (window.innerWidth / Math.max(1, window.innerHeight))
+    || 1.6;
+  return Math.abs(ahead) * Math.tan(fov / 2) * aspect + BOAT_MARGIN;
+}
 // A boat cruises inside the belt of sea the camera is actually looking at:
 // an absolute berth slides out of frame as the camera orbits and reads as
 // "the boat sailed off for good". Each boat keeps its own ellipse in front of the
@@ -1220,6 +1234,14 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     // of snapping every frame
     pushX: 0,
     pushZ: 0,
+    // sideways offset from the lane: 0 while cruising, `±offStage` while the hull
+    // is outside the frame. This one number carries every arrival and departure.
+    away: 0,
+    lastAway: 0,
+    // which edge the boat left by; 0 = not leaving, pick the nearer side
+    exitSide: 0,
+    // false = the hull is outside the frame and is not being drawn at all
+    shown: false,
   };
 });
 
@@ -1324,23 +1346,13 @@ function updateBoats(dt) {
 
   for (let index = 0; index < BOAT_MAX; index += 1) {
     const want = index < boatTarget ? 1 : 0;
-    // Arrivals ease in slowly and departures a bit faster, and every lane picks a
-    // slightly different rate: a session that gains three subagents at once still
-    // gets three separate arrivals instead of a fleet snapping into place.
-    const rate = want > boatFade[index]
-      ? 0.9 + (index % 4) * 0.15
-      : 1.3 + (index % 3) * 0.2;
-    boatFade[index] += (want - boatFade[index]) * Math.min(1, dt * rate);
-    if (want === 0 && boatFade[index] < 0.01) {
-      boatFade[index] = 0;
-      boatCruise[index].pushX = 0;
-      boatCruise[index].pushZ = 0;
+    const lane = boatCruise[index];
+    // A hull that is already outside the frame and no longer wanted is not drawn.
+    if (!want && !lane.shown) {
+      lane.pushX = 0;
+      lane.pushZ = 0;
       continue;
     }
-    const fade = boatFade[index];
-    if (fade <= 0) continue;
-
-    const lane = boatCruise[index];
     // The swell, not a stopwatch, drives the orbit: `cruise` scales with the sea
     // state and `surge` with the slope of the face the boat is on.
     lane.angle += dt * lane.speed * cruise * lane.surge;
@@ -1349,21 +1361,56 @@ function updateBoats(dt) {
     lane.pushZ *= 0.92;
 
     const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
-    const across = Math.sin(angle) * lane.radiusRight + lane.side * (1 - fade) * BOAT_APPROACH;
-    // fade 0..1 is "how far outside the frame on the approach": a boat enters by
-    // crossing in from the left or right edge and leaves by sailing back out to
-    // that side, which is what reads as a boat coming and going on the water
+    const laneAcross = Math.sin(angle) * lane.radiusRight;
+    // Sideways distance that puts the hull just past the frame edge at this depth.
+    const offStage = boatApproachOffset(ahead);
+    // Every lane moves at its own pace, so three subagents added at once still
+    // arrive one after another instead of as a fleet snapping into place.
+    const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
+    const laneExit = BOAT_EXIT_RATE * (0.8 + (index % 3) * 0.1);
+
+    if (want) {
+      if (!lane.shown) {
+        // First appearance: park the hull beyond an edge while it is still not
+        // drawn, then let it sail in. Nothing ever pops into the middle.
+        lane.shown = true;
+        lane.away = lane.side * offStage;
+        lane.lastAway = lane.away;
+      }
+      lane.exitSide = 0;
+      lane.away += (0 - lane.away) * Math.min(1, dt * laneEnter);
+    } else {
+      if (lane.exitSide === 0) {
+        // Leave by the nearer edge, judged from where the hull is right now.
+        lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side;
+      }
+      lane.away += (lane.exitSide * offStage - lane.away) * Math.min(1, dt * laneExit);
+      if (Math.abs(lane.away) >= offStage - 1) {
+        // Fully outside the frame: dropping the hull here cannot be seen.
+        lane.shown = false;
+        lane.exitSide = 0;
+        lane.away = 0;
+        lane.lastAway = 0;
+        lane.pushX = 0;
+        lane.pushZ = 0;
+        continue;
+      }
+    }
+    // how fast the hull is drifting sideways this frame; the course needs it
+    const awaySpeed = (lane.away - lane.lastAway) / Math.max(dt, 1e-3);
+    lane.lastAway = lane.away;
+
+    const across = laneAcross + lane.away;
     // Tangent of the ellipse in the camera's flat frame: the boat has to point
     // where it is actually going, otherwise it sails sideways or stern first.
-    // While the approach offset is moving sideways, that motion is part of the
-    // course too, so an arriving boat comes bow-on instead of crabbing in.
-    const lateralSpeed = -lane.side * BOAT_APPROACH * (want - fade) * rate;
+    // The sideways travel is part of the course too, so an arriving boat comes
+    // bow-on instead of crabbing in.
     const vx = boatRight.x * Math.cos(angle) * lane.radiusRight
       - boatForward.x * Math.sin(angle) * lane.radiusBack
-      + boatRight.x * lateralSpeed;
+      + boatRight.x * awaySpeed;
     const vz = boatRight.z * Math.cos(angle) * lane.radiusRight
       - boatForward.z * Math.sin(angle) * lane.radiusBack
-      + boatRight.z * lateralSpeed;
+      + boatRight.z * awaySpeed;
     const placed = boatPlaced[placedCount];
     placed.x = originX + boatForward.x * ahead + boatRight.x * across + lane.pushX;
     placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
@@ -1374,7 +1421,7 @@ function updateBoats(dt) {
     const dirLen = Math.hypot(vx, vz) || 1;
     placed.dirX = vx / dirLen;
     placed.dirZ = vz / dirLen;
-    placed.fade = fade;
+    placed.fade = 1;
     // the placement slot is not the lane slot: keep the boat's own lane so the
     // separation pushes and the heading go back to the boat that owns them
     placed.lane = index;
@@ -1437,11 +1484,9 @@ function updateBoats(dt) {
     boatYaw.setFromAxisAngle(BOAT_UP, placed.heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
     boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
-    // perspective already shrinks a boat that is out on the approach, so the
-    // scale stays near 1 and the pop that came from scaling in place is gone;
-    // the tail only trims the last frame or two so nothing vanishes at full size
-    const tail = Math.min(1, placed.fade * 2.5);
-    boatDummy.scale.setScalar((0.72 + 0.28 * placed.fade) * tail * 2.2);
+    // Perspective already shrinks a boat out on the approach, and a hull is only
+    // ever removed once it is past the frame edge, so the scale stays constant.
+    boatDummy.scale.setScalar(2.2);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);
