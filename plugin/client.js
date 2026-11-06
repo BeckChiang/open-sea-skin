@@ -111,6 +111,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     sunReadout: '太阳：真实高度 {el}°，方位 {az}°，画面里画在 {view}°',
     sunReadoutNight: '太阳：现在在地平线下（方位 {az}°），夜里没有日盘',
     sunReadoutManual: '太阳：手动模式下由滑杆决定，不对应真实时刻',
+      sunTimes: '今日 日出 {rise} · 日落 {set}',
+      sunTimesNone: '今日无日出日落（极昼或极夜）',
       moonInfo: '月亮：{name}，亮面 {p}%，高度 {h}°',
       moonBelow: '月亮：{name}，亮面 {p}%，现在在地平线下',
       moonOff: '月亮：已关闭',
@@ -185,6 +187,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     sunReadout: 'Sun: {el}\u00b0 up at bearing {az}\u00b0, drawn at {view}\u00b0 in the frame',
     sunReadoutNight: 'Sun: below the horizon now (bearing {az}\u00b0), no disc at night',
     sunReadoutManual: 'Sun: manual mode \u2014 the slider sets it, not the clock',
+      sunTimes: 'today {rise} sunrise \u00b7 {set} sunset',
+      sunTimesNone: 'no sunrise or sunset today (polar day or night)',
       moonInfo: 'Moon: {name}, {p}% lit, {h}\u00b0 up',
       moonBelow: 'Moon: {name}, {p}% lit, below the horizon',
       moonOff: 'Moon: off',
@@ -699,26 +703,40 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     // Same idea for the sun: the panel prints the real altitude plus where that
     // altitude lands in the frame, so "it does not match the clock" becomes a
     // number to check instead of a guess.
+    // Sunrise and sunset come from the frame, which already owns the ephemeris,
+    // so the panel cannot disagree with the sky it is describing.
+    const clockOf = (minutes) => {
+      if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 0) return null;
+      const h = Math.floor(minutes / 60) % 24;
+      const m = Math.round(minutes % 60);
+      return String(h).padStart(2, '0') + ':' + (m < 10 ? '0' + m : String(m));
+    };
+    const sunTimesText = (ocean) => {
+      const rise = ocean ? clockOf(ocean.sunriseMinutes) : null;
+      const set = ocean ? clockOf(ocean.sunsetMinutes) : null;
+      if (!rise || !set) return copy.sunTimesNone;
+      return copy.sunTimes.replace('{rise}', rise).replace('{set}', set);
+    };
     const refreshSunReadout = () => {
       const el = document.getElementById(pid('sun-out'));
       if (!el) return;
       const ocean = readOceanState();
       if (!ocean || typeof ocean.sunElevationDeg !== 'number') return;
+      const times = sunTimesText(ocean);
       if (state.sunMode !== 'real') {
-        el.textContent = copy.sunReadoutManual;
+        el.textContent = copy.sunReadoutManual + ' · ' + times;
         return;
       }
       const real = Math.round(ocean.sunElevationDeg);
       const view = Math.round(Number(ocean.sunViewElevationDeg) || 0);
       const az = Math.round(Number(ocean.sunAzimuthDeg) || 0);
-      if (real <= -1) {
-        el.textContent = copy.sunReadoutNight.replace('{az}', String(az));
-        return;
-      }
-      el.textContent = copy.sunReadout
-        .replace('{el}', String(real))
-        .replace('{az}', String(az))
-        .replace('{view}', String(view));
+      const body = real <= -1
+        ? copy.sunReadoutNight.replace('{az}', String(az))
+        : copy.sunReadout
+          .replace('{el}', String(real))
+          .replace('{az}', String(az))
+          .replace('{view}', String(view));
+      el.textContent = body + ' · ' + times;
     };
 
     const setBoatNote = (text) => {

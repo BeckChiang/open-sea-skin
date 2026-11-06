@@ -26,7 +26,7 @@ import {
   constellationVertices, equatorialToHorizontal, localSiderealTime,
   starBrightnessFromDegree
 } from './sky-astro.js';
-import {
+import { sunTimes,
   sunPosition, moonPosition,
   cloudCoverOf, starLevelOf, starIntensityOf
 } from './solar.js';
@@ -533,7 +533,25 @@ function syncStars() {
 }
 
 // once per second in real mode (contract: no 720 s sine cycle)
+let sunTimesKey = '';
+let sunriseMinutes = null;
+let sunsetMinutes = null;
+
+// Recomputed only when the calendar day or the coordinates change: the scan
+// costs 1440 cheap evaluations, which is nothing once a day and wasteful per
+// frame.
+function refreshSunTimes(now) {
+  const at = new Date(now);
+  const key = at.getFullYear() + '-' + (at.getMonth() + 1) + '-' + at.getDate() + '@' + sunLat + ',' + sunLon;
+  if (key === sunTimesKey) return;
+  sunTimesKey = key;
+  const times = sunTimes(at, sunLat, sunLon);
+  sunriseMinutes = times.riseMinutes;
+  sunsetMinutes = times.setMinutes;
+}
+
 function refreshSky(now) {
+  refreshSunTimes(now);
   if (sunMode === 'real') {
     const sun = sunPosition(new Date(now), sunLat, sunLon);
     // palette from the true elevation, disc aimed into the visible band
@@ -913,6 +931,8 @@ if (SKIN) {
     sunAzimuthDeg,
     sunViewElevationDeg,
     sunViewAzimuthDeg,
+    sunriseMinutes,
+    sunsetMinutes,
     moonElevationDeg,
     moonAzimuthDeg,
     moonPhase01,

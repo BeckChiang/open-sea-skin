@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  sunTimes,
   sunPosition,
   moonPosition,
   daylightFromElevation,
@@ -122,3 +123,15 @@ test('starIntensityOf matches the contract formula', () => {
   assert.ok(Math.abs(starIntensityOf(-8, 'high', 1) - 0.35) < 1e-9);
   assert.equal(starIntensityOf(-8, 'off', 1), 0);
 });
+
+test('sunrise and sunset follow the coordinates', () => {
+  const day = new Date('2026-11-06T16:00:00+08:00')
+  const wuhan = sunTimes(day, 30.59, 114.31)
+  const harbin = sunTimes(day, 45.75, 126.63)
+  assert.ok(wuhan.riseMinutes !== null && wuhan.setMinutes !== null)
+  // 06:46 / 17:28 in Wuhan on 2026-11-06
+  assert.ok(Math.abs(wuhan.riseMinutes - 406) <= 2, 'wuhan sunrise near 06:46, got ' + wuhan.riseMinutes)
+  assert.ok(Math.abs(wuhan.setMinutes - 1048) <= 2, 'wuhan sunset near 17:28, got ' + wuhan.setMinutes)
+  // A northern city rises later in absolute minutes and sets earlier.
+  assert.ok(harbin.setMinutes < wuhan.setMinutes, 'harbin must set before wuhan')
+})

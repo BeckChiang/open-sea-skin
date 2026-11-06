@@ -108,6 +108,27 @@ export function moonPosition(date, latDeg = 31.23, lonDeg = 121.47) {
 }
 
 /** Contract §2.2: sun elevation -> the legacy 0–100 daylight value. */
+// Sunrise and sunset in local minutes of the day, found by walking the same
+// sunPosition() the sky is drawn from: no separate ephemeris, so the moment the
+// palette turns cannot disagree with the moment the panel prints.
+// Returns nulls during polar day or polar night.
+export function sunTimes(date, latDeg = 30.59, lonDeg = 114.31) {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  let riseMinutes = null;
+  let setMinutes = null;
+  let prev = sunPosition(day, latDeg, lonDeg).elevationDeg;
+  for (let minutes = 1; minutes <= 1440; minutes += 1) {
+    const at = new Date(day.getTime() + minutes * 60000);
+    const elevation = sunPosition(at, latDeg, lonDeg).elevationDeg;
+    if (riseMinutes === null && prev < 0 && elevation >= 0) riseMinutes = minutes;
+    if (setMinutes === null && prev >= 0 && elevation < 0) setMinutes = minutes;
+    prev = elevation;
+    if (riseMinutes !== null && setMinutes !== null) break;
+  }
+  return { riseMinutes, setMinutes };
+}
+
 export function daylightFromElevation(elevationDeg) {
   return clamp((elevationDeg + 4) / 44, 0, 1) * 100;
 }
