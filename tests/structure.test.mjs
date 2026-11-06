@@ -355,3 +355,12 @@ test('the surface takes every new dial instead of a fixed look', () => {
   assert.ok(source.includes('uniform(CONSTELLATION_GRADES.mid / 100)'), 'constellation glow is a 0..1 multiplier, not a percentage')
   assert.ok(source.includes('uniform(CROSS_GRADES.mid / 100)'), 'cross glow is a 0..1 multiplier, not a percentage')
 })
+
+test('the frame rate is a budget dial, not a fixed 60', () => {
+  // a wallpaper does not need 60 fps, and every frame is a full-screen fill
+  assert.ok(source.includes('const FPS_OPTIONS = [24, 30, 45, 60];'), 'the cap has a fixed option list')
+  assert.ok(source.includes('let fpsCap = SKIN ? 30 : 60;'), 'the skin starts at half rate')
+  assert.ok(source.includes('if (Number.isFinite(Number(d.fps))) applyFpsCap(Number(d.fps));'), 'the host can retune the cap live')
+  assert.ok(clientSource.includes("const FPS_LEVELS = [24, 30, 45, 60];"), 'the panel offers the same four rates')
+  assert.ok(clientSource.includes("case pid('fps'): return { fps: Number(value) };"), 'picking a rate posts the number, not a string')
+})

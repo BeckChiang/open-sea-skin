@@ -321,7 +321,7 @@ const detailHeight = Fn(([xz, time]) => {
 // ----------------------------------------------------------------------------
 
 // scalar hash for the star cells (same sine-fold trick as hash2 above)
-const hash31 = Fn(([p]) => fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))).mul(43758.5453)));
+const hash31 = Fn(([p]) => fract(dot(p, vec3(0.1031, 0.1030, 0.0973)).mul(43758.5453)));
 
 const STAR_SCALE = 190;        // cells per radian: ~0.3° per cell
 const STAR_SIZE = 0.19;        // cell-space radius of one star
@@ -409,7 +409,7 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
 
   // Milky Way: a soft band along the galactic plane. Faint, and only at night —
   // it is the one night-sky term that is not a point light.
-  If(uMilky.mul(uNightF).greaterThan(0.001), () => {
+  If(uMilky.mul(uNightF).mul(astro).greaterThan(0.001), () => {
     const gal = abs(dot(d, normalize(uGalNormal)));
     const bandGlow = pow(float(1).sub(clamp(gal, 0, 1)), 6);
     col.addAssign(vec3(0.055, 0.050, 0.070).mul(bandGlow).mul(uMilky).mul(uStars).mul(uNightF));
@@ -758,6 +758,8 @@ function applySunMessage(d) {
     if (glowNodeRef) glowNodeRef.active = uGlowStrength.value > 0.01;
   }
   if (typeof d.quality === 'string') applyQuality(d.quality);
+  // 1.5.27: frame rate is a budget dial of its own, on top of the resolution one
+  if (Number.isFinite(Number(d.fps))) applyFpsCap(Number(d.fps));
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
     const t = Number(d.t);
@@ -1319,6 +1321,22 @@ const QUALITY_PRESETS = {
   low: { pixelRatio: 1, targetFps: 30, scaleCap: 0.85, minScale: 0.5 },
 };
 
+// 1.5.27: the frame budget is a first-class dial. A wallpaper does not need
+// 60 fps, and every frame is a full-screen fill: halving the rate halves the
+// GPU time. SKIN defaults to 30; the standalone demo keeps its old cap.
+const FPS_OPTIONS = [24, 30, 45, 60];
+let fpsCap = SKIN ? 30 : 60;
+
+function applyFpsCap(cap) {
+  const next = FPS_OPTIONS.includes(cap) ? cap : 60;
+  fpsCap = next;
+  FRAME_RATE_CAP = REDUCED_MOTION ? Math.min(next, 20) : next;
+  FRAME_MS = 1000 / FRAME_RATE_CAP;
+  // the governor must not chase a target above the cap: it would keep scaling
+  // the resolution up until the frame budget blew past the cap again
+  TARGET_FPS = Math.min(TARGET_FPS, Math.max(12, FRAME_RATE_CAP - 2));
+}
+
 function applyQuality(level) {
   const preset = QUALITY_PRESETS[level];
   if (!preset || !renderer) return;
@@ -1329,6 +1347,7 @@ function applyQuality(level) {
   MIN_SCALE = REDUCED_MOTION ? Math.min(preset.minScale, 0.5) : preset.minScale;
   renderScale = Math.min(Math.max(renderScale, preset.minScale), SCALE_CAP);
   applyResolutionScale(renderScale);
+  applyFpsCap(fpsCap);
 }
 
 function animate(now) {
@@ -1439,7 +1458,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.26';
+const OCEAN_BUILD = 'lab-1.5.27';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;

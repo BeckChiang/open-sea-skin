@@ -80,6 +80,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     // 1.5.26: frame budget. The scene is fill bound, so the quality preset is
     // the lever that matters; glow is the one remaining full-screen pass.
     quality: 'balanced',
+  fps: 30,
     glow: 55,
     glassMode: 'render',
     glassRadius: 14,
@@ -205,6 +206,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudOpacity: '不透明度',
       glassRadius: '模糊半径',
       perfGroup: '性能',
+  fpsMode: '帧率上限',
+  fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
       qualityMode: '画质档位',
       quality: {
         high: '高',
@@ -329,6 +332,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudOpacity: 'Opacity',
       glassRadius: 'Blur radius',
       perfGroup: 'Performance',
+  fpsMode: 'Frame rate',
+  fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
       qualityMode: 'Quality',
       quality: {
         high: 'High',
@@ -381,6 +386,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   const SKY_TONES = ['real', 'blue', 'warm'];
   const TZ_MODES = ['system', 'longitude', 'manual'];
 const QUALITY_LEVELS = ['high', 'balanced', 'low'];
+const FPS_LEVELS = [24, 30, 45, 60];
 
   // A column used to store a blur letter. It now stores a 0..100 strength, and
   // a saved letter is folded into one so old profiles keep their look.
@@ -447,6 +453,7 @@ const QUALITY_LEVELS = ['high', 'balanced', 'low'];
       cloudSpeed: clamp(source.cloudSpeed, 0, 4, DEFAULTS.cloudSpeed),
       cloudOpacity: clamp(source.cloudOpacity, 0, 1.5, DEFAULTS.cloudOpacity),
       quality: QUALITY_LEVELS.includes(source.quality) ? source.quality : DEFAULTS.quality,
+    fps: FPS_LEVELS.includes(Number(source.fps)) ? Number(source.fps) : DEFAULTS.fps,
       glow: clamp(source.glow, 0, 100, DEFAULTS.glow),
       glassMode: source.glassMode === 'css' ? 'css' : 'render',
       glassRadius: clamp(
@@ -835,6 +842,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         lineWidth: state.lineWidth,
         lineFadeDeg: state.lineFadeDeg,
         quality: state.quality,
+    fps: state.fps,
         glow: state.glow,
       });
     };
@@ -1459,6 +1467,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           <p class="oss-sub" data-copy="perfGroup"></p>
           ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
           ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
+        ${segRow(pid('fps'), 'fpsMode', [['24', 'fps.24'], ['30', 'fps.30'], ['45', 'fps.45'], ['60', 'fps.60']])}
           <div class="oss-row"><button type="button" class="oss-reset" data-copy="reset"></button></div>
           <p class="oss-sub" data-copy="resetNote"></p>`)}
         <p class="oss-note" data-copy="note"></p>`;
@@ -1640,7 +1649,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         'starSpikes', 'starBase', 'starHalo', 'starCount',
         'twinkleSpeed', 'twinkleAmp', 'milky', 'skyTone', 'constellation', 'cross', 'lineWidth',
         'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
-        'tzOffset', 'moon', 'lat', 'lon', 'quality', 'glow',
+        'tzOffset', 'moon', 'lat', 'lon', 'quality', 'glow', 'fps',
       ]);
       const GLASS_KEYS = new Set(['glass', 'glassRadius', 'glassMode', 'perf']);
       const BOAT_KEYS = new Set(['boats', 'boatSpread', 'boatPace', 'boatScale']);
@@ -1736,6 +1745,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
             case pid('sky-tone'): return { skyTone: value };
             case pid('glass-mode'): return { glassMode: value };
             case pid('quality'): return { quality: value };
+      case pid('fps'): return { fps: Number(value) };
             default: return null;
           }
         })();
@@ -1994,6 +2004,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     tzMode: 'ossTzMode',
     tzOffset: 'ossTzOffset',
     quality: 'ossQuality',
+    fps: 'ossFps',
     glow: 'ossGlow',
   });
 
@@ -2076,7 +2087,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.26';
+  const SKIN_BUILD = 'lab-1.5.27';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
