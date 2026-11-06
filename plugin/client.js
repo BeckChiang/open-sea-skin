@@ -1570,6 +1570,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         }
         applyCopy();
         syncUi();
+        refreshSunReadout();
       };
       syncLocale();
       const localeObserver = new MutationObserver(syncLocale);
