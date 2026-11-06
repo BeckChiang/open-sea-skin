@@ -1109,7 +1109,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.10';
+const OCEAN_BUILD = 'lab-1.5.11';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1520,7 +1520,9 @@ function updateBoats(dt) {
     lane.pushX *= 0.92;
     lane.pushZ *= 0.92;
 
-    const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
+    // 17.5..24 units ahead is the band that lands between 83% and 91% of the
+    // frame height — inside the visible water, not under the bottom edge.
+    const ahead = Math.max(17.5, Math.min(24, lane.base + Math.cos(angle) * lane.radiusBack));
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
     // The whole frame is fair water: a hull may cross behind the chat column,
@@ -1871,6 +1873,14 @@ const starDirA = new THREE.Vector3();
 const cameraRight = new THREE.Vector3(1, 0, 0);
 const cameraUp = new THREE.Vector3(0, 1, 0);
 
+// azimuth 0 faces -z (the camera's forward), altitude is degrees above the horizon
+function skyPoint(azDeg, altDeg, out) {
+  const az = azDeg * DEG_TO_RAD;
+  const alt = altDeg * DEG_TO_RAD;
+  const ce = Math.cos(alt);
+  return out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az)).multiplyScalar(STAR_RADIUS);
+}
+
 function updateStarDome(now, dt) {
   if (!starLayer) return;
   const layer = starLayer;
@@ -1938,29 +1948,27 @@ function updateStarDome(now, dt) {
     const progress = Math.min(1, meteor.elapsed / meteor.duration);
     // head runs along the path, tail trails it
     const head = meteor.from.clone().lerp(meteor.to, progress);
-    const tail = meteor.from.clone().lerp(meteor.to, Math.max(0, progress - 0.35));
+    const tail = meteor.from.clone().lerp(meteor.to, Math.max(0, progress - 0.18));
     meteorPositions.setXYZ(0, tail.x, tail.y, tail.z);
     meteorPositions.setXYZ(1, head.x, head.y, head.z);
     meteorPositions.needsUpdate = true;
-    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 1.4;
+    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 2.6;
     if (progress >= 1) {
       meteor.active = false;
-      meteor.next = elapsed + 4 + Math.random() * 9;
+      meteor.next = elapsed + 3 + Math.random() * 6;
     }
   } else {
     uMeteorGlow.value = 0;
     if (elapsed > meteor.next && layer.starsOpacity > 0.25 && meteorEnabled) {
-      const startAz = Math.random() * Math.PI * 2;
-      const startAlt = (25 + Math.random() * 40) * DEG_TO_RAD;
-      const travel = (10 + Math.random() * 16) * DEG_TO_RAD;
-      const dirAz = startAz + Math.PI * (0.5 + Math.random() * 0.5);
-      meteor.from.set(
-        Math.cos(startAlt) * Math.sin(startAz), Math.sin(startAlt), -Math.cos(startAlt) * Math.cos(startAz),
-      ).multiplyScalar(STAR_RADIUS);
-      const endAlt = Math.max(4 * DEG_TO_RAD, startAlt - travel * 0.55);
-      meteor.to.set(
-        Math.cos(endAlt) * Math.sin(dirAz), Math.sin(endAlt), -Math.cos(endAlt) * Math.cos(dirAz),
-      ).multiplyScalar(STAR_RADIUS);
+      // Spawn inside the slice of sky the camera actually shows. Picking the
+      // azimuth uniformly put four out of five streaks behind the viewer, which
+      // read as "meteors never render".
+      const startAzDeg = (Math.random() * 2 - 1) * 30;
+      const startAltDeg = 13 + Math.random() * 20;
+      const travelDeg = 10 + Math.random() * 12;
+      const driftDeg = (Math.random() * 2 - 1) * 12;
+      skyPoint(startAzDeg, startAltDeg, meteor.from);
+      skyPoint(startAzDeg + driftDeg, Math.max(4, startAltDeg - travelDeg), meteor.to);
       meteor.active = true;
       meteor.elapsed = 0;
       meteor.duration = 0.55 + Math.random() * 0.6;

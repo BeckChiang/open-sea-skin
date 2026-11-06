@@ -260,3 +260,17 @@ test('the cross on every constellation vertex is a real setting', () => {
   assert.ok(source.includes('const armLength = STAR_RADIUS * 0.0042'), 'the grade must also grow the arms')
   assert.ok(source.includes('cross: crossSetting,'), 'the grade must be readable from the state')
 })
+
+test('a saved grade survives normalize, and nothing spawns outside the frame', () => {
+  // 2026-11-06 evening: three separate "I set it and nothing happened" reports.
+  // 1) the cross grade was in DEFAULTS but not in normalize(), so each save threw
+  //    it away again; 2) hulls could dip below the bottom edge (y > 1.0 in the
+  //    reported spots); 3) meteors spawned over the whole sky, most of them
+  //    behind the camera.
+  assert.ok(clientSource.includes('cross: GRADE_LEVELS.includes(source.cross) ? source.cross : DEFAULTS.cross,'), 'the cross grade must survive a save')
+  assert.ok(source.includes('const ahead = Math.max(17.5, Math.min(24, lane.base + Math.cos(angle) * lane.radiusBack));'), 'every hull must stay inside the visible water band')
+  assert.ok(source.includes('const startAzDeg = (Math.random() * 2 - 1) * 30;'), 'meteors must spawn in the visible azimuth slice')
+  assert.ok(source.includes('const startAltDeg = 13 + Math.random() * 20;'), 'meteors must spawn below the top of the frame')
+  assert.ok(source.includes('skyPoint(startAzDeg, startAltDeg, meteor.from);'), 'the streak must use the shared sky helper')
+  assert.ok(source.includes('Math.sin(progress * Math.PI) * 2.6'), 'the streak must be bright enough to notice')
+})

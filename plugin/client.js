@@ -268,6 +268,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       moon: source.moon !== false,
       stars: GRADE_LEVELS.includes(source.stars) ? source.stars : DEFAULTS.stars,
       constellation: GRADE_LEVELS.includes(source.constellation) ? source.constellation : DEFAULTS.constellation,
+      cross: GRADE_LEVELS.includes(source.cross) ? source.cross : DEFAULTS.cross,
       meteor: source.meteor !== false,
       clouds: GRADE_LEVELS.includes(source.clouds) ? source.clouds : DEFAULTS.clouds,
       glassMode: source.glassMode === 'css' ? 'css' : 'render',
@@ -1625,7 +1626,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.10';
+  const SKIN_BUILD = 'lab-1.5.11';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
