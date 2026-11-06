@@ -64,7 +64,7 @@ test('star layer hides the meteor line behind a distinct key', () => {
 })
 
 test('per-frame layer updates cannot kill the render loop', () => {
-  assert.ok(source.includes("console.warn('[open-sea-skin] boats disabled'"))
+  assert.ok(source.includes("console.warn('[open-sea-skin] boats disabled:'"))
   assert.ok(source.includes("console.warn('[open-sea-skin] star dome disabled'"))
 })
 
@@ -310,4 +310,18 @@ test('no constant is used before it is declared', () => {
   const globals = new Set(['THREE', 'URL', 'NaN', 'Infinity', 'PI'])
   const missing = [...used].filter((name) => !declared.has(name) && !imported.has(name) && !globals.has(name))
   assert.deepEqual(missing, [], `used but never declared: ${missing.join(', ')}`)
+})
+
+test('module-scope collections are mutated, never reassigned', () => {
+  // 2026-11-06: `const boatSpots = []` was later reset with `boatSpots = []`,
+  // which throws "Assignment to constant variable" inside the animate() try and
+  // takes the whole fleet down. Reset with .length = 0 instead.
+  const collections = [...source.matchAll(/^const ([A-Za-z_$][\w$]*) = (?:\[|\{)/gm)].map((hit) => hit[1])
+  const offenders = collections.filter((name) => {
+    const hits = [...source.matchAll(new RegExp(`(^|[^\\w$.])${name}\\s*=(?!=)`, 'g'))]
+    return hits.some((hit) => !source.slice(Math.max(0, hit.index - 6), hit.index + 1).includes('const'))
+  })
+  assert.deepEqual(offenders, [], `reassigned const collections: ${offenders.join(', ')}`)
+  assert.ok(source.includes('boatSpots.length = 0;'), 'the spot list must be cleared in place')
+  assert.ok(source.includes('boatError = String((err && err.message) || err);'), 'a fleet failure must be kept for the panel')
 })

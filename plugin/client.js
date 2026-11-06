@@ -725,6 +725,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         target: state.boatTarget,
         drawn: state.boats,
         spots: Array.isArray(state.boatSpots) ? state.boatSpots : [],
+        error: typeof state.boatError === 'string' ? state.boatError : '',
       };
     };
 
@@ -875,7 +876,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ? ocean.spots.map((spot) => `${spot[0]},${spot[1]}`).join(' ')
           : '';
         const suffix = ocean
-          ? `（${sessionTag}海面 ${ocean.drawn}/${ocean.target}${spotText ? ' · ' + spotText : ''}）`
+          ? `（${sessionTag}海面 ${ocean.drawn}/${ocean.target}${ocean.error ? ' · 船层报错 ' + ocean.error : ''}${spotText ? ' · ' + spotText : ''}）`
           : '';
         if (data && data.ok === true) {
           if (!hostFresh) setBoatNote(copy.boatStale);
@@ -1658,7 +1659,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.14';
+  const SKIN_BUILD = 'lab-1.5.15';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

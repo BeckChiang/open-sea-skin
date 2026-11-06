@@ -965,6 +965,7 @@ if (SKIN) {
     boats: boatShown,
     boatSpots: boatSpots.slice(0, 6),
     boatTarget,
+    boatError,
     waterTop,
     elapsed: uTime.value,
     manualTimeOfDay,
@@ -1023,9 +1024,13 @@ function animate(now) {
   if (SKIN && boats) {
     try {
       updateBoats(dt);
+      boatError = '';
     } catch (err) {
+      // keep the message: the panel prints it, so a failure here is readable
+      // without opening DevTools and reading a swallowed warning
+      boatError = String((err && err.message) || err);
       boats = null;
-      console.warn('[open-sea-skin] boats disabled', err);
+      console.warn('[open-sea-skin] boats disabled:', boatError);
     }
   }
   if (SKIN && starLayer) {
@@ -1111,7 +1116,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.14';
+const OCEAN_BUILD = 'lab-1.5.15';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1340,6 +1345,7 @@ let boats = null;
 let waterTop = 0.84;
 const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, heading: 0, dirX: 0, dirZ: -1, lane: 0 }));
 const boatSpots = [];
+let boatError = '';
 const boatNormal = new THREE.Vector3(0, 1, 0);
 const boatTilt = new THREE.Quaternion();
 const boatYaw = new THREE.Quaternion();
@@ -1486,7 +1492,7 @@ function updateBoats(dt) {
   const time = uTime.value;
   const seaLevel = Math.max(0, Math.min(1, (uSea.value - 0.25) / 1.5));
   const cruise = 0.65 + 0.95 * seaLevel;
-  boatSpots = [];
+  boatSpots.length = 0;
 
   // pass 1: work out where each wanted hull sits on screen
   const spots = [];

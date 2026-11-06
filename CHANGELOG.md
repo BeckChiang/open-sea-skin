@@ -2,6 +2,19 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.15 — 2026-11-06
+
+### Fixed
+
+- **船还是一艘都没有**：1.5.14 只补了常量，真正的第一处崩溃是
+  `const boatSpots = []` 又被 `boatSpots = []` 重新赋值 —— 给常量赋值会抛
+  `TypeError: Assignment to constant variable`，同样被 `animate()` 的 try 吞掉并把 `boats` 置空。
+  改成 `boatSpots.length = 0`。
+- 船层出错时把消息留给面板：`__ossState().boatError` 会带上异常文本，面板「船」那行直接显示
+  「船层报错 …」，不用再开 DevTools 找那行被吞掉的警告。
+- 新增结构测试「module-scope collections are mutated, never reassigned」：拿它跑 1.5.14 的代码会
+  正好报出 `boatSpots`。
+
 ## 1.5.14 — 2026-11-06
 
 ### Fixed
