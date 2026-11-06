@@ -99,6 +99,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       constellation: '星座连线',
       meteor: '流星',
       moonOut: '月亮：—',
+    sunOut: '太阳：—',
+    sunReadout: '太阳：真实高度 {el}°，方位 {az}°，画面里画在 {view}°',
+    sunReadoutNight: '太阳：现在在地平线下（方位 {az}°），夜里没有日盘',
+    sunReadoutManual: '太阳：手动模式下由滑杆决定，不对应真实时刻',
       moonInfo: '月亮：{name}，亮面 {p}%，高度 {h}°',
       moonBelow: '月亮：{name}，亮面 {p}%，现在在地平线下',
       moonOff: '月亮：已关闭',
@@ -161,6 +165,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       constellation: 'Constellations',
       meteor: 'Meteors',
       moonOut: 'Moon: \u2014',
+    sunOut: 'Sun: \u2014',
+    sunReadout: 'Sun: {el}\u00b0 up at bearing {az}\u00b0, drawn at {view}\u00b0 in the frame',
+    sunReadoutNight: 'Sun: below the horizon now (bearing {az}\u00b0), no disc at night',
+    sunReadoutManual: 'Sun: manual mode \u2014 the slider sets it, not the clock',
       moonInfo: 'Moon: {name}, {p}% lit, {h}\u00b0 up',
       moonBelow: 'Moon: {name}, {p}% lit, below the horizon',
       moonOff: 'Moon: off',
@@ -672,6 +680,31 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
       else el.textContent = copy.moonInfo.replace('{name}', name).replace('{p}', String(lit)).replace('{h}', String(height));
     };
 
+    // Same idea for the sun: the panel prints the real altitude plus where that
+    // altitude lands in the frame, so "it does not match the clock" becomes a
+    // number to check instead of a guess.
+    const refreshSunReadout = () => {
+      const el = document.getElementById(pid('sun-out'));
+      if (!el) return;
+      const ocean = readOceanState();
+      if (!ocean || typeof ocean.sunElevationDeg !== 'number') return;
+      if (state.sunMode !== 'real') {
+        el.textContent = copy.sunReadoutManual;
+        return;
+      }
+      const real = Math.round(ocean.sunElevationDeg);
+      const view = Math.round(Number(ocean.sunViewElevationDeg) || 0);
+      const az = Math.round(Number(ocean.sunAzimuthDeg) || 0);
+      if (real <= -1) {
+        el.textContent = copy.sunReadoutNight.replace('{az}', String(az));
+        return;
+      }
+      el.textContent = copy.sunReadout
+        .replace('{el}', String(real))
+        .replace('{az}', String(az))
+        .replace('{view}', String(view));
+    };
+
     const setBoatNote = (text) => {
       const el = boatOutEl();
       if (el) el.textContent = text;
@@ -777,6 +810,7 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
         fleetAt = now;
         void pollFleet();
       }
+      refreshSunReadout();
       refreshMoonReadout();
 
       if (state.waveMode === 'manual') {
@@ -968,6 +1002,7 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
           ${segRow(pid('constellation'), 'constellation', gradeOptions)}
           ${switchRow(pid('meteor'), 'meteor')}
           ${segRow(pid('clouds'), 'clouds', gradeOptions)}
+          <p class="oss-sub" id="${pid('sun-out')}" data-copy="sunOut"></p>
           <p class="oss-sub" id="${pid('moon-out')}" data-copy="moonOut"></p>
           <p class="oss-sub" data-copy="sunNote"></p>
         </div>
@@ -1234,7 +1269,8 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
       on(moonBox, 'change', () => {
         void save({ moon: moonBox.checked });
         postSun();
-        refreshMoonReadout();
+        refreshSunReadout();
+      refreshMoonReadout();
       });
       const meteorBox = panel.querySelector(`#${pid('meteor')}`);
       if (meteorBox) {
