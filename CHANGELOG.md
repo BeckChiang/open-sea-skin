@@ -2,6 +2,12 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.4.1 — 2026-11-06
+
+### 修复 / Fixed
+
+- 切会话后船的数量要刷新界面才变：船数轮询改为由 250 ms 的波浪 tick 驱动（每 4 s 一次，会话 id 一变立刻重取），不再挂在单独容易失联的定时器上；`postFleet` 改成每次轮询都发，iframe 帧重载后能自愈；指标桥改为在渲染期写入，切会话第一拍即带新 `sessionId`。
+
 ## 1.4.0 — 2026-11-06
 
 本地 fork（`plugins/open-sea-skin-lab`），在 1.2.7 基础上加功能，未改动上游 npm 包。
