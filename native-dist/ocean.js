@@ -1271,7 +1271,7 @@ const BOAT_MAX = 12;
 // sea reads as "the fleet feature is broken", not as "no work in progress".
 const BOAT_BASE = 1;
 // Boats close enough to overlap get pushed apart by this much, in world units.
-const BOAT_MIN_SEP = 3.4;
+const BOAT_MIN_SEP = 5.5;
 // How far outside the frame a boat sits while it arrives or leaves: measured
 // from the camera's own frustum at the boat's depth, so an entrance really starts
 // at the left or right edge instead of somewhere mid-screen on a wide window.
@@ -1310,7 +1310,7 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   // lower third of the frame and anything nearer than ~30 units sits on the very
   // bottom edge. 3–7 units of lateral swing still leaves room for the approach
   // offset to stay off screen instead of parking a hull at the edge.
-  const base = 36 + ((index * 5.3) % 16);
+  const base = 30 + (index % 6) * 5.2 + Math.floor(index / 6) * 2.6;
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
@@ -1326,8 +1326,8 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     base,
     // alternate sides so a burst of arrivals crosses the frame from both edges
     side: index % 2 === 0 ? 1 : -1,
-    radiusRight: 3 + ((index * 1.3) % 4),
-    radiusBack: 1.5 + ((index * 1.1) % 2),
+    radiusRight: 4 + ((index * 2.6) % 10),
+    radiusBack: 2 + ((index * 1.7) % 5),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
     // separation pushes accumulate here and decay, so boats ease apart instead
@@ -1589,7 +1589,7 @@ function updateBoats(dt) {
     // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
     // size as before, at a berth that reads as further out to sea instead of
     // hugging the bottom edge.
-    boatDummy.scale.setScalar(3.2);
+    boatDummy.scale.setScalar(2.8);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);

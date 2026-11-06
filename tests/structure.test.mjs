@@ -123,6 +123,10 @@ test('altitude stays real until it would leave the frame', () => {
   assert.ok(source.includes('controls.maxPolarAngle = Math.PI * 0.62'), 'looking up must not be clamped away')
 })
 
+test('hulls keep their distance', () => {
+  assert.ok(source.includes('const BOAT_MIN_SEP = 5.5;'), 'separation must scale with the hull')
+})
+
 test('the constellations and the meteors are real settings', () => {
   // The sky used to be procedural only; it now draws the actual 88 constellations,
   // so how strongly they read has to be a dial instead of a compile-time constant.
@@ -142,8 +146,8 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // With the 8 degree pitch the sea only fills the lower third of the frame, so
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
-  assert.ok(source.includes('const base = 36 + ((index * 5.3) % 16)'), 'berths must be 36-52 units out')
-  assert.ok(source.includes('boatDummy.scale.setScalar(3.2)'), 'the hull must grow with the berth')
+  assert.ok(source.includes('const base = 30 + (index % 6) * 5.2 + Math.floor(index / 6) * 2.6'), 'berths must spread over 30-60 units so hulls do not stack')
+  assert.ok(source.includes('boatDummy.scale.setScalar(2.8)'), 'the hull must grow with the berth')
 })
 
 test('boats off is the switch, not a zero count', () => {
