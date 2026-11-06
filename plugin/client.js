@@ -2011,7 +2011,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.23';
+  const SKIN_BUILD = 'lab-1.5.24';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

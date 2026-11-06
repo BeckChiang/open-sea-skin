@@ -345,4 +345,8 @@ test('the surface takes every new dial instead of a fixed look', () => {
   assert.ok(source.includes('const thetaFolded = 2 * Math.atan(Math.tan(theta * 0.5) / fold);'), 'the dome must be a conformal stereographic fold')
   assert.ok(source.includes('meteorHead'), 'meteors need a head, not a bare hairline')
   assert.ok(source.includes('twilightTimes(at, sunLat, sunLon)'), 'twilight boundaries come from the same ephemeris')
+  // 1.5.23 shipped with these two seeded from the percentage tables, so the sky
+  // rendered 100x its glow and the crosses were 574 units long: a grey wall.
+  assert.ok(source.includes('uniform(CONSTELLATION_GRADES.mid / 100)'), 'constellation glow is a 0..1 multiplier, not a percentage')
+  assert.ok(source.includes('uniform(CROSS_GRADES.mid / 100)'), 'cross glow is a 0..1 multiplier, not a percentage')
 })

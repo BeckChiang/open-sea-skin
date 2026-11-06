@@ -576,11 +576,15 @@ function applyElevation(elevationDeg, azimuthDeg, viewElDeg, viewAzDeg) {
 
   // 1.5.23 twilight axes: the warm band, the twilight glow, the belt of Venus,
   // the earth shadow, and the airglow all come from the same elevation curve.
-  uTwilightWarm.value = sky.twilight.warm;
-  uTwilightBand.value = sky.twilight.bandHeight;
-  uBeltOfVenus.value = sky.twilight.belt;
-  uEarthShadow.value = sky.twilight.shadow;
-  uAirglow.value = sky.twilight.airglow;
+  // Every value is scrubbed: a stray undefined here silently kills the whole
+  // sky material (three builds a uniform of type null and throws every frame),
+  // which shows up as a grey canvas rather than as a visible error.
+  const tw = sky.twilight || {};
+  uTwilightWarm.value = finiteOr(tw.warm, 0);
+  uTwilightBand.value = finiteOr(tw.bandHeight, 6);
+  uBeltOfVenus.value = finiteOr(tw.belt, 0);
+  uEarthShadow.value = finiteOr(tw.shadow, 0);
+  uAirglow.value = finiteOr(sky.airglow, 0);
   // morning is a cool rose, evening a deep ember: the same band, different paint
   uTwilightColor.value.set(...(sunRising ? [1.0, 0.55, 0.45] : [1.0, 0.40, 0.15]));
 
@@ -1002,6 +1006,13 @@ function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
 
+// A uniform whose value is undefined makes three build a node of type null and
+// throw while compiling the shader; the frame is never submitted and the skin
+// reads as a grey page. Scrub every external value before it reaches a uniform.
+function finiteOr(value, fallback) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function applyGlass(active, rects) {
   const effective = active === true && glassNode !== null;
   if (active === true && glassNode === null) warnGlass(new Error('blur node unavailable'));
@@ -1265,7 +1276,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.23';
+const OCEAN_BUILD = 'lab-1.5.24';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1342,6 +1353,21 @@ async function boot() {
       } catch (error) {
         console.warn('[open-sea-skin] star dome disabled', error);
         starLayer = null;
+      }
+
+      // A probe seam for headless checks: only present when the page asks for it.
+      if (typeof location !== 'undefined' && /[?&]ossdebug=1/.test(location.search)) {
+        window.__ossDebug = {
+          scene, camera, sky, renderer,
+          get post() { return postProcessing; },
+          uniforms: {
+            zenith: uZenithColor, horizon: uHorizonColor, deep: uDeepColor, shallow: uShallowColor,
+            skyLight: uSkyLight, nightF: uNightF, tone: uSkyTone, stars: uStars, airglow: uAirglow,
+            warm: uTwilightWarm, belt: uBeltOfVenus, shadow: uEarthShadow, cloudOpacity: uCloudOpacity,
+            fold: uSkyFold, milky: uMilky, moonVisible: uMoonVisible,
+            constellation: uConstellation, cross: uCrossGlow, starSize: uStarSize,
+          },
+        };
       }
     }
 
@@ -1881,8 +1907,8 @@ let starLayer = null;
 const uStarGlow = uniform(0);
 const uMeteorGlow = uniform(0);
 // how strongly the real constellations are drawn: a settings dial, not a compile flag
-const uConstellation = uniform(CONSTELLATION_GRADES.mid);
-const uCrossGlow = uniform(CROSS_GRADES.mid);
+const uConstellation = uniform(CONSTELLATION_GRADES.mid / 100);
+const uCrossGlow = uniform(CROSS_GRADES.mid / 100);
 
 function createStarLayer(scene) {
   const vertices = constellationVertices(CONSTELLATION_LINES);

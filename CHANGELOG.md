@@ -2,6 +2,14 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.24 — 2026-11-06
+
+### Fixed
+
+- **整片天空发灰（1.5.23 的回归）**。1.5.23 把三个档位表从 0..1 改成百分比（mid = 100），但 `uConstellation` 与 `uCrossGlow` 两个 uniform 仍按老表播种，值是 100 而不是 1：757 颗星的十字星臂长从 15 涨到 574，加法混合铺满天空；星座连线也被放大 100 倍，形成一层白色格栅。两处改为 `…_GRADES.mid / 100`。
+- 顺带给「星空亮度/十字星」的 uniform 加了回归断言，避免百分比与 0..1 再次混用。
+- `window.__ossDebug` 调试出口改为只在 URL 带 `?ossdebug=1` 时挂载（1.5.23 是无条件挂的）。
+
 ## 1.5.23 — 2026-11-06
 
 ### Added

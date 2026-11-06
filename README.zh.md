@@ -1,10 +1,10 @@
-# Open Sea Skin · Lab 分支说明（1.5.23）
+# Open Sea Skin · Lab 分支说明（1.5.24）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 上游只提供「海洋 + 夕阳 + 玻璃界面」；本分支在它的地基上加了三块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**，并把所有能调的参数搬进了设置面板。
 
 - 上游版本：1.2.7（`plugin/client.js` 与 `native-dist/*` 原样起步）
-- 本分支版本：**1.5.23**
+- 本分支版本：**1.5.24**
 - 许可证：MIT（见 `LICENSE`；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`）
 - 只在这台机器的 `C:\Users\recko\DSH\plugins\open-sea-skin-lab` 开发，profile 用 `link:` 安装
 
@@ -30,7 +30,7 @@
 
 ```powershell
 # 1. 解压到任意位置（不要放进同步盘的 DSH 工作区根目录以外也可以，但路径不要含中文空格）
-Expand-Archive .\open-sea-skin-lab-1.5.23.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+Expand-Archive .\open-sea-skin-lab-1.5.24.zip -DestinationPath C:\Users\<你>\DSH\plugins\
 
 # 2. 如果装过官方版，先卸掉（同一个包名，只能存在一个）
 #    在 DSH 里让它执行 plugin_manager remove_bundle open-sea-skin
@@ -46,7 +46,7 @@ Expand-Archive .\open-sea-skin-lab-1.5.23.zip -DestinationPath C:\Users\<你>\DS
 
 1. 左下角出现海洋图标按钮，点开有十一组折叠面板（顶部还有搜索框）；
 2. 面板「天空控制」里能看到「今日 日出 …· 日落 …」；
-3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.23` 与 `[open-sea-skin] ocean lab-1.5.23`。
+3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.24` 与 `[open-sea-skin] ocean lab-1.5.24`。
 
 > 只改渲染半边（`shared/ocean.js` 等）时，F5 就够；改了宿主半边（`plugin/index.js`）必须**完全退出重开**，或者在装了 `dsh-unlag` 的情况下点它的刷新按钮。
 
