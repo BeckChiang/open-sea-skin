@@ -188,5 +188,7 @@ test('a missing metrics bridge is reported instead of silently flat', () => {
   // both leave the wave engine reading nothing. The panel must be able to say so.
   assert.ok(clientSource.includes('waveBridgeNone'), 'the panel needs a bridge-not-mounted label')
   assert.ok(clientSource.includes('this.count += 1'), 'the store must count pushes so the panel can report them')
-  assert.ok(clientSource.includes('if (React && ctx && ctx.slots'), 'a host without the slot service must still get the skin')
+  assert.ok(clientSource.includes('__openSeaSkinBridgeState'), 'the mount result must be readable by the panel')
+  assert.ok(clientSource.includes('describeSlots'), 'the reason a bridge is missing must be named')
+  assert.ok(!clientSource.includes("require('react')"), 'the bridge must not depend on the loader resolving react')
 })

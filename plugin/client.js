@@ -90,6 +90,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveOut: '来源{src} · 消费 ¥{cost}（满浪 ¥{full}）· 吞吐 {rate} tok/s · 浪 {sea}',
       waveBridgeNone: '指标桥未挂载',
       waveBridge: '指标桥 {n} 次 · {s}s 前',
+      bridgeWhy: { 'no-slots': '未拿到 slots 服务', 'slots-shape': 'slots 接口不符', 'inject-failed': '注入失败，见控制台', 'no-ctx': '没有 ctx' },
       waveSrcManual: '手动',
       waveSrcThroughput: '吞吐',
       waveSrcAmount: '金额',
@@ -163,6 +164,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveOut: '{src} · spend ¥{cost} (full wave ¥{full}) · {rate} tok/s · sea {sea}',
       waveBridgeNone: 'metrics bridge not mounted',
       waveBridge: 'bridge {n} pushes · {s}s ago',
+      bridgeWhy: { 'no-slots': 'no slots service', 'slots-shape': 'slots has an unexpected shape', 'inject-failed': 'injection failed, see console', 'no-ctx': 'no plugin context' },
       waveSrcManual: 'manual',
       waveSrcThroughput: 'throughput',
       waveSrcAmount: 'spend',
@@ -733,8 +735,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const store = globalThis.__openSeaSkinMetrics;
       const seen = store && typeof store.count === 'number' ? store.count : 0;
       const age = store && store.at ? Math.max(0, Math.round((performance.now() - store.at) / 1000)) : -1;
+      const bridgeState = globalThis.__openSeaSkinBridgeState;
+      const why = seen === 0 && bridgeState && bridgeState !== 'mounted'
+        ? '（' + ((copy.bridgeWhy && copy.bridgeWhy[bridgeState]) || bridgeState) + '）'
+        : '';
       const tag = seen === 0
-        ? copy.waveBridgeNone
+        ? copy.waveBridgeNone + why
         : copy.waveBridge.replace('{n}', String(seen)).replace('{s}', String(age));
       const snapshot = readMetrics();
       if (!snapshot) {
@@ -1563,35 +1569,55 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     // Renders nothing: it only mirrors the session's cumulative token usage and
     // the active model into the store the wave engine polls.
-    let React = null;
-    try { React = require('react'); } catch { React = null; }
-    // The bridge is registered before the controller and guarded instead of
-    // bailing out: if a host ever lacks the slot service, the skin still draws,
-    // and the panel says so instead of quietly reading nothing.
-    if (React && ctx && ctx.slots && typeof ctx.slots.inject === 'function') {
-    const Bridge = function OpenSeaSkinMetrics(props) {
-      const usage = props.useProjection ? props.useProjection('tokenUsage') : null;
-      const selection = props.useProjection ? props.useProjection('modelSelection') : null;
-      const model = selection ? selection.next || selection.lastUsed : null;
-      // Pushed while rendering instead of from an effect: the store has to carry
-      // the open conversation on the first tick after a switch, and an effect
-      // only fires after paint (and only when its dependency list agrees).
-      metricsStore.push({
-        sessionId: props.sessionId || null,
-        cachedTokens: (usage && usage.cacheReadTokens) || 0,
-        uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
-        outputTokens: (usage && usage.outputTokens) || 0,
-        costYuan: costOf(usage, model),
-      });
-      return null;
+    //
+    // Registered before the controller and guarded rather than bailing out: the
+    // skin has to draw even when the host cannot give us a slot, and the panel
+    // prints *why* the bridge is missing instead of leaving a silent flat sea.
+    const slots = ctx && (ctx.slots || (typeof ctx.get === 'function' ? ctx.get('slots') : null));
+    const describeSlots = () => {
+      if (!ctx) return 'no-ctx';
+      if (!slots) return 'no-slots';
+      if (typeof slots.inject !== 'function' || typeof slots.register !== 'function') return 'slots-shape';
+      return '';
     };
-    Bridge.displayName = 'OpenSeaSkinMetrics';
-
-    ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register(
-      { name: 'conversation.composer.dock', id: 'open-sea-skin-metrics', order: 900 },
-      (props) => React.createElement(Bridge, props),
-    )), 'open-sea-skin: metrics bridge');
+    let bridgeState = describeSlots();
+    if (!bridgeState) {
+      const Bridge = function OpenSeaSkinMetrics(props) {
+        const usage = props && props.useProjection ? props.useProjection('tokenUsage') : null;
+        const selection = props && props.useProjection ? props.useProjection('modelSelection') : null;
+        const model = selection ? selection.next || selection.lastUsed : null;
+        // Pushed while rendering instead of from an effect: the store has to carry
+        // the open conversation on the first tick after a switch, and an effect
+        // only fires after paint (and only when its dependency list agrees).
+        metricsStore.push({
+          sessionId: (props && props.sessionId) || null,
+          cachedTokens: (usage && usage.cacheReadTokens) || 0,
+          uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
+          outputTokens: (usage && usage.outputTokens) || 0,
+          costYuan: costOf(usage, model),
+        });
+        return null;
+      };
+      Bridge.displayName = 'OpenSeaSkinMetrics';
+      // Handed to the slot as a plain component: no React.createElement needed, so
+      // this path cannot fail just because the module loader will not resolve
+      // 'react' for a plugin that never declared it as a dependency.
+      const register = () => slots.register(
+        { name: 'conversation.composer.dock', id: 'open-sea-skin-metrics', order: 900 },
+        Bridge,
+      );
+      try {
+        if (typeof ctx.effect === 'function') {
+          ctx.effect(() => slots.inject('conversation.composer.dock', register), 'open-sea-skin: metrics bridge');
+        } else {
+          slots.inject('conversation.composer.dock', register);
+        }
+      } catch (error) {
+        bridgeState = 'inject-failed';
+        console.warn('[open-sea-skin] metrics bridge failed to mount', error);
+      }
     }
+    globalThis.__openSeaSkinBridgeState = bridgeState || 'mounted';
 
     const controller = globalThis.OpenSeaSkinCore.createController({
       assetUrl: (path) => '/open-sea-skin/' + path,
