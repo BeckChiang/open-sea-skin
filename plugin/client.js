@@ -532,6 +532,7 @@ ${blurCss(state)}`;
 
     // ---- fleet: one boat per subagent in the open conversation --------------
     let fleetInFlight = false;
+    let fleetSince = 0;
     let fleetAt = 0;
 
     const boatOutEl = () => document.getElementById(`${IDS.panel}-${'boat-out'}`);
@@ -550,7 +551,10 @@ ${blurCss(state)}`;
     };
 
     const pollFleet = async () => {
-      if (!state.boats || fleetInFlight) return;
+      if (!state.boats) return;
+      // Released rather than trusted: a request that never settles would
+      // otherwise leave the flag set and freeze the roster.
+      if (fleetInFlight && performance.now() - fleetSince < 9000) return;
       const snapshot = readMetrics();
       const sessionId = snapshot && snapshot.sessionId;
       if (!sessionId) {
@@ -558,8 +562,14 @@ ${blurCss(state)}`;
         return;
       }
       fleetInFlight = true;
+      fleetSince = performance.now();
       try {
-        const response = await fetch(`${FLEET_PATH}?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+        // A stalled request must not wedge the poll: the flag would stay set and
+        // the fleet would sit at whatever count it last heard, forever.
+        const response = await fetch(`${FLEET_PATH}?session=${encodeURIComponent(sessionId)}`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(6000),
+        });
         const data = await response.json();
         // Boats picture the conversation you are looking at, so the number is the
         // subagents this session has; `running` is the live subset the note reports.
