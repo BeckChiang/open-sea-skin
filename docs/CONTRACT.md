@@ -100,12 +100,12 @@
   "services": { "subagents": true, "sessionQuery": true, "agents": true, "agentTeams": true } }
 ```
 
-- 口径：**正在运行**的子智能体，不累计；且必须与侧边栏「正在运行 N 个子智能体」一致。
+- 口径（2026-11-06 修订）：船数 = **本会话的子智能体条目数**（`children.length`），与侧边栏「子智能体」列表的条数一致，不是「正在运行」数、也不累计跨会话。`running`（有未结束回合的 child 数）只用于面板文案「本会话 N 个子智能体，M 个正在运行」。
 - 判定方法：`subagentCatalog` 条目只有 `{id, createdAt, mode, label?}`，**没有 running 字段**；而 team members 里包含父智能体自己。所以逐个 `sessionQuery.observeSession(childId, { projectionMode: 'all' })`，读 `projections.values.subagentTiming.active`——有 open turn 就是 running，`lastTurnCompleted` 后就不是。每个 child 结果缓存 2.5 s（轮询间隔 4 s），observation 用 `Symbol.asyncDispose`/`Symbol.dispose` 释放；最多观察 24 个 child。
 - `members` 只作为诊断字段保留，不参与计数（否则父智能体永远贡献一艘幽灵船）。
 - 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
-- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe；`count` 上限 12（渲染端 `BOAT_MAX`），下限 1（常驻一艘 `BOAT_BASE`）。
-- 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船沿相机前侧的可见带巡航（`boatCruise`：横向 `lateral` 在 ±0.95 间折返、`base` 16–30 前后漂移），到边缘掉头而不是飞出画面；两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，所以是稳定避碰而不是抖动。
+- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe，`count` = `children.length`（clamp 0..12，渲染端再按 `BOAT_BASE`/`BOAT_MAX` 收边）；`sessionId` 一变立即重拉，不用等下一轮。宿主返回的是旧形状（没有 `children`）时，面板显示「宿主半是旧版本，需要重启」提示。
+- 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base` 14–27、`radiusRight` 5–8.4、`radiusBack` 2–4.2、角速度 0.10–0.19 rad/s 即一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
 
 ## 5 · 星空与流星
 

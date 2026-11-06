@@ -1165,8 +1165,8 @@ let boatCamera = null;
 const boatFade = new Float32Array(BOAT_MAX);
 // A boat cruises inside the belt of sea the camera is actually looking at:
 // an absolute berth slides out of frame as the camera orbits and reads as
-// "the boat sailed off for good". Each boat keeps a lane, a heading and a slow
-// in/out drift, and turns around at the edge of the belt instead of leaving.
+// "the boat sailed off for good". Each boat keeps its own ellipse in front of the
+// camera and points along the tangent, so it never turns around on the spot.
 const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   const spread = index / (BOAT_MAX - 1);
   const base = 14 + ((index * 7.3) % 13);

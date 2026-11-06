@@ -69,9 +69,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secSun: '日照',
       secBoat: '船',
       boats: '显示船只',
-      boatNote: '一艘常驻，其余等于当前正在运行的子智能体，随进程增减。',
-      boatIdle: '当前没有运行中的子智能体（海面保留 1 艘）',
-      boatCount: '正在运行 {n} 个子智能体',
+      boatNote: '每个子智能体一艘船；没有子智能体时海面保留 1 艘。切会话会跟着变。',
+      boatIdle: '本会话没有子智能体（海面保留 1 艘）',
+      boatCount: '本会话 {n} 个子智能体，{m} 个正在运行',
       boatLoading: '读取中…',
       boatOffline: '读不到子智能体列表（接口未启用？）',
       boatStale: '宿主插件还是旧版，先按右上角刷新按钮或重启桌面端',
@@ -124,9 +124,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secSun: 'Sunlight',
       secBoat: 'Boats',
       boats: 'Show boats',
-      boatNote: 'One boat stays out; every running subagent adds another, live.',
-      boatIdle: 'No subagent running (one boat kept afloat)',
-      boatCount: '{n} subagent(s) running',
+      boatNote: 'One boat per subagent, and one kept afloat when the session has none. Switching sessions reshapes it.',
+      boatIdle: 'No subagent in this session (one boat kept afloat)',
+      boatCount: '{n} subagent(s) in this session, {m} running',
       boatLoading: 'Reading…',
       boatOffline: 'Subagent roster unavailable (endpoint off?)',
       boatStale: 'Host plugin is stale: press the header refresh button, or restart',
@@ -561,7 +561,12 @@ ${blurCss(state)}`;
       try {
         const response = await fetch(`${FLEET_PATH}?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
         const data = await response.json();
-        const count = Math.max(0, Math.min(12, Number(data && data.running) || 0));
+        // Boats picture the conversation you are looking at, so the number is the
+        // subagents this session has; `running` is the live subset the note reports.
+        // That is also what makes switching sessions reshape the fleet.
+        const children = data && Array.isArray(data.children) ? data.children.length : 0;
+        const running = Math.max(0, Math.min(12, Number(data && data.running) || 0));
+        const count = Math.max(0, Math.min(12, children));
         postFleet(count);
         // A host build from before the per-child observation answers without
         // sessionQuery, and its `running` counts the parent agent, so the fleet
@@ -569,7 +574,8 @@ ${blurCss(state)}`;
         const hostFresh = !!(data && data.services && data.services.sessionQuery === true);
         if (data && data.ok === true) {
           if (!hostFresh) setBoatNote(copy.boatStale);
-          else setBoatNote(count > 0 ? copy.boatCount.replace('{n}', String(count)) : copy.boatIdle);
+          else if (count > 0) setBoatNote(copy.boatCount.replace('{n}', String(count)).replace('{m}', String(running)));
+          else setBoatNote(copy.boatIdle);
         }
         else setBoatNote(`${copy.boatOffline} ${data && data.error ? `(${data.error})` : ''}`.trim());
       } catch {
@@ -624,6 +630,7 @@ ${blurCss(state)}`;
             lastTotal = total;
             lastAt = now;
             rate = 0;
+            void pollFleet();
           }
           const seconds = Math.max(0.05, (now - lastAt) / 1000);
           const delta = Math.max(0, total - (lastTotal === null ? total : lastTotal));
