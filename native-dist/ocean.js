@@ -14,7 +14,7 @@
 import * as THREE from './vendor/three.webgpu.js';
 import {
   Fn, pass, uniform, uniformArray, texture, uv, float, vec2, vec3, vec4, If,
-  sin, cos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
+  sin, cos, tan, atan, acos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
   abs, attribute, smoothstep, length, reflect, passTexture,
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
@@ -26,7 +26,7 @@ import {
   constellationVertices, equatorialToHorizontal, localSiderealTime,
   starBrightnessFromDegree
 } from './sky-astro.js';
-import { sunTimes,
+import { sunTimes, twilightTimes,
   sunPosition, moonPosition,
   cloudCoverOf, starLevelOf, starIntensityOf
 } from './solar.js';
@@ -72,11 +72,19 @@ let moonEnabled = true;
 let starsSetting = 'mid';
 let constellationSetting = 'mid';
 let crossSetting = 'mid';
+// effective percentages for the two constellation dials (100 = old 'mid')
+let constellationDial = 100;
+let crossDial = 100;
+// 1.5.23 meteor dials: how often, and how hot
+let meteorRate = 1;
+let meteorBright = 1;
 let meteorEnabled = true;
 let cloudsSetting = 'mid';
 // reported back through window.__ossState()
 let sunElevationDeg = 0;
 let sunAzimuthDeg = 0;
+// true while the sun is climbing: picks the morning paint for the twilight band
+let sunRising = true;
 // where the disc is actually aimed after the dome is squeezed into the frame
 let sunViewElevationDeg = 0;
 let sunViewAzimuthDeg = 0;
@@ -89,11 +97,29 @@ let cloudCover = cloudCoverOf(cloudsSetting);
 let sunClock = 0;
 
 const SKY_LEVELS = ['off', 'low', 'mid', 'high'];
-const CONSTELLATION_GRADES = Object.freeze({ off: 0, low: 0.5, mid: 1, high: 1.7 });
+// 1.5.23: percentages, where 100 is the old 'mid' look and the dial may climb
+// past it. A letter from an older profile still maps through these tables.
+const STAR_GRADES = Object.freeze({ off: 0, low: 60, mid: 100, high: 150 });
+const CONSTELLATION_GRADES = Object.freeze({ off: 0, low: 50, mid: 100, high: 170 });
 // the cross on every constellation vertex: how bright and how long the arms are
-const CROSS_GRADES = Object.freeze({ off: 0, low: 0.55, mid: 1, high: 1.75 });
+const CROSS_GRADES = Object.freeze({ off: 0, low: 55, mid: 100, high: 175 });
+
+// panel value -> percentage. Numbers pass through; letters look up the table.
+function dialOf(value, fallback, table) {
+  const n = Number(value);
+  if (Number.isFinite(n)) return Math.max(0, Math.min(200, n));
+  if (typeof value === 'string' && Object.prototype.hasOwnProperty.call(table, value)) return table[value];
+  return fallback;
+}
 
 const GLASS_MAX_RECTS = 3;
+
+// Night tints the panel offers: measured dark, a colder blue, a warmer city glow.
+const SKY_TONES = Object.freeze({
+  real: new THREE.Vector3(1, 1, 1),
+  blue: new THREE.Vector3(0.80, 1.02, 1.35),
+  warm: new THREE.Vector3(1.22, 0.98, 0.82),
+});
 
 // ----------------------------------------------------------------------------
 // SECTION 1 · SHARED UNIFORMS
@@ -126,6 +152,36 @@ const uMoonVisible = uniform(0);
 const uMoonPhaseCos = uniform(1);
 const uStars = uniform(0);
 const uCloudCover = uniform(CLOUD_COVER_BASELINE);
+// 1.5.23 sky dials: twilight axes (see sky.js), airglow, and the moon's lift of
+// the whole night sky.
+const uTwilightWarm = uniform(0);
+const uTwilightColor = uniform(new THREE.Vector3(1.0, 0.40, 0.15));
+const uTwilightBand = uniform(6);
+const uBeltOfVenus = uniform(0);
+const uEarthShadow = uniform(0);
+const uAirglow = uniform(1);
+// cloud motion and presence, both continuous dials (1 = the 1.2.7 look)
+const uCloudSpeed = uniform(1);
+const uCloudOpacity = uniform(1);
+
+// Star art dials (1.5.23): every one is continuous, so the panel never snaps.
+const uStarSize = uniform(5.4);
+const uStarBase = uniform(1);
+const uStarHaze = uniform(1);
+const uHaloStrength = uniform(0.28);
+const uLineWidth = uniform(1);
+const uLineFadeDeg = uniform(14);
+const uTwinkleSpeed = uniform(1);
+const uTwinkleAmp = uniform(0.3);
+// Milky Way band: normal of the galactic plane in world space, plus its dial.
+const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
+const uMilky = uniform(0.35);
+// Night tint: (1,1,1) keeps the measured palette; the panel's presets scale it.
+const uSkyTone = uniform(new THREE.Vector3(1, 1, 1));
+// The star dome folds the sky toward the view axis; the procedural haze reads
+// these two to unfold itself back onto the same directions.
+const uSkyAxisDir = uniform(new THREE.Vector3(0, 0, -1));
+const uSkyFold = uniform(1);
 
 // Frosted-glass columns (contract §2.3): 3 rects of (x0, y0, x1, y1) + level.
 const uGlassRects = uniformArray([
@@ -272,16 +328,27 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
   // Sunset band: a warm wash that hugs the horizon on the sun's side. The dusk
   // palette alone tinted the whole sky evenly, which read as "grey" instead of
   // 晚霞; this is the part that makes the hour visible.
+  // 1.5.23: its strength and its height now come from sky.js, so it rises
+  // smoothly out of the day and sinks into the night instead of popping on.
   const lowSun = float(1).sub(smoothstep(0.05, 0.36, uSunDir.y));
   const flatSun = normalize(vec3(uSunDir.x, 0, uSunDir.z).add(vec3(1e-4, 0, 1e-4)));
   const flatDir = normalize(vec3(d.x, 0, d.z).add(vec3(1e-4, 0, 1e-4)));
   const towardSun = max(dot(flatDir, flatSun), 0);
-  const bandLow = smoothstep(0.42, 0.0, d.y);
-  // and it only exists while the sun is up or in civil twilight — without this
-  // gate the warm band would sit on the midnight horizon as a permanent fake dawn
-  const duskGate = smoothstep(-0.16, 0.03, uSunDir.y);
-  const warmBand = pow(towardSun, 5).mul(lowSun).mul(bandLow).mul(duskGate);
-  col.addAssign(vec3(1.0, 0.40, 0.15).mul(warmBand).mul(0.9));
+  const awayFromSun = max(dot(flatDir, flatSun.mul(-1)), 0);
+  const bandTop = float(0.05).add(uTwilightBand.mul(0.022));
+  const bandLow = smoothstep(bandTop, 0.0, d.y);
+  const warmBand = pow(towardSun, 5).mul(bandLow).mul(uTwilightWarm).mul(lowSun.mul(0.35).add(0.65));
+  col.addAssign(uTwilightColor.mul(warmBand).mul(0.9));
+
+  // Belt of Venus: the pink band opposite the sun, above the earth shadow.
+  // Cold pink, and it must not reach the water line.
+  const beltBand = smoothstep(0.30, 0.02, d.y).mul(smoothstep(-0.02, 0.09, d.y));
+  col.addAssign(vec3(0.62, 0.30, 0.42).mul(pow(awayFromSun, 3)).mul(beltBand).mul(uBeltOfVenus).mul(0.6));
+
+  // Earth shadow: the blue-grey wedge that rises from the horizon opposite the
+  // sunset as the sun sinks; it is what makes dusk darker than dawn's glow.
+  const shadowBand = smoothstep(0.16, 0.0, d.y).mul(smoothstep(-0.05, 0.03, d.y));
+  col.assign(mix(col, col.mul(vec3(0.55, 0.62, 0.90)), shadowBand.mul(uEarthShadow).mul(0.75)));
 
   // moon: phase-shaped disc + halo, gated by uMoonVisible (brightness, 0..1)
   If(uMoonVisible.greaterThan(0.002), () => {
@@ -299,9 +366,19 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     col.addAssign(vec3(0.55, 0.62, 0.78).mul(halo).mul(moonGlow));
   });
 
-  // stars: one hash point per direction cell, faded near the horizon
+  // stars: one hash point per direction cell, faded near the horizon.
+  // 1.5.23: the dome folds sky directions toward the view axis, so the haze
+  // unfolds the direction back before hashing — otherwise it would slide against
+  // the constellations as the fold changes.
   If(uStars.mul(astro).greaterThan(0.001), () => {
-    const p = d.mul(STAR_SCALE);
+    const axisDir = normalize(uSkyAxisDir);
+    const cosT = clamp(dot(d, axisDir), -1, 1);
+    const theta = acos(cosT);
+    const thetaOrig = atan(tan(theta.mul(0.5)).mul(uSkyFold).clamp(-1e4, 1e4)).mul(2);
+    const shift = theta.sub(thetaOrig);
+    const spin = normalize(cross(axisDir, d));
+    const unfolded = normalize(d.mul(cos(shift)).add(cross(spin, d).mul(sin(shift))));
+    const p = unfolded.mul(STAR_SCALE);
     const cell = floor(p);
     const local = fract(p).sub(0.5);
     const hx = hash31(cell);
@@ -310,16 +387,32 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     const dist = length(local.xy.sub(vec2(hx, hy).sub(0.5).mul(0.62)));
     const core = float(1).sub(smoothstep(0, STAR_SIZE, dist));
     const gate = smoothstep(0.972, 0.9985, hg);
-    const twinkle = sin(uTime.mul(hg.mul(2.4).add(1.3)).add(hx.mul(29.7))).mul(0.22).add(0.78);
+    const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(hg.mul(2.4).add(1.3)).add(hx.mul(29.7))).mul(0.22).add(0.78);
     const altitude = smoothstep(0.02, 0.32, d.y);
-    col.addAssign(vec3(0.86, 0.92, 1).mul(core).mul(gate).mul(twinkle).mul(altitude).mul(uStars).mul(2.2));
+    col.addAssign(vec3(0.86, 0.92, 1).mul(core).mul(gate).mul(twinkle).mul(altitude).mul(uStars).mul(2.2).mul(uStarHaze));
   });
+
+  // Milky Way: a soft band along the galactic plane. Faint, and only at night —
+  // it is the one night-sky term that is not a point light.
+  If(uMilky.mul(uNightF).greaterThan(0.001), () => {
+    const gal = abs(dot(d, normalize(uGalNormal)));
+    const bandGlow = pow(float(1).sub(clamp(gal, 0, 1)), 6);
+    col.addAssign(vec3(0.055, 0.050, 0.070).mul(bandGlow).mul(uMilky).mul(uStars).mul(uNightF));
+  });
+
+  // Airglow: a very faint green-blue wash that never leaves a dark sky, and the
+  // moon's lift of the whole dome (scattered moonlight), both night-gated.
+  col.addAssign(vec3(0.010, 0.016, 0.030).mul(uAirglow).mul(smoothstep(0.55, 0, d.y)));
+  col.addAssign(vec3(0.030, 0.038, 0.058).mul(uMoonVisible).mul(uNightF).mul(uAirglow));
 
   // clouds only inside the low band: skips one FBM for most sky pixels
   const band = smoothstep(0.03, 0.16, d.y).mul(smoothstep(0.6, 0.22, d.y));
   If(band.mul(cloudMask).greaterThan(0.001), () => {
     const proj = d.xz.div(d.y.add(0.18)).mul(0.55);
-    const cloudNoise = clamp(fbm(proj.add(vec2(uTime.mul(0.006), uTime.mul(0.003)))).mul(0.5).add(0.5), 0, 1);
+    // 1.5.23: they drift now, and the dial can stop them dead (0 = frozen) or
+    // send them at a walking pace
+    const drift = vec2(uTime.mul(0.006), uTime.mul(0.0025)).mul(uCloudSpeed);
+    const cloudNoise = clamp(fbm(proj.add(drift)).mul(0.5).add(0.5), 0, 1);
     // uCloudCover 0.55 reproduces the 1.2.7 threshold (0.62 -> 0.95) and opacity
     const low = float(0.62).add(float(CLOUD_COVER_BASELINE).sub(uCloudCover).mul(0.55));
     const density = clamp(uCloudCover.div(CLOUD_COVER_BASELINE), 0, 1);
@@ -328,8 +421,11 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     // Daytime clouds now take the horizon hue (blue) instead of near-white, so a
     // cloudy noon no longer greys the whole sky out; at dusk uSunColor warms them.
     const cloudColor = uHorizonColor.mul(uSkyLight.mul(1.3)).add(vec3(0.05)).toVar();
-    col.assign(mix(col, cloudColor, cover.mul(0.58).mul(density)));
+    col.assign(mix(col, cloudColor, cover.mul(0.58).mul(density).mul(uCloudOpacity)));
   });
+
+  // Night tint last, so it scales everything the dome drew above the horizon.
+  col.mulAssign(mix(vec3(1), uSkyTone, uNightF));
 
   return col;
 });
@@ -478,6 +574,16 @@ function applyElevation(elevationDeg, azimuthDeg, viewElDeg, viewAzDeg) {
   uSkyLight.value = sky.skyLight;
   uNightF.value = 1 - sky.horizonF;
 
+  // 1.5.23 twilight axes: the warm band, the twilight glow, the belt of Venus,
+  // the earth shadow, and the airglow all come from the same elevation curve.
+  uTwilightWarm.value = sky.twilight.warm;
+  uTwilightBand.value = sky.twilight.bandHeight;
+  uBeltOfVenus.value = sky.twilight.belt;
+  uEarthShadow.value = sky.twilight.shadow;
+  uAirglow.value = sky.twilight.airglow;
+  // morning is a cool rose, evening a deep ember: the same band, different paint
+  uTwilightColor.value.set(...(sunRising ? [1.0, 0.55, 0.45] : [1.0, 0.40, 0.15]));
+
   sunElevationDeg = elevationDeg;
   sunAzimuthDeg = azimuthDeg;
   sunViewElevationDeg = viewElDeg === undefined ? elevationDeg : viewElDeg;
@@ -488,6 +594,7 @@ function applyElevation(elevationDeg, azimuthDeg, viewElDeg, viewAzDeg) {
 // sunset (~0.28) to afternoon (1). 1.2.7 mapped 0..1 onto DUSK..daylight only.
 function applyTimeOfDay(t) {
   currentDaylight = Math.min(100, Math.max(0, t * 100));
+  sunRising = manualElevationDeg(t + 0.002) > manualElevationDeg(t);
   applyElevation(manualElevationDeg(t), manualAzimuthDeg(t));
 }
 
@@ -539,6 +646,7 @@ function syncStars() {
 let sunTimesKey = '';
 let sunriseMinutes = null;
 let sunsetMinutes = null;
+let twilightMinutes = null;
 
 // Recomputed only when the calendar day or the coordinates change: the scan
 // costs 1440 cheap evaluations, which is nothing once a day and wasteful per
@@ -551,12 +659,16 @@ function refreshSunTimes(now) {
   const times = sunTimes(at, sunLat, sunLon);
   sunriseMinutes = times.riseMinutes;
   sunsetMinutes = times.setMinutes;
+  twilightMinutes = twilightTimes(at, sunLat, sunLon);
 }
 
 function refreshSky(now) {
   refreshSunTimes(now);
   if (sunMode === 'real') {
     const sun = sunPosition(new Date(now), sunLat, sunLon);
+    // ten minutes ahead decides whether the band is warming up or cooling down,
+    // which is what picks the morning rose over the evening ember
+    sunRising = sunPosition(new Date(now + 600000), sunLat, sunLon).elevationDeg > sun.elevationDeg;
     // palette from the true elevation, disc aimed into the visible band
     applyElevation(
       sun.elevationDeg,
@@ -576,17 +688,42 @@ function applySunMessage(d) {
   if (Number.isFinite(lat) && lat >= -90 && lat <= 90) sunLat = lat;
   if (Number.isFinite(lon) && lon >= -180 && lon <= 180) sunLon = lon;
   if (typeof d.moon === 'boolean') moonEnabled = d.moon;
-  if (SKY_LEVELS.indexOf(d.stars) >= 0) starsSetting = d.stars;
-  if (SKY_LEVELS.indexOf(d.constellation) >= 0) constellationSetting = d.constellation;
-  uConstellation.value = CONSTELLATION_GRADES[constellationSetting] ?? CONSTELLATION_GRADES.mid;
-  if (SKY_LEVELS.indexOf(d.cross) >= 0) crossSetting = d.cross;
-  uCrossGlow.value = CROSS_GRADES[crossSetting] ?? CROSS_GRADES.mid;
+  // 1.5.23: percentages. A letter from an older profile is mapped by its table.
+  if (d.stars !== undefined) starsSetting = dialOf(d.stars, 100, STAR_GRADES);
+  if (d.constellation !== undefined) {
+    constellationSetting = d.constellation;
+    constellationDial = dialOf(d.constellation, 100, CONSTELLATION_GRADES);
+    uConstellation.value = constellationDial / 100;
+  }
+  if (d.cross !== undefined) {
+    crossSetting = d.cross;
+    crossDial = dialOf(d.cross, 100, CROSS_GRADES);
+    uCrossGlow.value = crossDial / 100;
+  }
   if (typeof d.meteor === 'boolean') meteorEnabled = d.meteor;
-  if (SKY_LEVELS.indexOf(d.clouds) >= 0) cloudsSetting = d.clouds;
+  if (d.clouds !== undefined) cloudsSetting = d.clouds;
   uCloudCover.value = cloudCoverOf(cloudsSetting);
   cloudCover = uCloudCover.value;
+  if (Number.isFinite(Number(d.cloudSpeed))) uCloudSpeed.value = Math.max(0, Math.min(4, Number(d.cloudSpeed)));
+  if (Number.isFinite(Number(d.cloudOpacity))) uCloudOpacity.value = Math.max(0, Math.min(1.5, Number(d.cloudOpacity)));
+  // star art, all continuous
+  if (Number.isFinite(Number(d.starSize))) uStarSize.value = Math.max(1, Math.min(14, Number(d.starSize)));
+  if (Number.isFinite(Number(d.starBase))) uStarBase.value = Math.max(0, Math.min(2, Number(d.starBase)));
+  if (Number.isFinite(Number(d.starHalo))) uHaloStrength.value = Math.max(0, Math.min(2, Number(d.starHalo)));
+  if (Number.isFinite(Number(d.lineWidth))) uLineWidth.value = Math.max(0.2, Math.min(4, Number(d.lineWidth)));
+  if (Number.isFinite(Number(d.lineFadeDeg))) uLineFadeDeg.value = Math.max(3, Math.min(45, Number(d.lineFadeDeg)));
+  if (Number.isFinite(Number(d.starCount))) uStarHaze.value = Math.max(0, Math.min(2, Number(d.starCount)));
+  if (Number.isFinite(Number(d.twinkleSpeed))) uTwinkleSpeed.value = Math.max(0.1, Math.min(4, Number(d.twinkleSpeed)));
+  if (Number.isFinite(Number(d.twinkleAmp))) uTwinkleAmp.value = Math.max(0, Math.min(0.9, Number(d.twinkleAmp)));
+  if (Number.isFinite(Number(d.milky))) uMilky.value = Math.max(0, Math.min(2, Number(d.milky)));
+  if (typeof d.skyTone === 'string' && SKY_TONES[d.skyTone]) uSkyTone.value.copy(SKY_TONES[d.skyTone]);
+  applyStarDials();
   const skyDist = Number(d.skyDist);
   if (Number.isFinite(skyDist)) skyZoom = Math.max(0.6, Math.min(3, skyDist));
+  const dome = Number(d.domeAmount);
+  if (Number.isFinite(dome)) skyDome = Math.max(0, Math.min(1, dome));
+  if (Number.isFinite(Number(d.meteorRate))) meteorRate = Math.max(0.1, Math.min(6, Number(d.meteorRate)));
+  if (Number.isFinite(Number(d.meteorBright))) meteorBright = Math.max(0.2, Math.min(3, Number(d.meteorBright)));
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
     const t = Number(d.t);
@@ -833,6 +970,10 @@ function applyGlassMessage(d) {
     : d.mode === 'render' ? true
       : d.active === true;
   const wanted = requested && d.perf !== true;
+  // 1.5.23: one blur radius for the whole frame, in CSS pixels. The render path
+  // maps it onto the spread of the blur taps; the CSS path uses it directly.
+  const radius = Number(d.radius);
+  if (Number.isFinite(radius)) uGlassSpread.value = Math.max(0, Math.min(24, radius)) / 24 * 9;
   const rects = [];
   if (wanted && Array.isArray(d.rects)) {
     for (const rect of d.rects) {
@@ -941,6 +1082,7 @@ if (SKIN) {
     sunViewAzimuthDeg,
     sunriseMinutes,
     sunsetMinutes,
+    twilightMinutes,
     moonElevationDeg,
     moonAzimuthDeg,
     moonPhase01,
@@ -1123,7 +1265,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.22';
+const OCEAN_BUILD = 'lab-1.5.23';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1731,7 +1873,6 @@ function updateBoats(dt) {
 // ---------------------------------------------------------------------------
 
 const STAR_RADIUS = 3200;
-const STAR_GRADES = { off: 0, low: 0.4, mid: 0.7, high: 1 };
 const DEG_TO_RAD = Math.PI / 180;
 
 let starLayer = null;
@@ -1786,8 +1927,10 @@ function createStarLayer(scene) {
   const aGlow = attribute('aGlow', 'float');
   const aPhase = attribute('aPhase', 'float');
   const aHue = attribute('aHue', 'float');
-  // 1.5 rad/s reads as scintillation; anything faster looks like blinking
-  const twinkle = sin(uTime.mul(1.5).add(aPhase)).mul(0.3).add(0.7);
+  // 1.5 rad/s reads as scintillation; anything faster looks like blinking.
+  // 1.5.23: both the rate and the depth are dials now.
+  const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(1.5).add(aPhase))
+    .mul(uTwinkleAmp).add(float(1).sub(uTwinkleAmp));
   const starMaterial = new THREE.PointsNodeMaterial({
     size: 5.4,
     sizeAttenuation: false,
@@ -1796,7 +1939,8 @@ function createStarLayer(scene) {
     blending: THREE.AdditiveBlending,
   });
   starMaterial.colorNode = mix(vec3(1.0, 0.93, 0.84), vec3(0.72, 0.83, 1.0), aHue)
-    .mul(aGlow).mul(twinkle).mul(uStarGlow);
+    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase);
+  starMaterial.sizeNode = uStarSize;
   const stars = new THREE.Points(starGeometry, starMaterial);
   stars.frustumCulled = false;
   stars.renderOrder = 2;
@@ -1813,7 +1957,8 @@ function createStarLayer(scene) {
     blending: THREE.AdditiveBlending,
   });
   haloMaterial.colorNode = mix(vec3(0.85, 0.9, 1.0), vec3(0.6, 0.78, 1.0), aHue)
-    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(0.28);
+    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uHaloStrength);
+  haloMaterial.sizeNode = uStarSize.mul(1.67);
   const halos = new THREE.Points(starGeometry, haloMaterial);
   halos.frustumCulled = false;
   halos.renderOrder = 2;
@@ -1901,9 +2046,26 @@ function createStarLayer(scene) {
   meteor.renderOrder = 3;
   scene.add(meteor);
 
+  // A head on the streak: a 1 px line alone reads as a scratch, and the bright
+  // leading point is what makes a meteor look like a meteor.
+  const meteorHeadGeometry = new THREE.BufferGeometry();
+  meteorHeadGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  const meteorHeadMaterial = new THREE.PointsNodeMaterial({
+    size: 4.6,
+    sizeAttenuation: false,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  meteorHeadMaterial.colorNode = vec3(1, 0.96, 0.86).mul(uMeteorGlow).mul(2.2);
+  const meteorHead = new THREE.Points(meteorHeadGeometry, meteorHeadMaterial);
+  meteorHead.frustumCulled = false;
+  meteorHead.renderOrder = 3;
+  scene.add(meteorHead);
+
   return {
     // NOTE: `meteor` is the state machine below, so the Line needs its own key
-    stars, halos, crosses, lines, meteorLine: meteor,
+    stars, halos, crosses, lines, meteorLine: meteor, meteorHead,
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
@@ -1916,31 +2078,53 @@ function createStarLayer(scene) {
     starCount,
     starsOpacity: 0,
     lastSky: -1e9,
-    meteor: { active: false, elapsed: 0, duration: 1, next: 5, from: new THREE.Vector3(), to: new THREE.Vector3() },
+    meteor: {
+      active: false, elapsed: 0, duration: 1, next: 5,
+      from: new THREE.Vector3(), to: new THREE.Vector3(),
+      // 1.5.23: a shorter tail for a quick streak, a longer one for a fireball
+      tail: 0.18, power: 1,
+    },
   };
 }
 
 let lastAltDeg = 0;
 
-// "Sky distance": 1 keeps the plain 60 degree cone, so the frame holds the same
-// stars as before. Raising it shrinks the angles toward the view axis, which
-// folds a wider swathe of sky into the same window (more constellations).
-let skyZoom = 1;
+// "Sky distance": 2 is the default now — at 1.0 the 60 degree window barely
+// covers the Big Dipper. The dome folds sky angles toward the view axis by this
+// factor, using a stereographic fold so the constellations keep their shape
+// (every angle is scaled by the same local factor, so figures are not sheared).
+let skyZoom = 2;
+// How much of that fold applies to the dome. 0 keeps the plain perspective sky
+// (the old look), 1 is the full fold; in between mixes the two angles.
+let skyDome = 0.55;
 const skyAxis = new THREE.Vector3(0, 0, -1);
-const skyFull = new THREE.Quaternion();
-const skyPart = new THREE.Quaternion();
 const skyUnit = new THREE.Vector3();
+const skyCross = new THREE.Vector3();
 
+// Fold one direction toward the view axis: theta -> 2*atan(tan(theta/2)/fold).
+// Written as a rotation about the axis perpendicular to (axis, dir), which is
+// the same thing on the great circle through both and avoids any pole issue.
 function compressSky(dir) {
-  if (skyZoom <= 1.0001) return dir;
+  const fold = Math.max(0.35, 1 + (skyZoom - 1) * skyDome);
+  uSkyFold.value = fold;
+  if (Math.abs(fold - 1) < 0.001) return dir;
   if (boatCamera) boatCamera.getWorldDirection(skyAxis);
   else skyAxis.set(0, 0, -1);
+  uSkyAxisDir.value.copy(skyAxis);
   const length = dir.length();
   if (length < 1e-6) return dir;
   skyUnit.copy(dir).divideScalar(length);
-  skyFull.setFromUnitVectors(skyAxis, skyUnit);
-  skyPart.identity().slerp(skyFull, 1 / skyZoom);
-  skyUnit.copy(skyAxis).applyQuaternion(skyPart);
+  const cosT = Math.max(-1, Math.min(1, skyAxis.dot(skyUnit)));
+  const theta = Math.acos(cosT);
+  if (theta < 1e-5) return dir;
+  const thetaFolded = 2 * Math.atan(Math.tan(theta * 0.5) / fold);
+  skyCross.crossVectors(skyAxis, skyUnit);
+  if (skyCross.lengthSq() < 1e-12) return dir;
+  skyCross.normalize();
+  const shift = theta - thetaFolded;
+  // rotate skyUnit about skyCross by -shift, i.e. toward the axis
+  const q = new THREE.Quaternion().setFromAxisAngle(skyCross, -shift);
+  skyUnit.applyQuaternion(q);
   return dir.copy(skyUnit).multiplyScalar(length);
 }
 
@@ -1973,10 +2157,17 @@ function skyPoint(azDeg, altDeg, out) {
   return dir.multiplyScalar(STAR_RADIUS);
 }
 
+// Star dials moved: sizes are uniforms now, so only the level change needs a
+// rebuild (it re-grades which vertices are bright). Forcing lastSky makes the
+// next updateStarDome pass redo the dome even if 20 s have not gone by.
+function applyStarDials() {
+  if (starLayer) starLayer.lastSky = -1e9;
+}
+
 function updateStarDome(now, dt) {
   if (!starLayer) return;
   const layer = starLayer;
-  const grade = STAR_GRADES[starsSetting] ?? 0.7;
+  const grade = starLevelOf(starsSetting);
   // stars fade with daylight and are washed out by a bright moon
   const visible = grade * Math.max(0, Math.min(1, uNightF.value * 1.15 - moonBrightness * 0.35));
   const targetOpacity = visible;
@@ -1991,6 +2182,15 @@ function updateStarDome(now, dt) {
     const date = new Date();
     const lst = localSiderealTime(date, sunLon);
     const lat = sunLat;
+    // the galactic pole rides the same sky, so the Milky Way band turns with it
+    const gal = equatorialToHorizontal(192.85948, 27.12825, lat, lst);
+    const galAlt = gal.altDeg * DEG_TO_RAD;
+    const galAz = gal.azDeg * DEG_TO_RAD;
+    uGalNormal.value.set(
+      Math.cos(galAlt) * Math.sin(galAz),
+      Math.sin(galAlt),
+      -Math.cos(galAlt) * Math.cos(galAz),
+    );
     const starPositions = layer.stars.geometry.getAttribute('position');
     for (let i = 0; i < layer.starCount; i += 1) {
       starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
@@ -2037,9 +2237,9 @@ function updateStarDome(now, dt) {
       pz[i] = starDirA.z;
       // fade the connections in over the first 14 degrees of altitude, so they
       // dissolve into the horizon haze instead of stopping mid-air
-      pg[i] = Math.max(0, Math.min(1, lastAltDeg / 14));
+      pg[i] = Math.max(0, Math.min(1, lastAltDeg / uLineFadeDeg.value));
     }
-    const half = STAR_RADIUS * 0.0012;
+    const half = STAR_RADIUS * 0.0012 * uLineWidth.value;
     for (let e = 0; e + 1 < layer.segmentCount; e += 2) {
       const ax = px[e], ay = py[e], az = pz[e];
       const bx = px[e + 1], by = py[e + 1], bz = pz[e + 1];
@@ -2073,20 +2273,24 @@ function updateStarDome(now, dt) {
   // meteors: random streaks that only exist at night
   const meteor = layer.meteor;
   const meteorPositions = layer.meteorLine.geometry.getAttribute('position');
+  const meteorHeadPositions = layer.meteorHead.geometry.getAttribute('position');
   const elapsed = now / 1000;
   if (meteor.active) {
     meteor.elapsed += dt;
     const progress = Math.min(1, meteor.elapsed / meteor.duration);
-    // head runs along the path, tail trails it
+    // head runs along the path, tail trails it by a fraction of the whole run
     const head = meteor.from.clone().lerp(meteor.to, progress);
-    const tail = meteor.from.clone().lerp(meteor.to, Math.max(0, progress - 0.18));
+    const tail = meteor.from.clone().lerp(meteor.to, Math.max(0, progress - meteor.tail));
     meteorPositions.setXYZ(0, tail.x, tail.y, tail.z);
     meteorPositions.setXYZ(1, head.x, head.y, head.z);
     meteorPositions.needsUpdate = true;
-    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 2.6;
+    meteorHeadPositions.setXYZ(0, head.x, head.y, head.z);
+    meteorHeadPositions.needsUpdate = true;
+    // a fade in and out, scaled by how hot this particular streak is
+    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 2.6 * meteor.power * meteorBright;
     if (progress >= 1) {
       meteor.active = false;
-      meteor.next = elapsed + 3 + Math.random() * 6;
+      meteor.next = elapsed + (2.5 + Math.random() * 5) / meteorRate;
     }
   } else {
     uMeteorGlow.value = 0;
@@ -2096,13 +2300,19 @@ function updateStarDome(now, dt) {
       // read as "meteors never render".
       const startAzDeg = (Math.random() * 2 - 1) * 30;
       const startAltDeg = 13 + Math.random() * 20;
-      const travelDeg = 10 + Math.random() * 12;
+      // one in eight is a fireball: longer, brighter, slower to burn out
+      const fireball = Math.random() < 0.12;
+      const travelDeg = fireball ? 16 : 10 + Math.random() * 12;
       const driftDeg = (Math.random() * 2 - 1) * 12;
       skyPoint(startAzDeg, startAltDeg, meteor.from);
       skyPoint(startAzDeg + driftDeg, Math.max(4, startAltDeg - travelDeg), meteor.to);
       meteor.active = true;
       meteor.elapsed = 0;
       meteor.duration = 0.55 + Math.random() * 0.6;
+      meteor.tail = fireball ? 0.34 : 0.18;
+      meteor.power = fireball ? 2.1 : 1;
+      meteorHeadPositions.setXYZ(0, meteor.from.x, meteor.from.y, meteor.from.z);
+      meteorHeadPositions.needsUpdate = true;
     }
   }
 }

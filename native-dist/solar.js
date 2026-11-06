@@ -129,6 +129,37 @@ export function sunTimes(date, latDeg = 30.59, lonDeg = 114.31) {
   return { riseMinutes, setMinutes };
 }
 
+// Twilight boundaries, found the same way as sunTimes(): walk one day once and
+// record where the sun crosses each of the three standard depths. One pass for
+// all six numbers, and the panel prints exactly the instants the palette uses.
+export const TWILIGHT_LEVELS = Object.freeze({ civil: -6, nautical: -12, astronomical: -18 });
+
+export function twilightTimes(date, latDeg = 30.59, lonDeg = 114.31) {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  const depths = Object.entries(TWILIGHT_LEVELS);
+  const result = {};
+  for (const [name] of depths) result[name] = { dawnMinutes: null, duskMinutes: null };
+  let pending = depths.length * 2;
+  let prev = sunPosition(day, latDeg, lonDeg).elevationDeg;
+  for (let minutes = 1; minutes <= 1440 && pending > 0; minutes += 1) {
+    const elevation = sunPosition(new Date(day.getTime() + minutes * 60000), latDeg, lonDeg).elevationDeg;
+    for (const [name, depth] of depths) {
+      const slot = result[name];
+      if (slot.dawnMinutes === null && prev < depth && elevation >= depth) {
+        slot.dawnMinutes = minutes;
+        pending -= 1;
+      }
+      if (slot.duskMinutes === null && prev >= depth && elevation < depth) {
+        slot.duskMinutes = minutes;
+        pending -= 1;
+      }
+    }
+    prev = elevation;
+  }
+  return result;
+}
+
 export function daylightFromElevation(elevationDeg) {
   return clamp((elevationDeg + 4) / 44, 0, 1) * 100;
 }
@@ -136,14 +167,30 @@ export function daylightFromElevation(elevationDeg) {
 const CLOUD_COVER = { off: 0.15, low: 0.35, mid: 0.55, high: 0.8 };
 const STAR_LEVEL = { off: 0, low: 0.33, mid: 0.66, high: 1 };
 
-/** Contract §2.2 cloud档位 -> uCloudCover. */
+/**
+ * Contract §2.2 cloud档位 -> uCloudCover.
+ * 1.5.23: a number is a percentage (0..100), so the panel can slide it. The
+ * legacy letters keep working for a profile saved by an older build.
+ */
 export function cloudCoverOf(level) {
+  if (isDial(level, CLOUD_COVER)) return clamp(Number(level) / 100, 0.02, 0.95);
   return Object.prototype.hasOwnProperty.call(CLOUD_COVER, level) ? CLOUD_COVER[level] : CLOUD_COVER.mid;
 }
 
 /** Contract §2.2 星空档位 -> starLevel multiplier. */
 export function starLevelOf(level) {
+  if (isDial(level, STAR_LEVEL)) {
+    // 100% is the old 'mid' look, so an upgraded profile looks unchanged.
+    return clamp(Number(level) / 100, 0, 2) * STAR_LEVEL.mid;
+  }
   return Object.prototype.hasOwnProperty.call(STAR_LEVEL, level) ? STAR_LEVEL[level] : STAR_LEVEL.mid;
+}
+
+// 1.5.23: the panel sends percentages; a letter from an older profile is still a
+// letter, and anything else must fall through to the 'mid' default.
+function isDial(level, table) {
+  if (typeof level === 'number') return Number.isFinite(level);
+  return typeof level === 'string' && !(level in table) && Number.isFinite(Number(level));
 }
 
 /**

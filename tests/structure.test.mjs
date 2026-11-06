@@ -300,7 +300,7 @@ test('the ribbon draws the legs the data actually has', () => {
 test('the geometry is sized like last time, not larger', () => {
   // The ribbons are the same picture as the hairlines, only softened: if the
   // stroke gets much fatter the sky turns into a mesh.
-  assert.ok(source.includes('const half = STAR_RADIUS * 0.0012;'), 'keep the stroke close to its former weight')
+  assert.ok(source.includes('const half = STAR_RADIUS * 0.0012 * uLineWidth.value;'), 'keep the stroke close to its former weight, as a dial')
 })
 
 test('the hulls keep the 1.5.3 lanes, widened only by the panel setting', () => {
@@ -321,4 +321,26 @@ test('boat range, pace and scale are panel settings', () => {
   assert.ok(source.includes("if (d && d.type === 'oss-boats') applyBoatsMessage(d);"), 'the surface must accept the settings')
   assert.ok(clientSource.includes("type: 'oss-boats',"), 'the panel must send the settings')
   assert.ok(clientSource.includes("rangeRow(pid('boat-spread'), 'boatSpread', 0.2, 3, 0.1)"), 'the range slider must exist')
+})
+
+test('the panel is one searchable set of collapsible groups', () => {
+  // 1.5.23 went from five flat blocks to eleven groups plus a search box; the
+  // old grade buttons are sliders now, so the pinned markup has to follow.
+  for (const key of ['secSky', 'secStars', 'secConst', 'secMeteor', 'secClouds', 'secAdvanced']) {
+    assert.ok(clientSource.includes(`group('${key}'`), `${key} must be its own collapsible group`)
+  }
+  assert.ok(clientSource.includes("<details class=\"oss-sec\""), 'groups must be <details> elements')
+  assert.ok(clientSource.includes("const RANGE_ROWS = ["), 'one table must drive the sliders')
+  for (const row of ["['star-size', 'starSize'", "['dome-amount', 'domeAmount'", "['glass-radius', 'glassRadius'", "['tz-offset', 'tzOffset'"]) {
+    assert.ok(clientSource.includes(row), `${row} must be a panel dial`)
+  }
+  assert.ok(!clientSource.includes("pid('col-left-level')"), 'the four-step column button must be gone')
+  assert.ok(clientSource.includes("setRowVisible(el('tz-offset'), state.tzMode === 'manual')"), 'the offset slider follows the clock mode')
+})
+
+test('the surface takes every new dial instead of a fixed look', () => {
+  assert.ok(source.includes('if (Number.isFinite(radius)) uGlassSpread.value = Math.max(0, Math.min(24, radius)) / 24 * 9;'), 'one global blur radius drives the renderer')
+  assert.ok(source.includes('const thetaFolded = 2 * Math.atan(Math.tan(theta * 0.5) / fold);'), 'the dome must be a conformal stereographic fold')
+  assert.ok(source.includes('meteorHead'), 'meteors need a head, not a bare hairline')
+  assert.ok(source.includes('twilightTimes(at, sunLat, sunLon)'), 'twilight boundaries come from the same ephemeris')
 })

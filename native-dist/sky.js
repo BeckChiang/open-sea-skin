@@ -6,6 +6,13 @@
 // solar elevation with a third NIGHT palette, and DUSK sits exactly at the
 // horizon so the original sunset look is preserved.
 //
+// 1.5.23 · continuity. The old curve froze twice a day: DAY saturated at +12°
+// (08:00–16:00 identical) and NIGHT at −18° (all night identical), so the sky
+// changed only during ~9 hours of the 24. Two extra ramps fix that: DEEP_NIGHT
+// keeps the night breathing with the sun's depth, DAY_HIGH adds a slow noon
+// shift on top of the day ramp, and the twilight is its own axis (warm band,
+// belt of Venus, earth shadow, airglow) instead of one gated term.
+//
 // No three.js dependency: imported by the renderer and unit tested directly.
 
 // Starlit night. The sea keeps enough lift to stay legible as water (the moon
@@ -18,6 +25,18 @@ export const NIGHT = {
   sunIntensity: 0,
   deep: [0.01, 0.024, 0.045],
   shallow: [0.024, 0.055, 0.085],
+};
+
+// Below astronomical twilight the sun is far enough down that even the last
+// scattered light is gone; only airglow and the Milky Way keep the sky from
+// being a flat black plate.
+export const DEEP_NIGHT = {
+  zenith: [0.0035, 0.0055, 0.011],
+  horizon: [0.008, 0.015, 0.028],
+  sun: [0.0, 0.0, 0.0],
+  sunIntensity: 0,
+  deep: [0.006, 0.012, 0.02],
+  shallow: [0.012, 0.024, 0.038],
 };
 
 // Sunset: orange on the horizon under a violet-blue zenith. The warm band that
@@ -44,9 +63,25 @@ export const DAY = {
   shallow: [0.05, 0.34, 0.42],
 };
 
-// Elevation at which the sky is fully night / fully day.
+// Noon: the sun is high, the Rayleigh path through the atmosphere is shortest,
+// so the zenith deepens and the horizon loses its wash. Only a slow hue shift —
+// brightness is already at its ceiling by +12°.
+export const DAY_HIGH = {
+  zenith: [0.032, 0.165, 0.55],
+  horizon: [0.40, 0.63, 0.91],
+  sun: [1.0, 0.96, 0.88],
+  sunIntensity: 1.85,
+  deep: [0.010, 0.075, 0.115],
+  shallow: [0.045, 0.31, 0.40],
+};
+
+// Elevation at which the sky is fully night / fully day, and the extra ramps.
 export const NIGHT_FULL_DEG = -18;
 export const DAY_FULL_DEG = 12;
+// The night and the noon ramps run over these spans (degrees of sun elevation).
+export const DEEP_NIGHT_SPAN_DEG = [-90, NIGHT_FULL_DEG];
+export const DAY_HIGH_SPAN_DEG = [0, 90];
+export const TWILIGHT_DEG = { civil: -6, nautical: -12, astronomical: NIGHT_FULL_DEG };
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -55,36 +90,89 @@ export function smoothstep01(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-const mix3 = (night, dusk, day, horizonF, dayF) => [
-  lerp(lerp(night[0], dusk[0], horizonF), day[0], dayF),
-  lerp(lerp(night[1], dusk[1], horizonF), day[1], dayF),
-  lerp(lerp(night[2], dusk[2], horizonF), day[2], dayF),
-];
+// A smooth bump that is 0 outside [a, b] and 1 at `peak`: one rise, one fall,
+// both with zero slope at the ends, so a shader term driven by it never pops.
+export function bump(x, a, peak, b) {
+  if (x <= a || x >= b) return 0;
+  return x <= peak ? smoothstep01(a, peak, x) : 1 - smoothstep01(peak, b, x);
+}
+
+// deep night -> night -> dusk -> day -> noon, each stop with its own ramp.
+const stops = (deep, night, dusk, day, noon, nightF, horizonF, dayF, dayHue) => [0, 1, 2].map((k) => {
+  const nightMix = lerp(deep[k], night[k], nightF);
+  const duskMix = lerp(nightMix, dusk[k], horizonF);
+  const dayMix = lerp(duskMix, day[k], dayF);
+  return lerp(dayMix, noon[k], dayHue * dayF);
+});
 
 /**
  * @param {number} elevationDeg sun elevation above the horizon, degrees
- * @returns {{horizonF:number, dayF:number, zenith:number[], horizon:number[],
- *   deep:number[], shallow:number[], sun:number[], sunIntensity:number,
- *   skyLight:number}}
+ * @returns {{
+ *   horizonF:number, dayF:number, dayHue:number, nightF:number, skyLight:number,
+ *   zenith:number[], horizon:number[], deep:number[], shallow:number[],
+ *   sun:number[], sunIntensity:number,
+ *   twilight:{warm:number, bandHeight:number, belt:number, shadow:number},
+ *   airglow:number
+ * }}
  */
 export function skyFromElevation(elevationDeg) {
-  const horizonF = smoothstep01(NIGHT_FULL_DEG, 0, elevationDeg);
-  const dayF = smoothstep01(0, DAY_FULL_DEG, elevationDeg);
-  const sunIntensity = lerp(lerp(NIGHT.sunIntensity, DUSK.sunIntensity, horizonF), DAY.sunIntensity, dayF);
-  // how much ambient light reaches clouds / foam: 0.04 at deep night, 0.55 at
-  // the horizon, 1 in full daylight
-  const skyLight = lerp(0.04, lerp(0.55, 1, dayF), horizonF);
-  const sunRGB = mix3(NIGHT.sun, DUSK.sun, DAY.sun, horizonF, dayF);
+  const el = elevationDeg;
+  // 0 at deep night, 1 from astronomical twilight up: the old night ramp.
+  const horizonF = smoothstep01(NIGHT_FULL_DEG, 0, el);
+  // 0 at the horizon, 1 in daylight: brightness ramp, unchanged in meaning.
+  const dayF = smoothstep01(0, DAY_FULL_DEG, el);
+  // 0 at the horizon, 1 with the sun overhead: the slow noon hue shift.
+  const dayHue = smoothstep01(DAY_HIGH_SPAN_DEG[0], DAY_HIGH_SPAN_DEG[1], el);
+  // 0 at deep night, 1 just below astronomical twilight: the night ramp.
+  const nightF = smoothstep01(DEEP_NIGHT_SPAN_DEG[0], DEEP_NIGHT_SPAN_DEG[1], el);
+
+  const sunIntensity = lerp(
+    lerp(NIGHT.sunIntensity, DUSK.sunIntensity, horizonF),
+    lerp(DAY.sunIntensity, DAY_HIGH.sunIntensity, dayHue),
+    dayF,
+  );
+  // How much ambient light reaches clouds, foam and the sea surface. One smooth
+  // curve instead of a nested lerp: the old form dropped 0.5 -> 0.14 in the last
+  // 20 minutes before sunset, which read as a hard switch.
+  const skyLight = lerp(0.04, 1, smoothstep01(NIGHT_FULL_DEG, DAY_FULL_DEG, el));
+
+  const zenith = stops(DEEP_NIGHT.zenith, NIGHT.zenith, DUSK.zenith, DAY.zenith, DAY_HIGH.zenith, nightF, horizonF, dayF, dayHue);
+  const horizon = stops(DEEP_NIGHT.horizon, NIGHT.horizon, DUSK.horizon, DAY.horizon, DAY_HIGH.horizon, nightF, horizonF, dayF, dayHue);
+  const deep = stops(DEEP_NIGHT.deep, NIGHT.deep, DUSK.deep, DAY.deep, DAY_HIGH.deep, nightF, horizonF, dayF, dayHue);
+  const shallow = stops(DEEP_NIGHT.shallow, NIGHT.shallow, DUSK.shallow, DAY.shallow, DAY_HIGH.shallow, nightF, horizonF, dayF, dayHue);
+
+  const sunRGB = [0, 1, 2].map((k) =>
+    lerp(lerp(lerp(NIGHT.sun[k], DUSK.sun[k], horizonF), DAY.sun[k], dayF), DAY_HIGH.sun[k], dayHue * dayF));
+
+  // Twilight is its own axis. Each term is a bump in sun elevation, so it fades
+  // in and out smoothly and can never sit on the horizon at midnight.
+  const twilight = {
+    // 晚霞: the warm wash on the sun's side, peaking at the moment of sunset.
+    warm: bump(el, -14, -0.5, 7),
+    // Where the band sits, in degrees of altitude: low and wide at dusk.
+    bandHeight: lerp(3.2, 7.5, smoothstep01(-14, -0.5, el)),
+    // Belt of Venus: the pink band opposite the sun just after sunset.
+    belt: bump(el, -16, -3, 2.5),
+    // Earth shadow: the blue-grey wedge that rises opposite the sun.
+    shadow: bump(el, -9, -1.5, 3.5),
+  };
+  // Airglow: the faint glow that keeps a moonless sky from being flat black.
+  const airglow = 1 - smoothstep01(-16, -4, el);
+
   return {
     horizonF,
     dayF,
-    sunIntensity,
+    dayHue,
+    nightF,
     skyLight,
-    zenith: mix3(NIGHT.zenith, DUSK.zenith, DAY.zenith, horizonF, dayF),
-    horizon: mix3(NIGHT.horizon, DUSK.horizon, DAY.horizon, horizonF, dayF),
-    deep: mix3(NIGHT.deep, DUSK.deep, DAY.deep, horizonF, dayF),
-    shallow: mix3(NIGHT.shallow, DUSK.shallow, DAY.shallow, horizonF, dayF),
+    sunIntensity,
+    zenith,
+    horizon,
+    deep,
+    shallow,
     sun: [sunRGB[0] * sunIntensity, sunRGB[1] * sunIntensity, sunRGB[2] * sunIntensity],
+    twilight,
+    airglow,
   };
 }
 

@@ -10,6 +10,8 @@ import {
   cloudCoverOf,
   starLevelOf,
   starIntensityOf,
+  twilightTimes,
+  TWILIGHT_LEVELS,
 } from '../shared/solar.js';
 
 const SHANGHAI = { lat: 31.23, lon: 121.47 };
@@ -135,3 +137,21 @@ test('sunrise and sunset follow the coordinates', () => {
   // A northern city rises later in absolute minutes and sets earlier.
   assert.ok(harbin.setMinutes < wuhan.setMinutes, 'harbin must set before wuhan')
 })
+
+test('twilight boundaries bracket sunrise and sunset in the right order', () => {
+  // One walk of the day yields all six crossings, so the panel prints exactly
+  // the instants the palette changes at.
+  const day = at('2026-11-06T12:00:00+08:00');
+  const times = sunTimes(day, SHANGHAI.lat, SHANGHAI.lon);
+  const twilight = twilightTimes(day, SHANGHAI.lat, SHANGHAI.lon);
+  assert.deepEqual(Object.keys(twilight).sort(), Object.keys(TWILIGHT_LEVELS).sort());
+  const a = twilight.astronomical;
+  const n = twilight.nautical;
+  const c = twilight.civil;
+  assert.ok(a.dawnMinutes < n.dawnMinutes, 'astronomical dawn comes before nautical');
+  assert.ok(n.dawnMinutes < c.dawnMinutes, 'nautical dawn comes before civil');
+  assert.ok(c.dawnMinutes < times.riseMinutes, 'civil dawn precedes sunrise');
+  assert.ok(times.setMinutes < c.duskMinutes, 'sunset precedes civil dusk');
+  assert.ok(c.duskMinutes < n.duskMinutes, 'civil dusk precedes nautical');
+  assert.ok(n.duskMinutes < a.duskMinutes, 'nautical dusk precedes astronomical');
+});

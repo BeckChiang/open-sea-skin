@@ -26,6 +26,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   // Host half of the skin: live roster of running subagents (one boat each).
   const FLEET_PATH = '/open-sea-skin/fleet';
 
+  // Every number here is a continuous dial that reaches the ocean as a uniform,
+  // so nothing in the panel snaps between looks. lat/lon start unset: the first
+  // time the sky wants a real sun, the panel asks the browser where it is, and
+  // only falls back to a fixed city if that is refused.
   const DEFAULTS = Object.freeze({
     enabled: true,
     sea: 45,
@@ -38,29 +42,56 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     amountFull: 10,
     smooth: 4,
     sunMode: 'real',
-    lat: 30.59,
-    lon: 114.31,
+    lat: null,
+    lon: null,
+    tzMode: 'system',
+    tzOffset: 8,
     moon: true,
-    stars: 'mid',
-    constellation: 'mid',
-    cross: 'mid',
+    // sky: distance and how much of the stereographic fold is applied
+    skyDist: 2,
+    domeAmount: 0.55,
+    skyTone: 'real',
+    // stars: brightness, art, haze
+    stars: 100,
+    starSize: 5.4,
+    starBase: 1,
+    starHalo: 0.28,
+    starCount: 1,
+    twinkleSpeed: 1.5,
+    twinkleAmp: 0.3,
+    milky: 0.35,
+    // constellations
+    constellation: 100,
+    cross: 100,
+    lineWidth: 1,
+    lineFadeDeg: 14,
+    // meteors
     meteor: true,
-    clouds: 'mid',
+    meteorRate: 1,
+    meteorBright: 1,
+    // clouds
+    clouds: 55,
+    cloudSpeed: 1,
+    cloudOpacity: 1,
     glassMode: 'render',
-    colLeft: Object.freeze({ on: true, level: 'weak' }),
-    colCenter: Object.freeze({ on: true, level: 'medium' }),
-    colRight: Object.freeze({ on: true, level: 'weak' }),
+    glassRadius: 14,
+    colLeft: Object.freeze({ on: true, strength: 40 }),
+    colCenter: Object.freeze({ on: true, strength: 60 }),
+    colRight: Object.freeze({ on: true, strength: 40 }),
     perf: false,
     boats: true,
     boatSpread: 2,
     boatPace: 1,
     boatScale: 2.5,
-    skyDist: 1,
   });
 
-  // Blur strength per column, sent to the ocean as a 0..1 weight.
-  const BLUR_LEVELS = Object.freeze({ off: 0, weak: 0.35, medium: 0.7, strong: 1 });
-  const BLUR_PX = Object.freeze({ off: 0, weak: 10, medium: 18, strong: 30 });
+  // Where the sky looks if the browser will not say: Shanghai. The value is
+  // only a placeholder until a geolocation fix or a typed coordinate arrives.
+  const FALLBACK_PLACE = Object.freeze({ lat: 31.23, lon: 121.47 });
+
+  // Old profiles stored a blur letter per column. Map it onto a strength.
+  const LEGACY_COLUMN = Object.freeze({ off: 0, weak: 35, medium: 60, strong: 90 });
+  const LEGACY_GLASS_PX = Object.freeze({ off: 0, weak: 10, medium: 18, strong: 30 });
   const GRADE_LEVELS = Object.freeze(['off', 'low', 'mid', 'high']);
 
   const COPY = Object.freeze({
@@ -138,6 +169,37 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassMode: '实现方式',
       perf: '高性能模式',
       glassNote: '渲染器内模糊最省；CSS 模糊更兼容但更吃帧。三栏可分别开关与调强度。',
+      search: '搜索设置项…',
+      secSky: '天空与日照',
+      secStars: '星空',
+      secConst: '星座',
+      secMeteor: '流星',
+      secClouds: '云',
+      secAdvanced: '高级',
+      skyTone: '夜色倾向',
+      domeAmount: '穹顶弧度',
+      starSize: '星点大小',
+      starBase: '星星亮度',
+      starHalo: '光晕',
+      starCount: '底噪星场',
+      twinkleSpeed: '闪烁速度',
+      twinkleAmp: '闪烁幅度',
+      milky: '银河带',
+      lineWidth: '连线粗细',
+      lineFadeDeg: '地平淡出',
+      meteorRate: '出现频率',
+      meteorBright: '亮度',
+      cloudSpeed: '漂移速度',
+      cloudOpacity: '不透明度',
+      glassRadius: '模糊半径',
+      colStrength: '强度',
+      tzMode: '时钟',
+      tzOffset: '时区偏移',
+      clockOut: '本机 {local} · 该地 {place}',
+      twilightOut: '暮光 民用 {civil} · 航海 {nautical} · 天文 {astro}',
+      twilightNone: '—',
+      skyTones: { real: '真实', blue: '深蓝', warm: '暖夜' },
+      tzModes: { system: '跟本机', longitude: '按经度', manual: '手动' },
       cols: { left: '左侧栏', center: '交互区', right: '右侧栏' },
       modes: { manual: '手动', throughput: '吞吐', amount: '金额' },
       sunModes: { real: '真实时钟', manual: '手动' },
@@ -219,6 +281,37 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassMode: 'Implementation',
       perf: 'Performance mode',
       glassNote: 'In-renderer blur is cheapest; CSS blur is more compatible but costs frames. Each column toggles separately.',
+      search: 'Search settings…',
+      secSky: 'Sky & daylight',
+      secStars: 'Stars',
+      secConst: 'Constellations',
+      secMeteor: 'Meteors',
+      secClouds: 'Clouds',
+      secAdvanced: 'Advanced',
+      skyTone: 'Night tint',
+      domeAmount: 'Dome curve',
+      starSize: 'Star size',
+      starBase: 'Star brightness',
+      starHalo: 'Halo',
+      starCount: 'Faint field',
+      twinkleSpeed: 'Twinkle speed',
+      twinkleAmp: 'Twinkle depth',
+      milky: 'Milky Way',
+      lineWidth: 'Line weight',
+      lineFadeDeg: 'Horizon fade',
+      meteorRate: 'Rate',
+      meteorBright: 'Brightness',
+      cloudSpeed: 'Drift speed',
+      cloudOpacity: 'Opacity',
+      glassRadius: 'Blur radius',
+      colStrength: 'Strength',
+      tzMode: 'Clock',
+      tzOffset: 'UTC offset',
+      clockOut: 'Here {local} · there {place}',
+      twilightOut: 'Twilight civil {civil} · nautical {nautical} · astro {astro}',
+      twilightNone: '—',
+      skyTones: { real: 'Real', blue: 'Deep blue', warm: 'Warm night' },
+      tzModes: { system: 'This machine', longitude: 'By longitude', manual: 'Manual' },
       cols: { left: 'Left column', center: 'Conversation', right: 'Right column' },
       modes: { manual: 'Manual', throughput: 'Throughput', amount: 'Cost' },
       sunModes: { real: 'Real clock', manual: 'Manual' },
@@ -239,30 +332,40 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
   }
 
-  // The lab build first shipped with Shanghai as the default location. Anyone
-  // who never touched the field still carries that pair, so treat it as
-  // "unset" once and migrate to the current default.
-  const LEGACY_DEFAULT_LOCATION = { lat: 31.23, lon: 121.47 };
-  function legacyDefaultLocation(source) {
-    return (
-      Number(source.lat) === LEGACY_DEFAULT_LOCATION.lat &&
-      Number(source.lon) === LEGACY_DEFAULT_LOCATION.lon
+  // Two shipped builds hard-coded a city (Shanghai, then Wuhan). Anyone who
+  // never touched the field still carries one of those pairs, so treat them as
+  // "unset" once and let the machine's own location take over.
+  const LEGACY_PLACES = [
+    { lat: 31.23, lon: 121.47 },
+    { lat: 30.59, lon: 114.31 },
+  ];
+  function isLegacyPlace(source) {
+    return LEGACY_PLACES.some(
+      (place) => Number(source.lat) === place.lat && Number(source.lon) === place.lon,
     );
   }
 
-  const BLUR_LEVEL_NAMES = Object.keys(BLUR_LEVELS);
   const WAVE_MODES = ['manual', 'throughput', 'amount'];
+  const SKY_TONES = ['real', 'blue', 'warm'];
+  const TZ_MODES = ['system', 'longitude', 'manual'];
 
+  // A column used to store a blur letter. It now stores a 0..100 strength, and
+  // a saved letter is folded into one so old profiles keep their look.
   function normalizeColumn(raw, fallback) {
     const column = raw && typeof raw === 'object' ? raw : {};
-    return {
-      on: column.on !== false,
-      level: BLUR_LEVEL_NAMES.includes(column.level) ? column.level : fallback.level,
-    };
+    let strength = Number(column.strength);
+    if (!Number.isFinite(strength)) {
+      const legacy = LEGACY_COLUMN[column.level];
+      strength = Number.isFinite(legacy) ? legacy : fallback.strength;
+    }
+    return { on: column.on !== false, strength: clamp(strength, 0, 100, fallback.strength) };
   }
 
   function normalize(raw) {
     const source = raw && typeof raw === 'object' ? raw : {};
+    const legacyPlace = isLegacyPlace(source);
+    const lat = legacyPlace ? null : Number(source.lat);
+    const lon = legacyPlace ? null : Number(source.lon);
     return {
       enabled: source.enabled !== false,
       sea: clamp(source.sea, 0, 100, DEFAULTS.sea),
@@ -275,15 +378,44 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       amountFull: clamp(source.amountFull, 1, 100, DEFAULTS.amountFull),
       smooth: clamp(source.smooth, 2, 8, DEFAULTS.smooth),
       sunMode: source.sunMode === 'manual' ? 'manual' : 'real',
-      lat: legacyDefaultLocation(source) ? DEFAULTS.lat : clamp(source.lat, -90, 90, DEFAULTS.lat),
-      lon: legacyDefaultLocation(source) ? DEFAULTS.lon : clamp(source.lon, -180, 180, DEFAULTS.lon),
+      lat: Number.isFinite(lat) && Math.abs(lat) <= 90 ? lat : null,
+      lon: Number.isFinite(lon) && Math.abs(lon) <= 180 ? lon : null,
+      tzMode: TZ_MODES.includes(source.tzMode) ? source.tzMode : DEFAULTS.tzMode,
+      tzOffset: clamp(source.tzOffset, -12, 14, DEFAULTS.tzOffset),
       moon: source.moon !== false,
-      stars: GRADE_LEVELS.includes(source.stars) ? source.stars : DEFAULTS.stars,
-      constellation: GRADE_LEVELS.includes(source.constellation) ? source.constellation : DEFAULTS.constellation,
-      cross: GRADE_LEVELS.includes(source.cross) ? source.cross : DEFAULTS.cross,
+      // sky
+      skyDist: clamp(source.skyDist, 0.6, 3, DEFAULTS.skyDist),
+      domeAmount: clamp(source.domeAmount, 0, 1, DEFAULTS.domeAmount),
+      skyTone: SKY_TONES.includes(source.skyTone) ? source.skyTone : DEFAULTS.skyTone,
+      // stars: a letter from 1.5.22 becomes its percentage
+      stars: clamp(dialFrom(source.stars, { off: 0, low: 60, mid: 100, high: 150 }), 0, 200, DEFAULTS.stars),
+      starSize: clamp(source.starSize, 1, 14, DEFAULTS.starSize),
+      starBase: clamp(source.starBase, 0, 2, DEFAULTS.starBase),
+      starHalo: clamp(source.starHalo, 0, 2, DEFAULTS.starHalo),
+      starCount: clamp(source.starCount, 0, 2, DEFAULTS.starCount),
+      twinkleSpeed: clamp(source.twinkleSpeed, 0.1, 4, DEFAULTS.twinkleSpeed),
+      twinkleAmp: clamp(source.twinkleAmp, 0, 0.9, DEFAULTS.twinkleAmp),
+      milky: clamp(source.milky, 0, 2, DEFAULTS.milky),
+      // constellations
+      constellation: clamp(dialFrom(source.constellation, { off: 0, low: 50, mid: 100, high: 170 }), 0, 200, DEFAULTS.constellation),
+      cross: clamp(dialFrom(source.cross, { off: 0, low: 55, mid: 100, high: 175 }), 0, 200, DEFAULTS.cross),
+      lineWidth: clamp(source.lineWidth, 0.2, 4, DEFAULTS.lineWidth),
+      lineFadeDeg: clamp(source.lineFadeDeg, 3, 45, DEFAULTS.lineFadeDeg),
+      // meteors
       meteor: source.meteor !== false,
-      clouds: GRADE_LEVELS.includes(source.clouds) ? source.clouds : DEFAULTS.clouds,
+      meteorRate: clamp(source.meteorRate, 0.1, 6, DEFAULTS.meteorRate),
+      meteorBright: clamp(source.meteorBright, 0.2, 3, DEFAULTS.meteorBright),
+      // clouds
+      clouds: clamp(dialFrom(source.clouds, { off: 0, low: 35, mid: 55, high: 80 }), 0, 100, DEFAULTS.clouds),
+      cloudSpeed: clamp(source.cloudSpeed, 0, 4, DEFAULTS.cloudSpeed),
+      cloudOpacity: clamp(source.cloudOpacity, 0, 1.5, DEFAULTS.cloudOpacity),
       glassMode: source.glassMode === 'css' ? 'css' : 'render',
+      glassRadius: clamp(
+        source.glassRadius,
+        0,
+        24,
+        Number.isFinite(LEGACY_GLASS_PX[source.glassLevel]) ? LEGACY_GLASS_PX[source.glassLevel] : DEFAULTS.glassRadius,
+      ),
       colLeft: normalizeColumn(source.colLeft, DEFAULTS.colLeft),
       colCenter: normalizeColumn(source.colCenter, DEFAULTS.colCenter),
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
@@ -292,8 +424,14 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatSpread: clamp(source.boatSpread, 0.2, 3, DEFAULTS.boatSpread),
       boatPace: clamp(source.boatPace, 0.3, 2.5, DEFAULTS.boatPace),
       boatScale: clamp(source.boatScale, 1.4, 4.6, DEFAULTS.boatScale),
-      skyDist: clamp(source.skyDist, 0.6, 3, DEFAULTS.skyDist),
     };
+  }
+
+  // A level letter from the previous build, or a plain number.
+  function dialFrom(value, table) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+    return Object.prototype.hasOwnProperty.call(table, value) ? table[value] : NaN;
   }
 
   function selectCopy(locale) {
@@ -317,7 +455,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     if (state.glassMode !== 'css' || state.perf) return '';
     const column = (selector, key) => {
       const entry = state[key];
-      const px = entry.on ? BLUR_PX[entry.level] || 0 : 0;
+      // one radius for the frame, each column takes a share of it
+      const px = entry.on ? Math.round(state.glassRadius * Math.pow(entry.strength / 100, 0.85)) : 0;
       if (!px) return '';
       return `${selector} { -webkit-backdrop-filter: blur(${px}px) saturate(125%); backdrop-filter: blur(${px}px) saturate(125%); }`;
     };
@@ -483,9 +622,29 @@ ${blurCss(state)}`;
 #${IDS.panel} .oss-switch input[type='checkbox'] { width:15px; height:15px; margin:0; accent-color:#8fe9e4; cursor:pointer; }
 #${IDS.panel} .oss-reset { width:100%; margin-top:4px; padding:7px 0; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#eef4f6; font-size:11px; cursor:pointer; transition:background .15s ease, border-color .15s ease; }
 #${IDS.panel} .oss-reset:hover { background:rgba(143,233,228,.12); border-color:rgba(143,233,228,.4); }
-#${IDS.panel} .oss-sec { margin-top:15px; padding-top:13px; border-top:1px solid rgba(255,255,255,.1); }
+#${IDS.panel} .oss-sec { margin-top:12px; padding-top:11px; border-top:1px solid rgba(255,255,255,.1); }
 #${IDS.panel} .oss-sec:first-of-type { margin-top:10px; padding-top:0; border-top:0; }
-#${IDS.panel} .oss-sec > .oss-caption { margin:0 0 10px; font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:rgba(143,233,228,.85); font-weight:600; }
+#${IDS.panel} .oss-sec > .oss-caption {
+  margin:0 0 8px; font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+  color:rgba(143,233,228,.85); font-weight:600; cursor:pointer; display:flex;
+  align-items:center; gap:7px; list-style:none; user-select:none;
+}
+#${IDS.panel} .oss-sec > .oss-caption::-webkit-details-marker { display:none; }
+#${IDS.panel} .oss-sec > .oss-caption::before {
+  content:''; width:0; height:0; border-left:5px solid currentColor;
+  border-top:4px solid transparent; border-bottom:4px solid transparent;
+  transform:rotate(90deg); transition:transform .16s ease; opacity:.75;
+}
+#${IDS.panel} .oss-sec:not([open]) > .oss-caption::before { transform:rotate(0deg); }
+#${IDS.panel} .oss-sec:not([open]) > .oss-caption { margin-bottom:0; opacity:.72; }
+#${IDS.panel} .oss-search { margin:12px 0 4px; }
+#${IDS.panel} .oss-search input {
+  width:100%; box-sizing:border-box; padding:6px 9px; font-size:11px;
+  color:rgba(226,242,255,.9); background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.14); border-radius:7px; outline:none;
+}
+#${IDS.panel} .oss-search input:focus { border-color:rgba(143,233,228,.5); background:rgba(255,255,255,.08); }
+#${IDS.panel} .oss-row[hidden] { display:none; }
 #${IDS.panel} .oss-seg { display:flex; gap:4px; }
 #${IDS.panel} .oss-seg button { flex:1; padding:5px 0; font-size:10.5px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); color:rgba(255,255,255,.72); cursor:pointer; transition:color .15s ease, border-color .15s ease, background .15s ease; }
 #${IDS.panel} .oss-seg button:hover { color:#dafdfb; border-color:rgba(143,233,228,.35); }
@@ -608,13 +767,30 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         t: state.time,
         lat: state.lat,
         lon: state.lon,
+        tzMode: state.tzMode,
+        tzOffset: state.tzOffset,
         moon: state.moon,
         stars: state.stars,
         constellation: state.constellation,
         cross: state.cross,
         meteor: state.meteor,
+        meteorRate: state.meteorRate,
+        meteorBright: state.meteorBright,
         clouds: state.clouds,
+        cloudSpeed: state.cloudSpeed,
+        cloudOpacity: state.cloudOpacity,
         skyDist: state.skyDist,
+        domeAmount: state.domeAmount,
+        skyTone: state.skyTone,
+        starSize: state.starSize,
+        starBase: state.starBase,
+        starHalo: state.starHalo,
+        starCount: state.starCount,
+        twinkleSpeed: state.twinkleSpeed,
+        twinkleAmp: state.twinkleAmp,
+        milky: state.milky,
+        lineWidth: state.lineWidth,
+        lineFadeDeg: state.lineFadeDeg,
       });
     };
 
@@ -630,7 +806,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const pick = (key) => {
         const column = state[key];
         if (!column || !column.on) return null;
-        const level = BLUR_LEVELS[column.level] || 0;
+        const level = clamp(column.strength, 0, 100, 0) / 100;
         if (!level) return null;
         const element = COLUMN_SELECTORS[key]
           .map((selector) => document.querySelector(selector))
@@ -656,7 +832,13 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // The in-renderer pass only runs in `render` mode; CSS mode blurs itself
       // and must leave the water sharp so the two do not fight.
       const active = state.enabled && !state.perf && state.glassMode === 'render';
-      post({ type: 'oss-glass', mode: state.glassMode, perf: state.perf, rects: active ? measureColumns() : [] });
+      post({
+        type: 'oss-glass',
+        mode: state.glassMode,
+        perf: state.perf,
+        radius: state.glassRadius,
+        rects: active ? measureColumns() : [],
+      });
     };
 
     // ---- fleet: one boat per subagent in the open conversation --------------
@@ -767,22 +949,61 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     // number to check instead of a guess.
     // Sunrise and sunset come from the frame, which already owns the ephemeris,
     // so the panel cannot disagree with the sky it is describing.
-    const clockOf = (minutes) => {
+    // The sky is drawn in real time, so the panel has to say which clock it is
+    // drawn against: the machine's, the coordinate's, or a hand-set offset.
+    const deviceOffset = () => -new Date().getTimezoneOffset() / 60;
+    const placeOffset = () => {
+      if (state.tzMode === 'manual') return state.tzOffset;
+      if (state.tzMode === 'longitude' && typeof state.lon === 'number') return Math.round(state.lon / 15);
+      return deviceOffset();
+    };
+    // Sun times are minutes of the machine's day; the panel prints the place's.
+    const placeShiftMinutes = () => (placeOffset() - deviceOffset()) * 60;
+    const clockOf = (minutes, shift = 0) => {
       if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 0) return null;
-      const h = Math.floor(minutes / 60) % 24;
-      const m = Math.round(minutes % 60);
+      const total = ((Math.round(minutes) + shift) % 1440 + 1440) % 1440;
+      const h = Math.floor(total / 60);
+      const m = total % 60;
       return String(h).padStart(2, '0') + ':' + (m < 10 ? '0' + m : String(m));
     };
+    const clockNow = (offset) => new Date(Date.now() + offset * 3600000).toISOString().slice(11, 16);
     const sunTimesText = (ocean) => {
-      const rise = ocean ? clockOf(ocean.sunriseMinutes) : null;
-      const set = ocean ? clockOf(ocean.sunsetMinutes) : null;
+      const shift = placeShiftMinutes();
+      const rise = ocean ? clockOf(ocean.sunriseMinutes, shift) : null;
+      const set = ocean ? clockOf(ocean.sunsetMinutes, shift) : null;
       if (!rise || !set) return copy.sunTimesNone;
       return copy.sunTimes.replace('{rise}', rise).replace('{set}', set);
     };
+    const twilightText = (ocean) => {
+      const table = ocean && ocean.twilightMinutes;
+      if (!table) return copy.twilightNone;
+      const shift = placeShiftMinutes();
+      const pair = (name) => {
+        const slot = table[name] || {};
+        const dawn = clockOf(slot.dawnMinutes, shift);
+        const dusk = clockOf(slot.duskMinutes, shift);
+        return dawn && dusk ? `${dawn} / ${dusk}` : copy.twilightNone;
+      };
+      return copy.twilightOut
+        .replace('{civil}', pair('civil'))
+        .replace('{nautical}', pair('nautical'))
+        .replace('{astro}', pair('astronomical'));
+    };
     const refreshSunReadout = () => {
+      const clockEl = document.getElementById(pid('clock-out'));
+      if (clockEl) {
+        const place = clockNow(placeOffset());
+        const local = clockNow(deviceOffset());
+        const zone = `UTC${placeOffset() >= 0 ? '+' : '−'}${Math.abs(placeOffset())}`;
+        clockEl.textContent = copy.clockOut
+          .replace('{local}', local)
+          .replace('{place}', `${place} ${zone}`);
+      }
+      const twilightEl = document.getElementById(pid('twilight-out'));
       const el = document.getElementById(pid('sun-out'));
       if (!el) return;
       const ocean = readOceanState();
+      if (twilightEl) twilightEl.textContent = twilightText(ocean);
       if (!ocean || typeof ocean.sunElevationDeg !== 'number') return;
       const times = sunTimesText(ocean);
       if (state.sunMode !== 'real') {
@@ -1112,17 +1333,16 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const rangeRow = (id, key, min, max, step) => `<div class="oss-row"><div class="oss-head"><label for="${id}" data-copy="${key}"></label><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" /></div>`;
       const segRow = (id, key, options) => `<div class="oss-row"><div class="oss-head"><span data-copy="${key}"></span></div><div class="oss-seg" id="${id}">${options.map(([value, copyKey]) => `<button type="button" data-value="${value}" data-copy="${copyKey}"></button>`).join('')}</div></div>`;
       const switchRow = (id, key) => `<div class="oss-row oss-switch"><label for="${id}" data-copy="${key}"></label><input type="checkbox" id="${id}" /></div>`;
-      const colRow = (id, key) => `<div class="oss-col" id="${id}"><div class="oss-col-head"><span data-copy="${key}"></span><input type="checkbox" id="${id}-on" /></div><div class="oss-seg" id="${id}-level">${['off', 'weak', 'medium', 'strong'].map((level) => `<button type="button" data-value="${level}" data-copy="levels.${level}"></button>`).join('')}</div></div>`;
-      const gradeOptions = [['off', 'grades.off'], ['low', 'grades.low'], ['mid', 'grades.mid'], ['high', 'grades.high']];
+      // One slider per column: the shared radius times this column's share.
+      const colRow = (id, key) => `<div class="oss-col" id="${id}"><div class="oss-col-head"><label for="${id}-on" data-copy="${key}"></label><input type="checkbox" id="${id}-on" /></div><div class="oss-head"><span data-copy="colStrength"></span><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}-strength" min="0" max="100" step="1" /></div>`;
+      // Collapsible group: eleven of them do not fit on one screen unfolded.
+      const group = (key, rows, open) => `<details class="oss-sec"${open ? ' open' : ''}><summary class="oss-caption" data-copy="${key}"></summary>${rows}</details>`;
 
       panel.innerHTML = `
         <div class="oss-title"><span>OPEN SEA <span class="oss-mark">·</span> SKIN</span><button class="oss-close" type="button" aria-label="${copy.close}">×</button></div>
-        <div class="oss-sec">
-          <p class="oss-caption" data-copy="secSkin"></p>
-          ${switchRow(pid('enabled'), 'enable')}
-        </div>
-        <div class="oss-sec">
-          <p class="oss-caption" data-copy="secWave"></p>
+        <div class="oss-search"><input type="search" id="${pid('search')}" placeholder="${copy.search}" aria-label="${copy.search}" /></div>
+        ${group('secSkin', `${switchRow(pid('enabled'), 'enable')}`)}
+        ${group('secWave', `
           ${segRow(pid('wave-mode'), 'waveSource', [['manual', 'modes.manual'], ['throughput', 'modes.throughput'], ['amount', 'modes.amount']])}
           ${rangeRow(pid('sea-range'), 'manualSea', 0, 100, 1)}
           ${rangeRow(pid('floor'), 'floor', 0, 60, 1)}
@@ -1130,85 +1350,91 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('amount-full'), 'amountFull', 1, 100, 1)}
           ${rangeRow(pid('smooth'), 'smooth', 2, 8, 0.5)}
           <p class="oss-sub" id="${pid('wave-out')}"></p>
-          <p class="oss-sub" data-copy="waveNote"></p>
-        </div>
-        <div class="oss-sec">
-          <p class="oss-caption" data-copy="secSun"></p>
+          <p class="oss-sub" data-copy="waveNote"></p>`)}
+        ${group('secSky', `
           ${segRow(pid('sun-mode'), 'sunSource', [['real', 'sunModes.real'], ['manual', 'sunModes.manual']])}
+          <p class="oss-sub" id="${pid('clock-out')}"></p>
           ${rangeRow(pid('time-range'), 'manualTime', 0, 100, 1)}
           <div class="oss-inline"><label for="${pid('lat')}" data-copy="lat"></label><input class="oss-mini" id="${pid('lat')}" type="number" step="0.01" min="-90" max="90" /></div>
           <div class="oss-inline"><label for="${pid('lon')}" data-copy="lon"></label><input class="oss-mini" id="${pid('lon')}" type="number" step="0.01" min="-180" max="180" /></div>
           <div class="oss-row"><button type="button" class="oss-mini oss-locate" id="${pid('locate')}" data-copy="locate"></button><span class="oss-sub oss-locate-out" id="${pid('locate-out')}"></span></div>
+          ${segRow(pid('tz-mode'), 'tzMode', [['system', 'tzModes.system'], ['longitude', 'tzModes.longitude'], ['manual', 'tzModes.manual']])}
+          ${rangeRow(pid('tz-offset'), 'tzOffset', -12, 14, 0.5)}
           ${switchRow(pid('moon'), 'moon')}
-          ${segRow(pid('stars'), 'stars', gradeOptions)}
-          ${segRow(pid('constellation'), 'constellation', gradeOptions)}
-          ${segRow(pid('cross'), 'crossStars', gradeOptions)}
-          ${switchRow(pid('meteor'), 'meteor')}
-          ${rangeRow(pid('sky-dist'), 'skyDist', 0.6, 3, 0.1)}
-          ${segRow(pid('clouds'), 'clouds', gradeOptions)}
           <p class="oss-sub" id="${pid('sun-out')}" data-copy="sunOut"></p>
           <p class="oss-sub" id="${pid('moon-out')}" data-copy="moonOut"></p>
-          <p class="oss-sub" data-copy="sunNote"></p>
-        </div>
-        <div class="oss-sec">
-          <p class="oss-caption" data-copy="secBoat"></p>
+          <p class="oss-sub" id="${pid('twilight-out')}"></p>
+          <p class="oss-sub" data-copy="sunNote"></p>`, true)}
+        ${group('secStars', `
+          ${rangeRow(pid('sky-dist'), 'skyDist', 0.6, 3, 0.05)}
+          ${rangeRow(pid('dome-amount'), 'domeAmount', 0, 1, 0.01)}
+          ${rangeRow(pid('stars'), 'stars', 0, 200, 1)}
+          ${rangeRow(pid('star-size'), 'starSize', 1, 14, 0.1)}
+          ${rangeRow(pid('star-base'), 'starBase', 0, 2, 0.01)}
+          ${rangeRow(pid('star-halo'), 'starHalo', 0, 2, 0.01)}
+          ${rangeRow(pid('star-count'), 'starCount', 0, 2, 0.01)}
+          ${rangeRow(pid('twinkle-speed'), 'twinkleSpeed', 0.1, 4, 0.05)}
+          ${rangeRow(pid('twinkle-amp'), 'twinkleAmp', 0, 0.9, 0.01)}
+          ${rangeRow(pid('milky'), 'milky', 0, 2, 0.01)}
+          ${segRow(pid('sky-tone'), 'skyTone', [['real', 'skyTones.real'], ['blue', 'skyTones.blue'], ['warm', 'skyTones.warm']])}`)}
+        ${group('secConst', `
+          ${rangeRow(pid('constellation'), 'constellation', 0, 200, 1)}
+          ${rangeRow(pid('cross'), 'crossStars', 0, 200, 1)}
+          ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
+          ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}`)}
+        ${group('secMeteor', `
+          ${switchRow(pid('meteor'), 'meteor')}
+          ${rangeRow(pid('meteor-rate'), 'meteorRate', 0.1, 6, 0.1)}
+          ${rangeRow(pid('meteor-bright'), 'meteorBright', 0.2, 3, 0.05)}`)}
+        ${group('secClouds', `
+          ${rangeRow(pid('clouds'), 'clouds', 0, 100, 1)}
+          ${rangeRow(pid('cloud-speed'), 'cloudSpeed', 0, 4, 0.05)}
+          ${rangeRow(pid('cloud-opacity'), 'cloudOpacity', 0, 1.5, 0.01)}`)}
+        ${group('secBoat', `
           ${switchRow(pid('boats'), 'boats')}
           ${rangeRow(pid('boat-spread'), 'boatSpread', 0.2, 3, 0.1)}
           ${rangeRow(pid('boat-pace'), 'boatPace', 0.3, 2.5, 0.1)}
           ${rangeRow(pid('boat-scale'), 'boatScale', 1.4, 4.6, 0.1)}
           <p class="oss-sub" id="${pid('boat-out')}"></p>
-          <p class="oss-sub" data-copy="boatNote"></p>
-        </div>
-        <div class="oss-sec">
-          <p class="oss-caption" data-copy="secGlass"></p>
+          <p class="oss-sub" data-copy="boatNote"></p>`)}
+        ${group('secGlass', `
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
-          ${switchRow(pid('perf'), 'perf')}
+          ${rangeRow(pid('glass-range'), 'glass', 40, 90, 1)}
+          ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
           ${colRow(pid('col-left'), 'cols.left')}
           ${colRow(pid('col-center'), 'cols.center')}
           ${colRow(pid('col-right'), 'cols.right')}
-          ${rangeRow(pid('glass-range'), 'glass', 40, 90, 1)}
-          <p class="oss-sub" data-copy="glassNote"></p>
-        </div>
-        <div class="oss-row"><button type="button" class="oss-reset" data-copy="reset"></button></div>
+          ${switchRow(pid('perf'), 'perf')}
+          <p class="oss-sub" data-copy="glassNote"></p>`)}
+        ${group('secAdvanced', `
+          <div class="oss-row"><button type="button" class="oss-reset" data-copy="reset"></button></div>
+          <p class="oss-sub" data-copy="resetNote"></p>`)}
         <p class="oss-note" data-copy="note"></p>`;
 
       const host = document.body || document.documentElement;
       host.append(button, panel);
 
-      const seaRange = panel.querySelector(`#${pid('sea-range')}`);
-      const floorRange = panel.querySelector(`#${pid('floor')}`);
-      const r0Range = panel.querySelector(`#${pid('r0')}`);
-      const amountRange = panel.querySelector(`#${pid('amount-full')}`);
-      const smoothRange = panel.querySelector(`#${pid('smooth')}`);
-      const timeRange = panel.querySelector(`#${pid('time-range')}`);
-      const glassRange = panel.querySelector(`#${pid('glass-range')}`);
-      const seaOut = panel.querySelector(`#${pid('sea-range')}-out`);
-      const floorOut = panel.querySelector(`#${pid('floor')}-out`);
-      const r0Out = panel.querySelector(`#${pid('r0')}-out`);
-      const amountOut = panel.querySelector(`#${pid('amount-full')}-out`);
-      const smoothOut = panel.querySelector(`#${pid('smooth')}-out`);
-      const timeOut = panel.querySelector(`#${pid('time-range')}-out`);
-      const glassOut = panel.querySelector(`#${pid('glass-range')}-out`);
-      const enabledBox = panel.querySelector(`#${pid('enabled')}`);
-      const moonBox = panel.querySelector(`#${pid('moon')}`);
-      const perfBox = panel.querySelector(`#${pid('perf')}`);
-      const boatsBox = panel.querySelector(`#${pid('boats')}`);
-      const latInput = panel.querySelector(`#${pid('lat')}`);
-      const lonInput = panel.querySelector(`#${pid('lon')}`);
+      const el = (suffix) => panel.querySelector(`#${pid(suffix)}`);
+      const out = (suffix) => panel.querySelector(`#${pid(suffix)}-out`);
+      const enabledBox = el('enabled');
+      const moonBox = el('moon');
+      const perfBox = el('perf');
+      const boatsBox = el('boats');
+      const meteorBox = el('meteor');
+      const latInput = el('lat');
+      const lonInput = el('lon');
       const resetBtn = panel.querySelector('.oss-reset');
+      const searchBox = el('search');
 
-      const seg = (suffix) => panel.querySelector(`#${pid(suffix)}`);
-      const segWave = seg('wave-mode');
-      const segSun = seg('sun-mode');
-      const segStars = seg('stars');
-      const segConstellation = seg('constellation');
-      const segCross = seg('cross');
-      const segClouds = seg('clouds');
-      const segGlassMode = seg('glass-mode');
+      const segWave = el('wave-mode');
+      const segSun = el('sun-mode');
+      const segTz = el('tz-mode');
+      const segTone = el('sky-tone');
+      const segGlassMode = el('glass-mode');
       const columns = {
-        colLeft: { root: seg('col-left'), on: panel.querySelector(`#${pid('col-left')}-on`), level: seg('col-left-level') },
-        colCenter: { root: seg('col-center'), on: panel.querySelector(`#${pid('col-center')}-on`), level: seg('col-center-level') },
-        colRight: { root: seg('col-right'), on: panel.querySelector(`#${pid('col-right')}-on`), level: seg('col-right-level') },
+        colLeft: { root: el('col-left'), on: el('col-left-on'), range: el('col-left-strength'), out: out('col-left') },
+        colCenter: { root: el('col-center'), on: el('col-center-on'), range: el('col-center-strength'), out: out('col-center') },
+        colRight: { root: el('col-right'), on: el('col-right-on'), range: el('col-right-strength'), out: out('col-right') },
       };
 
       const setSeg = (group, value) => {
@@ -1220,64 +1446,97 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       };
 
       const setRowVisible = (control, visible) => {
-        const row = control.closest('.oss-row');
+        const row = control && control.closest('.oss-row');
         if (row instanceof HTMLElement) row.style.display = visible ? '' : 'none';
       };
 
-      const skyDistEl = panel.querySelector(`#${pid('sky-dist')}`);
-      const skyDistOut = panel.querySelector(`#${pid('sky-dist')}-out`);
-
-      const boatRangeRows = [
-        ['boat-spread', 'boatSpread', '×'],
-        ['boat-pace', 'boatPace', '×'],
-        ['boat-scale', 'boatScale', '×'],
+      // Every slider on the panel, in one table: syncUi and the input listener
+      // both walk it, so a new dial is one line instead of five.
+      const RANGE_ROWS = [
+        ['sea-range', 'sea', 0, 'waves'],
+        ['floor', 'floor', 0, 'int'],
+        ['r0', 'r0', 0, 'tps'],
+        ['amount-full', 'amountFull', 0, 'yuan'],
+        ['smooth', 'smooth', 1, 'sec'],
+        ['time-range', 'time', 0, 'clock'],
+        ['tz-offset', 'tzOffset', 1, 'tz'],
+        ['sky-dist', 'skyDist', 2, 'x'],
+        ['dome-amount', 'domeAmount', 2, 'factor'],
+        ['stars', 'stars', 0, 'pct'],
+        ['star-size', 'starSize', 1, 'px'],
+        ['star-base', 'starBase', 2, 'f2'],
+        ['star-halo', 'starHalo', 2, 'f2'],
+        ['star-count', 'starCount', 2, 'f2'],
+        ['twinkle-speed', 'twinkleSpeed', 2, 'f2'],
+        ['twinkle-amp', 'twinkleAmp', 2, 'f2'],
+        ['milky', 'milky', 2, 'f2'],
+        ['constellation', 'constellation', 0, 'pct'],
+        ['cross', 'cross', 0, 'pct'],
+        ['line-width', 'lineWidth', 2, 'f2'],
+        ['line-fade', 'lineFadeDeg', 1, 'deg'],
+        ['meteor-rate', 'meteorRate', 1, 'f1'],
+        ['meteor-bright', 'meteorBright', 2, 'f2'],
+        ['clouds', 'clouds', 0, 'pct'],
+        ['cloud-speed', 'cloudSpeed', 2, 'f2'],
+        ['cloud-opacity', 'cloudOpacity', 2, 'f2'],
+        ['boat-spread', 'boatSpread', 1, 'mul'],
+        ['boat-pace', 'boatPace', 1, 'mul'],
+        ['boat-scale', 'boatScale', 1, 'mul'],
+        ['glass-range', 'glass', 0, 'pct'],
+        ['glass-radius', 'glassRadius', 1, 'px'],
       ];
+
+      // One formatter per kind of value; the panel never shows a raw float.
+      const formatValue = (kind, value) => {
+        switch (kind) {
+          case 'pct': return `${Math.round(value)}%`;
+          case 'px': return `${Number(value).toFixed(1).replace(/\.0$/, '')}px`;
+          case 'x': return `${Number(value).toFixed(2).replace(/0$/, '')}×`;
+          case 'factor': return `${Math.round(value * 100)}%`;
+          case 'int': return String(Math.round(value));
+          case 'waves': return `${Math.round(value)}`;
+          case 'tps': return `${Math.round(value)} tok/s`;
+          case 'yuan': return `¥${Math.round(value)}`;
+          case 'sec': return `${Number(value).toFixed(1).replace(/\.0$/, '')}s`;
+          case 'clock': return state.sunMode === 'real' ? copy.realTime : timeLabel(copy, value);
+          case 'tz': return `UTC${value >= 0 ? '+' : '−'}${Math.abs(value)}`;
+          case 'deg': return `${Number(value).toFixed(1).replace(/\.0$/, '')}°`;
+          case 'mul': return `${Number(value).toFixed(1)}×`;
+          default: return Number(value).toFixed(2);
+        }
+      };
+      const rowEl = (id) => panel.querySelector(`#${pid(id)}`);
+      const rowOut = (id) => panel.querySelector(`#${pid(id)}-out`);
 
       const syncUi = () => {
         enabledBox.checked = state.enabled;
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
-        const meteorBox = panel.querySelector(`#${pid('meteor')}`);
         if (meteorBox) meteorBox.checked = state.meteor;
         if (boatsBox) boatsBox.checked = state.boats;
         setSeg(segWave, state.waveMode);
         setSeg(segSun, state.sunMode);
-        setSeg(segStars, state.stars);
-        setSeg(segConstellation, state.constellation);
-        setSeg(segCross, state.cross);
-        setSeg(segClouds, state.clouds);
+        setSeg(segTz, state.tzMode);
+        setSeg(segTone, state.skyTone);
         setSeg(segGlassMode, state.glassMode);
         for (const [key, entry] of Object.entries(columns)) {
-          entry.on.checked = state[key].on;
-          entry.root.classList.toggle('off', !state[key].on);
-          setSeg(entry.level, state[key].level);
+          const entryState = state[key];
+          entry.on.checked = entryState.on;
+          entry.root.classList.toggle('off', !entryState.on);
+          entry.range.value = String(entryState.strength);
+          entry.out.textContent = `${Math.round(entryState.strength)}%`;
         }
-        seaRange.value = String(state.sea);
-        floorRange.value = String(state.floor);
-        r0Range.value = String(state.r0);
-        amountRange.value = String(state.amountFull);
-        smoothRange.value = String(state.smooth);
-        timeRange.value = String(state.time);
-        glassRange.value = String(state.glass);
-        seaOut.textContent = String(state.sea).padStart(2, '0');
-        floorOut.textContent = String(state.floor);
-        r0Out.textContent = `${Math.round(state.r0)} tok/s`;
-        amountOut.textContent = `¥${state.amountFull}`;
-        smoothOut.textContent = `${state.smooth}s`;
-        glassOut.textContent = `${state.glass}%`;
-        timeOut.textContent = state.sunMode === 'real' ? copy.realTime : timeLabel(copy, state.time);
-        if (skyDistEl) skyDistEl.value = String(state.skyDist);
-        if (skyDistOut) skyDistOut.textContent = `${state.skyDist}\u00d7`;
-        for (const [id, key, suffix] of boatRangeRows) {
-          const el = panel.querySelector(`#${pid(id)}`);
-          const out = panel.querySelector(`#${pid(id)}-out`);
-          if (el) el.value = String(state[key]);
-          if (out) out.textContent = `${state[key]}${suffix}`;
+        for (const [id, key, , kind] of RANGE_ROWS) {
+          const input = rowEl(id);
+          const output = rowOut(id);
+          if (input) input.value = String(state[key]);
+          if (output) output.textContent = formatValue(kind, state[key]);
         }
-        latInput.value = String(state.lat);
-        lonInput.value = String(state.lon);
-        setRowVisible(seaRange, state.waveMode === 'manual');
-        setRowVisible(timeRange, state.sunMode === 'manual');
+        if (latInput) latInput.value = state.lat === null ? '' : String(state.lat);
+        if (lonInput) lonInput.value = state.lon === null ? '' : String(state.lon);
+        setRowVisible(el('sea-range'), state.waveMode === 'manual');
+        setRowVisible(el('time-range'), state.sunMode === 'manual');
+        setRowVisible(el('tz-offset'), state.tzMode === 'manual');
       };
 
       const refresh = () => {
@@ -1305,6 +1564,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         button.setAttribute('aria-label', copy.button);
         panel.setAttribute('aria-label', copy.button);
         panel.querySelector('.oss-close').setAttribute('aria-label', copy.close);
+        if (searchBox) {
+          searchBox.placeholder = copy.search;
+          searchBox.setAttribute('aria-label', copy.search);
+        }
         applyCopy();
         syncUi();
       };
@@ -1313,104 +1576,92 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       localeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
       surfaceCleanups.push(() => localeObserver.disconnect());
 
-      on(seaRange, 'input', () => {
-        state.sea = clamp(seaRange.value, 0, 100, DEFAULTS.sea);
-        seaValue = state.sea;
-        seaOut.textContent = String(state.sea).padStart(2, '0');
-        void save({ sea: state.sea });
-        postToOcean(state.sea);
-      });
-      on(floorRange, 'input', () => {
-        state.floor = clamp(floorRange.value, 0, 60, DEFAULTS.floor);
-        floorOut.textContent = String(state.floor);
-        void save({ floor: state.floor });
-      });
-      on(r0Range, 'input', () => {
-        state.r0 = clamp(r0Range.value, 1, 200, DEFAULTS.r0);
-        r0Out.textContent = `${Math.round(state.r0)} tok/s`;
-        void save({ r0: state.r0 });
-      });
-      on(amountRange, 'input', () => {
-        state.amountFull = clamp(amountRange.value, 1, 100, DEFAULTS.amountFull);
-        amountOut.textContent = `¥${state.amountFull}`;
-        void save({ amountFull: state.amountFull });
-      });
-      on(smoothRange, 'input', () => {
-        state.smooth = clamp(smoothRange.value, 2, 8, DEFAULTS.smooth);
-        smoothOut.textContent = `${state.smooth}s`;
-        void save({ smooth: state.smooth });
-      });
-      for (const [id, key, suffix] of boatRangeRows) {
-        const el = panel.querySelector(`#${pid(id)}`);
-        const out = panel.querySelector(`#${pid(id)}-out`);
-        if (!el) continue;
-        on(el, 'input', () => {
-          state[key] = clamp(el.value, Number(el.min), Number(el.max), DEFAULTS[key]);
-          if (out) out.textContent = `${state[key]}${suffix}`;
+      // Which message a slider belongs to; everything not listed is local-only.
+      const SKY_KEYS = new Set([
+        'skyDist', 'domeAmount', 'stars', 'starSize', 'starBase', 'starHalo', 'starCount',
+        'twinkleSpeed', 'twinkleAmp', 'milky', 'skyTone', 'constellation', 'cross', 'lineWidth',
+        'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
+        'tzOffset', 'moon', 'lat', 'lon',
+      ]);
+      const GLASS_KEYS = new Set(['glass', 'glassRadius', 'glassMode', 'perf']);
+      const BOAT_KEYS = new Set(['boats', 'boatSpread', 'boatPace', 'boatScale']);
+
+      for (const [id, key, , kind] of RANGE_ROWS) {
+        const input = rowEl(id);
+        if (!input) continue;
+        on(input, 'input', () => {
+          state[key] = clamp(input.value, Number(input.min), Number(input.max), DEFAULTS[key]);
+          const output = rowOut(id);
+          if (output) output.textContent = formatValue(kind, state[key]);
           void save({ [key]: state[key] });
-          postBoats();
+          if (key === 'time') {
+            state.autoCycle = false;
+            state.sunMode = 'manual';
+            syncUi();
+            postSun();
+            return;
+          }
+          if (key === 'sea') {
+            seaValue = state.sea;
+            postToOcean(seaValue);
+            return;
+          }
+          if (GLASS_KEYS.has(key)) {
+            updateGlass();
+            postGlass();
+            return;
+          }
+          if (BOAT_KEYS.has(key)) {
+            postBoats();
+            return;
+          }
+          if (SKY_KEYS.has(key)) postSun();
         });
       }
 
-      on(skyDistEl, 'input', () => {
-        state.skyDist = clamp(skyDistEl.value, 0.6, 3, DEFAULTS.skyDist);
-        if (skyDistOut) skyDistOut.textContent = `${state.skyDist}\u00d7`;
-        void save({ skyDist: state.skyDist });
-        postSun();
-      });
-
-      on(timeRange, 'input', () => {
-        state.time = clamp(timeRange.value, 0, 100, DEFAULTS.time);
-        state.autoCycle = false;
-        state.sunMode = 'manual';
-        timeOut.textContent = timeLabel(copy, state.time);
-        syncUi();
-        void save({ time: state.time, autoCycle: false, sunMode: 'manual' });
-        postSun();
-      });
-      on(glassRange, 'input', () => {
-        state.glass = clamp(glassRange.value, 40, 90, DEFAULTS.glass);
-        glassOut.textContent = `${state.glass}%`;
-        updateGlass();
-        void save({ glass: state.glass });
-      });
       for (const [input, key, min, max] of [[latInput, 'lat', -90, 90], [lonInput, 'lon', -180, 180]]) {
+        if (!input) continue;
         on(input, 'change', () => {
-          state[key] = clamp(input.value, min, max, DEFAULTS[key]);
-          input.value = String(state[key]);
+          const raw = input.value.trim();
+          const parsed = Number(raw);
+          state[key] = raw === '' || !Number.isFinite(parsed) ? null : clamp(parsed, min, max, parsed);
+          input.value = state[key] === null ? '' : String(state[key]);
           void save({ [key]: state[key] });
           postSun();
         });
       }
       const locateBtn = panel.querySelector(`#${pid('locate')}`);
       const locateOut = panel.querySelector(`#${pid('locate-out')}`);
-      if (locateBtn) {
-        on(locateBtn, 'click', () => {
-          const geo = globalThis.navigator && globalThis.navigator.geolocation;
-          if (!geo || typeof geo.getCurrentPosition !== 'function') {
+      // One quiet attempt per page load: a declined prompt must not re-ask every
+      // time the skin is switched back on.
+      let locateTried = false;
+      const runLocate = () => {
+        locateTried = true;
+        const geo = globalThis.navigator && globalThis.navigator.geolocation;
+        if (!geo || typeof geo.getCurrentPosition !== 'function') {
+          locateOut.textContent = copy.locateFail;
+          return;
+        }
+        locateOut.textContent = copy.locateBusy;
+        geo.getCurrentPosition(
+          (position) => {
+            const lat = Math.round(position.coords.latitude * 100) / 100;
+            const lon = Math.round(position.coords.longitude * 100) / 100;
+            state.lat = clamp(lat, -90, 90, lat);
+            state.lon = clamp(lon, -180, 180, lon);
+            if (latInput) latInput.value = String(state.lat);
+            if (lonInput) lonInput.value = String(state.lon);
+            locateOut.textContent = copy.locateOk;
+            void save({ lat: state.lat, lon: state.lon });
+            postSun();
+          },
+          () => {
             locateOut.textContent = copy.locateFail;
-            return;
-          }
-          locateOut.textContent = copy.locateBusy;
-          geo.getCurrentPosition(
-            (position) => {
-              const lat = Math.round(position.coords.latitude * 100) / 100;
-              const lon = Math.round(position.coords.longitude * 100) / 100;
-              state.lat = clamp(lat, -90, 90, DEFAULTS.lat);
-              state.lon = clamp(lon, -180, 180, DEFAULTS.lon);
-              if (latInput) latInput.value = String(state.lat);
-              if (lonInput) lonInput.value = String(state.lon);
-              locateOut.textContent = copy.locateOk;
-              void save({ lat: state.lat, lon: state.lon });
-              postSun();
-            },
-            () => {
-              locateOut.textContent = copy.locateFail;
-            },
-            { timeout: 8000, maximumAge: 600000 }
-          );
-        });
-      }
+          },
+          { timeout: 8000, maximumAge: 600000 },
+        );
+      };
+      if (locateBtn) on(locateBtn, 'click', runLocate);
 
       on(panel, 'click', (event) => {
         const option = event.target instanceof Element ? event.target.closest('.oss-seg button') : null;
@@ -1422,14 +1673,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           switch (group.id) {
             case pid('wave-mode'): return { waveMode: value };
             case pid('sun-mode'): return { sunMode: value };
-            case pid('stars'): return { stars: value };
-            case pid('constellation'): return { constellation: value };
-            case pid('cross'): return { cross: value };
-            case pid('clouds'): return { clouds: value };
+            case pid('tz-mode'): return { tzMode: value };
+            case pid('sky-tone'): return { skyTone: value };
             case pid('glass-mode'): return { glassMode: value };
-            case pid('col-left-level'): return { colLeft: { ...state.colLeft, level: value } };
-            case pid('col-center-level'): return { colCenter: { ...state.colCenter, level: value } };
-            case pid('col-right-level'): return { colRight: { ...state.colRight, level: value } };
             default: return null;
           }
         })();
@@ -1443,6 +1689,14 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           const patch = { [key]: { ...state[key], on: entry.on.checked } };
           void save(patch);
           refresh();
+        });
+        on(entry.range, 'input', () => {
+          const strength = clamp(entry.range.value, 0, 100, state[key].strength);
+          entry.out.textContent = `${Math.round(strength)}%`;
+          const patch = { [key]: { ...state[key], strength } };
+          void save(patch);
+          updateGlass();
+          postGlass();
         });
       }
 
@@ -1459,7 +1713,6 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         refreshSunReadout();
       refreshMoonReadout();
       });
-      const meteorBox = panel.querySelector(`#${pid('meteor')}`);
       if (meteorBox) {
         on(meteorBox, 'change', () => {
           void save({ meteor: meteorBox.checked });
@@ -1482,6 +1735,24 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           applyEnabled();
         });
       });
+
+      // A new panel group is a lot of rows; typing narrows the list, and any
+      // section with a hit is forced open so nothing stays folded out of sight.
+      if (searchBox) {
+        on(searchBox, 'input', () => {
+          const needle = searchBox.value.trim().toLowerCase();
+          for (const section of panel.querySelectorAll('.oss-sec')) {
+            let hits = 0;
+            for (const item of section.querySelectorAll('.oss-row, .oss-inline, .oss-col')) {
+              const match = !needle || item.textContent.toLowerCase().includes(needle);
+              item.hidden = !match;
+              if (match) hits += 1;
+            }
+            if (needle) section.open = true;
+            section.hidden = Boolean(needle) && hits === 0;
+          }
+        });
+      }
 
       on(button, 'click', () => setPanelOpen(!panelOpen));
       on(panel.querySelector('.oss-close'), 'click', () => setPanelOpen(false));
@@ -1508,6 +1779,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       placementObserver = new MutationObserver(schedulePlace);
       placementObserver.observe(host, { childList: true, subtree: true });
       schedulePlace();
+
+      // Never located before: try once, quietly. Declining the browser prompt is
+      // not an error — the field stays empty and the sky keeps its fallback city.
+      if (!locateTried && (state.lat === null || state.lon === null)) globalThis.setTimeout(runLocate, 600);
     };
 
     const unmount = () => {
@@ -1626,11 +1901,33 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     boatPace: 'ossBoatPace',
     boatScale: 'ossBoatScale',
     skyDist: 'ossSkyDist',
+    domeAmount: 'ossDomeAmount',
+    skyTone: 'ossSkyTone',
+    starSize: 'ossStarSize',
+    starBase: 'ossStarBase',
+    starHalo: 'ossStarHalo',
+    starCount: 'ossStarCount',
+    twinkleSpeed: 'ossTwinkleSpeed',
+    twinkleAmp: 'ossTwinkleAmp',
+    milky: 'ossMilky',
+    lineWidth: 'ossLineWidth',
+    lineFadeDeg: 'ossLineFadeDeg',
+    meteorRate: 'ossMeteorRate',
+    meteorBright: 'ossMeteorBright',
+    cloudSpeed: 'ossCloudSpeed',
+    cloudOpacity: 'ossCloudOpacity',
+    glassRadius: 'ossGlassRadius',
+    tzMode: 'ossTzMode',
+    tzOffset: 'ossTzOffset',
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
-  const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode']);
+  const NULLABLE_KEYS = new Set(['lat', 'lon']);
+  const TEXT_KEYS = new Set([
+    'waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode',
+    'skyTone', 'tzMode',
+  ]);
 
   function readSetting(key, fallback) {
     try {
@@ -1641,6 +1938,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         try { return JSON.parse(value); } catch { return fallback; }
       }
       if (TEXT_KEYS.has(key)) return value;
+      // An unset coordinate is stored as an empty string, not as "0", so a
+      // profile written before the machine was ever located still reads as null.
+      if (NULLABLE_KEYS.has(key)) return value === '' || value === 'null' ? null : Number(value);
       return Number(value);
     } catch {
       return fallback;
@@ -1700,7 +2000,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.22';
+  const SKIN_BUILD = 'lab-1.5.23';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
@@ -1772,6 +2072,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           try {
             for (const [key, value] of Object.entries(patch)) {
               if (!KEYS[key]) continue;
+              // An unset coordinate is written as an empty string so it reads
+              // back as "never located" instead of the number NaN.
+              if (value === null) { localStorage.setItem(KEYS[key], ''); continue; }
               localStorage.setItem(KEYS[key], typeof value === 'object' ? JSON.stringify(value) : String(value));
             }
           } catch {
