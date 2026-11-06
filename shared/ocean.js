@@ -1163,6 +1163,9 @@ const BOAT_MIN_SEP = 3.4;
 // transition: a boat that grows and shrinks in place reads as a pop, one that
 // sails in and out across the edge of the screen does not.
 const BOAT_APPROACH = 26;
+// Distance used to read the wave slope under a boat, in world units. Long enough
+// to see a swell face, short enough that a hull smaller than the wavelength.
+const BOAT_PROBE = 2.4;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
 // camera the fleet is anchored to; set when the boats are created
@@ -1178,17 +1181,24 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   // 3–7 units of lateral swing leaves room for the ~26 unit approach offset to
   // stay off screen instead of parking a hull at the very edge.
   const base = 15 + ((index * 7.3) % 11);
+  const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
     // ran left and right turned around on the spot, which read as a toy sliding
     // back and forth; an ellipse keeps the heading rotating all the way round.
-    phase: spread * Math.PI * 2 + index * 0.7,
+    phase,
+    // the orbit angle is integrated frame by frame (not derived from the clock),
+    // because the swell has to be able to speed a boat up and slow it down
+    angle: phase,
+    // multiplier from the local wave slope: 1 = level water, >1 sliding down a
+    // face, <1 climbing the next one. Set from the previous frame's sample.
+    surge: 1,
     base,
     // alternate sides so a burst of arrivals crosses the frame from both edges
     side: index % 2 === 0 ? 1 : -1,
     radiusRight: 3 + ((index * 1.3) % 4),
     radiusBack: 1.5 + ((index * 1.1) % 2),
-    // 0.10–0.19 rad/s: one lap takes 33–63 s
+    // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
     // separation pushes accumulate here and decay, so boats ease apart instead
     // of snapping every frame
@@ -1271,7 +1281,7 @@ const boatTilt = new THREE.Quaternion();
 const boatYaw = new THREE.Quaternion();
 const boatForward = new THREE.Vector3();
 const boatRight = new THREE.Vector3();
-const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0, heading: 0 }));
+const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0, heading: 0, dirX: 0, dirZ: -1 }));
 
 // Flat forward/right pair: the fleet rides the horizontal plane, so pitch is
 // handled by the swell normal instead of the camera's downward tilt.
@@ -1290,6 +1300,10 @@ function updateBoats(dt) {
   const originX = boatCamera ? boatCamera.position.x : 0;
   const originZ = boatCamera ? boatCamera.position.z : 17;
   const time = uTime.value;
+  // Swell sets the pace: a glassy sea lets the fleet drift, a heavy sea has the
+  // hulls running. uSea runs 0.25 (calm) .. 1.75 (rough) by the parent mapping.
+  const seaLevel = Math.max(0, Math.min(1, (uSea.value - 0.25) / 1.5));
+  const cruise = 0.65 + 0.95 * seaLevel;
   let placedCount = 0;
 
   for (let index = 0; index < BOAT_MAX; index += 1) {
@@ -1311,7 +1325,10 @@ function updateBoats(dt) {
     if (fade <= 0) continue;
 
     const lane = boatCruise[index];
-    const angle = lane.phase + time * lane.speed;
+    // The swell, not a stopwatch, drives the orbit: `cruise` scales with the sea
+    // state and `surge` with the slope of the face the boat is on.
+    lane.angle += dt * lane.speed * cruise * lane.surge;
+    const angle = lane.angle;
     lane.pushX *= 0.92;
     lane.pushZ *= 0.92;
 
@@ -1336,6 +1353,11 @@ function updateBoats(dt) {
     placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
     // the hull's bow is local +X, so yaw has to land +X on the tangent
     placed.heading = Math.atan2(-vz, vx);
+    // travel direction, kept unit length so the next frame can probe the water
+    // one boat-length ahead instead of at a random distance
+    const dirLen = Math.hypot(vx, vz) || 1;
+    placed.dirX = vx / dirLen;
+    placed.dirZ = vz / dirLen;
     placed.fade = fade;
     // the placement slot is not the lane slot: keep the boat's own lane so the
     // separation pushes and the heading go back to the boat that owns them
@@ -1380,6 +1402,19 @@ function updateBoats(dt) {
   for (let index = 0; index < placedCount; index += 1) {
     const placed = boatPlaced[index];
     const surface = seaStateAt(placed.x, placed.z, time, uSea.value);
+    // Read the water a boat length ahead: if it is lower, the hull is sliding
+    // down a face and gets to run; if it is higher, it has to climb and slows.
+    // Smoothing keeps the short chop from jittering the speed.
+    const probe = seaStateAt(
+      placed.x + placed.dirX * BOAT_PROBE,
+      placed.z + placed.dirZ * BOAT_PROBE,
+      time,
+      uSea.value,
+    );
+    const slope = (probe.y - surface.y) / BOAT_PROBE;
+    const lane = boatCruise[placed.lane];
+    const wantSurge = Math.max(0.7, Math.min(1.5, 1 - 1.9 * slope));
+    lane.surge += (wantSurge - lane.surge) * Math.min(1, dt * 3);
     boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
     boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
     // heading follows the lane direction, so a boat reads as sailing somewhere

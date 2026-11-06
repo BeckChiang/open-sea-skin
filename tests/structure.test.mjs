@@ -66,3 +66,12 @@ test('per-frame layer updates cannot kill the render loop', () => {
   assert.ok(source.includes("console.warn('[open-sea-skin] boats disabled'"))
   assert.ok(source.includes("console.warn('[open-sea-skin] star dome disabled'"))
 })
+
+test('boat speed is driven by the swell, not by the clock', () => {
+  // A boat that orbits at a fixed angular speed reads as a toy on rails: the
+  // pace has to come from the sea state and from the slope it is sailing on.
+  assert.ok(source.includes('lane.speed * cruise * lane.surge'), 'the orbit angle must integrate the swell factors')
+  assert.equal(source.includes('lane.phase + time * lane.speed'), false, 'no constant-clock orbit left behind')
+  assert.ok(source.includes('BOAT_PROBE'), 'the slope probe distance must exist')
+  assert.ok(source.includes('surge: 1'), 'each lane needs its own surge state')
+})
