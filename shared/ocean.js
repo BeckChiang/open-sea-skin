@@ -917,6 +917,7 @@ if (SKIN) {
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
+    if (d && d.type === 'oss-water') applyWaterMessage(d);
       if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
       // `off` is the panel switch: without it "0 subagents" and "boats turned off"
@@ -964,6 +965,7 @@ if (SKIN) {
     boats: boatShown,
     boatSpots: boatSpots.slice(0, 6),
     boatTarget,
+    waterTop,
     elapsed: uTime.value,
     manualTimeOfDay,
   });
@@ -1109,7 +1111,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.12';
+const OCEAN_BUILD = 'lab-1.5.13';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1311,97 +1313,66 @@ async function boot() {
 // ---------------------------------------------------------------------------
 // SECTION 10 · FLEET · one boat per subagent in this session (host roster -> message)
 // ---------------------------------------------------------------------------
+// Hulls are placed in SCREEN SPACE, then unprojected onto the water plane. The
+// frame is the boundary: whatever the window shape or the panel layout, a hull
+// can only ever land inside the open water the page actually shows.
 
 const BOAT_MAX = 12;
-// One hull always stays on the water: with no subagent in the session an empty
-// sea reads as "the fleet feature is broken", not as "no work in progress".
+// One hull always stays on the water: an empty sea reads as "the fleet feature
+// is broken", not as "no work in progress".
 const BOAT_BASE = 1;
-// Boats close enough to overlap get pushed apart by this much, in world units.
-const BOAT_MIN_SEP = 7;
-// How far outside the frame a boat sits while it arrives or leaves: measured
-// from the camera's own frustum at the boat's depth, so an entrance really starts
-// at the left or right edge instead of somewhere mid-screen on a wide window.
-// A hull's width of margin keeps the first visible moment at the edge itself.
-const BOAT_MARGIN = 6;
-// Sideways travel rates (per second, exponential): arrivals sail in at a walking
-// pace and departures are a touch slower, so a boat is seen to leave the frame
-// rather than blink out of it.
-const BOAT_ENTER_RATE = 0.95;
-const BOAT_EXIT_RATE = 0.72;
-// Distance used to read the wave slope under a boat, in world units. Long enough
-// to see a swell face, short enough that a hull smaller than the wavelength.
-const BOAT_PROBE = 2.4;
+// Sweep band and depth, as fractions of the frame. The parent sends the bottom
+// edge of the chat column (waterTop); hulls ride just below it.
+const BOAT_EDGE_FRAC = 1.15;
+const BOAT_MIN_SEP_FRAC = 0.075;
+
+let boatCamera = null;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
-// Where each drawn hull lands// Where each drawn hull lands on screen (normalised 0..1), refreshed every
-// frame. It is reported through __ossState so a hull that is counted but not
-// seen can be traced from the panel instead of guessed at.
-let boatSpots = [];
+let boats = null;
+// Bottom of the chat column as a fraction of the frame height: everything below
+// this line is open water with no sheet of glass over it.
+let waterTop = 0.84;
+const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, heading: 0, dirX: 0, dirZ: -1, lane: 0 }));
+const boatSpots = [];
+const boatNormal = new THREE.Vector3(0, 1, 0);
+const boatTilt = new THREE.Quaternion();
+const boatYaw = new THREE.Quaternion();
+const boatDummy = new THREE.Object3D();
+const boatForward = new THREE.Vector3(0, 0, -1);
+const boatRight = new THREE.Vector3(1, 0, 0);
+const BOAT_UP = new THREE.Vector3(0, 1, 0);
 
-// camera the fleet is anchored to; set when the boats are created
-let boatCamera = null;
-
-// Half the visible width at a given depth, plus a margin: a boat placed there is
-// just outside the frame, which is where every entrance and exit happens.
-function boatApproachOffset(ahead) {
-  const fov = ((boatCamera && boatCamera.fov) || 45) * (Math.PI / 180);
-  const aspect = (boatCamera && boatCamera.aspect)
-    || (window.innerWidth / Math.max(1, window.innerHeight))
-    || 1.6;
-  return Math.abs(ahead) * Math.tan(fov / 2) * aspect + BOAT_MARGIN;
-}
-// A boat cruises inside the belt of sea the camera is actually looking at:
-// an absolute berth slides out of frame as the camera orbits and reads as
-// "the boat sailed off for good". Each boat keeps its own ellipse in front of the
-// camera and points along the tangent, so it never turns around on the spot.
+// One lane per hull: where it sweeps, how high it rides, how fast it goes.
+// Every number here is a fraction of the frame, so the motion never depends on
+// the camera's distance or on the aspect ratio.
 const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   const spread = index / (BOAT_MAX - 1);
-  // 36–52 units ahead keeps the hulls in the upper band of the sea, just under
-  // the horizon. The camera now pitches 8 degrees up, so the water only fills the
-  // lower third of the frame and anything nearer than ~30 units sits on the very
-  // bottom edge. 3–7 units of lateral swing still leaves room for the approach
-  // offset to stay off screen instead of parking a hull at the edge.
-  const base = 19.5 + (index % 3) * 1.6;
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
-    // Each boat sails its own ellipse in front of the camera. A lane that only
-    // ran left and right turned around on the spot, which read as a toy sliding
-    // back and forth; an ellipse keeps the heading rotating all the way round.
     phase,
     // the orbit angle is integrated frame by frame (not derived from the clock),
     // because the swell has to be able to speed a boat up and slow it down
     angle: phase,
-    // multiplier from the local wave slope: 1 = level water, >1 sliding down a
-    // face, <1 climbing the next one. Set from the previous frame's sample.
     surge: 1,
-    base,
-    // alternate sides so a burst of arrivals crosses the frame from both edges
-    side: index % 2 === 0 ? 1 : -1,
-    // how far out in the visible band a lane rides: the middle of the frame is
-    // covered by the conversation column, so a hull parked at x≈0 is drawn but
-    // never seen. Lanes live in the left and right thirds instead.
-    // How far across the frame the hull sweeps (fraction of the visible half
-    // width) and a small permanent drift so three lanes do not run in lockstep.
-    // A hull that parks on a fixed berth reads as a boat that never travels.
-    span: 0.62 + (index % 3) * 0.05,
-    drift: ((index % 3) - 1) * 0.06,
-    radiusBack: 1.4 + ((index * 0.6) % 1),
+    // horizontal band: centre and amplitude in frame fractions
+    center: 0.56 - (index % 2) * 0.05,
+    amp: 0.33 + (index % 3) * 0.02,
+    // vertical offset from the water line, so three lanes do not sit on one row
+    depth: (index % 3) * 0.028,
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
-    // separation pushes accumulate here and decay, so boats ease apart instead
-    // of snapping every frame
-    pushX: 0,
-    pushZ: 0,
-    // sideways offset from the lane: 0 while cruising, `±offStage` while the hull
-    // is outside the frame. This one number carries every arrival and departure.
-    away: 0,
-    lastAway: 0,
-    // which edge the boat left by; 0 = not leaving, pick the nearer side
+    side: index % 2 === 0 ? 1 : -1,
+    // offset used for the drive-in / drive-out, in frame fractions
+    awayFrac: 0,
     exitSide: 0,
-    // remembered after the hull is dropped, so a recall re-enters the same edge
     exitFrom: 0,
-    // false = the hull is outside the frame and is not being drawn at all
     shown: false,
+    // separation pushes, in frame fractions, decay every frame
+    pushFrac: 0,
+    lastX: 0,
+    lastZ: 0,
+    hasLast: false,
   };
 });
 
@@ -1428,8 +1399,6 @@ function seaStateAt(x, z, time, sea) {
   const len = Math.hypot(nx, ny, nz) || 1;
   return { y, nx: nx / len, ny: ny / len, nz: nz / len };
 }
-
-let boats = null;
 
 function createBoats(scene, cam) {
   boatCamera = cam;
@@ -1472,212 +1441,157 @@ function createBoats(scene, cam) {
   };
 }
 
-const boatDummy = new THREE.Object3D();
-const BOAT_UP = new THREE.Vector3(0, 1, 0);
-const boatNormal = new THREE.Vector3();
-const boatTilt = new THREE.Quaternion();
-const boatYaw = new THREE.Quaternion();
-const boatForward = new THREE.Vector3();
-const boatRight = new THREE.Vector3();
-const boatPlaced = Array.from({ length: BOAT_MAX }, () => ({ x: 0, z: 0, fade: 0, lane: 0, heading: 0, dirX: 0, dirZ: -1 }));
-
-// Flat forward/right pair: the fleet rides the horizontal plane, so pitch is
-// handled by the swell normal instead of the camera's downward tilt.
 function boatAxes() {
-  if (boatCamera) boatCamera.getWorldDirection(boatForward);
-  else boatForward.set(0, 0, -1);
+  if (!boatCamera) return;
+  boatCamera.getWorldDirection(boatForward);
   boatForward.y = 0;
   if (boatForward.lengthSq() < 1e-6) boatForward.set(0, 0, -1);
   boatForward.normalize();
   boatRight.crossVectors(boatForward, BOAT_UP).normalize();
 }
 
+const seaRayOrigin = new THREE.Vector3();
+const seaRayDir = new THREE.Vector3();
+const seaNdc = new THREE.Vector2();
+
+// Where does the pixel at (sx, sy) — both 0..1 of the frame — land on the sea?
+// Returns false when the ray misses the water (a pixel above the horizon).
+function seaPointAt(sx, sy, out) {
+  if (!boatCamera) return false;
+  boatCamera.updateMatrixWorld();
+  seaNdc.set(sx * 2 - 1, 1 - sy * 2);
+  seaRayOrigin.setFromMatrixPosition(boatCamera.matrixWorld);
+  seaRayDir.set(seaNdc.x, seaNdc.y, 0.5).unproject(boatCamera).sub(seaRayOrigin).normalize();
+  if (seaRayDir.y >= -0.0001) return false;
+  const distance = -seaRayOrigin.y / seaRayDir.y;
+  if (!Number.isFinite(distance) || distance <= 0.5) return false;
+  out.x = seaRayOrigin.x + seaRayDir.x * distance;
+  out.z = seaRayOrigin.z + seaRayDir.z * distance;
+  return true;
+}
+
+function applyWaterMessage(data) {
+  const top = Number(data && data.top);
+  if (Number.isFinite(top)) waterTop = Math.max(0.5, Math.min(0.94, top));
+}
+
 function updateBoats(dt) {
   if (!boats) return;
   boatAxes();
-  const originX = boatCamera ? boatCamera.position.x : 0;
-  const originZ = boatCamera ? boatCamera.position.z : 17;
   const time = uTime.value;
-  // Swell sets the pace: a glassy sea lets the fleet drift, a heavy sea has the
-  // hulls running. uSea runs 0.25 (calm) .. 1.75 (rough) by the parent mapping.
   const seaLevel = Math.max(0, Math.min(1, (uSea.value - 0.25) / 1.5));
   const cruise = 0.65 + 0.95 * seaLevel;
-  let placedCount = 0;
   boatSpots = [];
 
+  // pass 1: work out where each wanted hull sits on screen
+  const spots = [];
   for (let index = 0; index < BOAT_MAX; index += 1) {
     const want = index < boatTarget ? 1 : 0;
     const lane = boatCruise[index];
-    // A hull that is already outside the frame and no longer wanted is not drawn.
     if (!want && !lane.shown) {
-      lane.pushX = 0;
-      lane.pushZ = 0;
+      lane.pushFrac = 0;
       continue;
     }
-    // The swell, not a stopwatch, drives the orbit: `cruise` scales with the sea
-    // state and `surge` with the slope of the face the boat is on.
     lane.angle += dt * lane.speed * cruise * lane.surge;
     const angle = lane.angle;
-    lane.pushX *= 0.92;
-    lane.pushZ *= 0.92;
+    lane.pushFrac *= 0.9;
+    // separation may nudge a berth, but never far enough to leave the frame
+    lane.pushFrac = Math.max(-0.2, Math.min(0.2, lane.pushFrac));
 
-    // 17.5..24 units ahead is the band that lands between 83% and 91% of the
-    // frame height — inside the visible water, not under the bottom edge.
-    const ahead = Math.max(17.5, Math.min(24, lane.base + Math.cos(angle) * lane.radiusBack));
-    // Sideways distance that puts the hull just past the frame edge at this depth.
-    const offStage = boatApproachOffset(ahead);
-    // The whole frame is fair water: a hull may cross behind the chat column,
-    // which is what a real sea behind the window would look like. No layout
-    // probing, no gaps to dodge.
-    // Half the water the camera can see at this depth: the berth is placed as a
-    // fraction of it, so a hull never swings past the frame edge.
-    const halfWidth = Math.max(1, offStage - BOAT_MARGIN);
-    // Hard limit on the sweep: ±0.78 of the half width keeps every hull inside
-    // the frame no matter what the depth is doing. The frame is the boundary.
-    const berth = Math.max(-0.78, Math.min(0.78, Math.sin(angle) * lane.span + lane.drift));
-    const laneAcross = berth * halfWidth;
-    // Every lane moves at its own pace, so three subagents added at once still
-    // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
     const laneExit = BOAT_EXIT_RATE * (0.8 + (index % 3) * 0.1);
 
     if (want) {
       if (!lane.shown) {
-        // First appearance: park the hull beyond an edge while it is still not
-        // drawn, then let it sail in. Nothing ever pops into the middle. A hull
-        // that was recalled while it was still leaving comes back from the side
-        // it had already committed to, so the eye does not see it swap edges.
+        // start beyond an edge and sail in, so nothing ever pops into the middle
         lane.shown = true;
-        lane.away = (lane.exitFrom || lane.side) * offStage;
+        lane.awayFrac = (lane.exitFrom || lane.side) * BOAT_EDGE_FRAC;
         lane.exitFrom = 0;
-        lane.lastAway = lane.away;
       }
       lane.exitSide = 0;
-      lane.away += (0 - lane.away) * Math.min(1, dt * laneEnter);
+      lane.awayFrac += (0 - lane.awayFrac) * Math.min(1, dt * laneEnter);
     } else {
       if (lane.exitSide === 0) {
-        // Leave by the nearer edge, judged from where the hull is right now.
-        lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side;
+        lane.exitSide = Math.sign(lane.amp + lane.awayFrac) || lane.side;
       }
-      lane.away += (lane.exitSide * offStage - lane.away) * Math.min(1, dt * laneExit);
-      if (Math.abs(lane.away) >= offStage - 1) {
-        // Fully outside the frame: dropping the hull here cannot be seen. Keep
-        // the edge it left by, in case the same index is wanted again moments
-        // later (fast session switching does exactly that).
+      lane.awayFrac += (lane.exitSide * BOAT_EDGE_FRAC - lane.awayFrac) * Math.min(1, dt * laneExit);
+      if (Math.abs(lane.awayFrac) >= BOAT_EDGE_FRAC - 0.08) {
         lane.exitFrom = lane.exitSide;
         lane.shown = false;
         lane.exitSide = 0;
-        lane.away = 0;
-        lane.lastAway = 0;
-        lane.pushX = 0;
-        lane.pushZ = 0;
+        lane.awayFrac = 0;
+        lane.pushFrac = 0;
         continue;
       }
     }
-    // how fast the hull is drifting sideways this frame; the course needs it
-    const awaySpeed = (lane.away - lane.lastAway) / Math.max(dt, 1e-3);
-    lane.lastAway = lane.away;
 
-    const across = laneAcross + lane.away;
-    // Tangent of the ellipse in the camera's flat frame: the boat has to point
-    // where it is actually going, otherwise it sails sideways or stern first.
-    // The sideways travel is part of the course too, so an arriving boat comes
-    // bow-on instead of crabbing in.
-    const lateralRate = Math.cos(angle) * lane.span * Math.max(1, halfWidth - BOAT_MARGIN);
-    const vx = boatRight.x * lateralRate
-      - boatForward.x * Math.sin(angle) * lane.radiusBack
-      + boatRight.x * awaySpeed;
-    const vz = boatRight.z * lateralRate
-      - boatForward.z * Math.sin(angle) * lane.radiusBack
-      + boatRight.z * awaySpeed;
-    const placed = boatPlaced[placedCount];
-    placed.x = originX + boatForward.x * ahead + boatRight.x * across + lane.pushX;
-    placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
-    // the hull's bow is local +X, so yaw has to land +X on the tangent
-    placed.heading = Math.atan2(-vz, vx);
-    // travel direction, kept unit length so the next frame can probe the water
-    // one boat-length ahead instead of at a random distance
-    const dirLen = Math.hypot(vx, vz) || 1;
-    placed.dirX = vx / dirLen;
-    placed.dirZ = vz / dirLen;
-    placed.fade = 1;
-    // the placement slot is not the lane slot: keep the boat's own lane so the
-    // separation pushes and the heading go back to the boat that owns them
-    placed.lane = index;
-    placedCount += 1;
+    const sweep = Math.sin(angle);
+    const sx = lane.center + sweep * lane.amp + lane.awayFrac + lane.pushFrac;
+    const sy = Math.max(
+      waterTop + 0.02,
+      Math.min(0.965, waterTop + 0.035 + lane.depth + Math.sin(angle * 1.7 + index) * 0.012),
+    );
+    spots.push({ lane, index, sx, sy });
   }
 
-  // Two relaxation passes are enough for 12 hulls and keep the cost at O(n²)
-  // with n = 12; pushes go back into the lane state so the fleet eases apart.
+  // pass 2: keep them from sharing one patch of water
   for (let pass = 0; pass < 2; pass += 1) {
-    for (let i = 0; i < placedCount; i += 1) {
-      for (let j = i + 1; j < placedCount; j += 1) {
-        const a = boatPlaced[i];
-        const b = boatPlaced[j];
-        let dx = a.x - b.x;
-        let dz = a.z - b.z;
-        let distance = Math.hypot(dx, dz);
-        if (distance >= BOAT_MIN_SEP) continue;
-        if (distance < 1e-3) {
-          dx = Math.cos(i * 2.1);
-          dz = Math.sin(i * 2.1);
-          distance = 1;
+    for (let a = 0; a < spots.length; a += 1) {
+      for (let b = a + 1; b < spots.length; b += 1) {
+        const gap = spots[b].sx - spots[a].sx;
+        const tooClose = Math.abs(gap) < BOAT_MIN_SEP_FRAC;
+        if (tooClose) {
+          const push = (BOAT_MIN_SEP_FRAC - Math.abs(gap)) * 0.5 * (gap >= 0 ? 1 : -1);
+          spots[a].lane.pushFrac -= push;
+          spots[b].lane.pushFrac += push;
+          spots[a].sx -= push;
+          spots[b].sx += push;
         }
-        const push = (BOAT_MIN_SEP - distance) / 2;
-        const ux = (dx / distance) * push;
-        const uz = (dz / distance) * push;
-        const laneA = boatCruise[a.lane];
-        const laneB = boatCruise[b.lane];
-        laneA.pushX += ux;
-        laneA.pushZ += uz;
-        laneB.pushX -= ux;
-        laneB.pushZ -= uz;
-        a.x += ux;
-        a.z += uz;
-        b.x -= ux;
-        b.z -= uz;
       }
     }
   }
 
+  // pass 3: place them on the water
   let active = 0;
-  for (let index = 0; index < placedCount; index += 1) {
-    const placed = boatPlaced[index];
+  for (const spot of spots) {
+    if (!seaPointAt(spot.sx, spot.sy, boatPlaced[active])) continue;
+    const placed = boatPlaced[active];
+    const lane = spot.lane;
     const surface = seaStateAt(placed.x, placed.z, time, uSea.value);
-    // Read the water a boat length ahead: if it is lower, the hull is sliding
-    // down a face and gets to run; if it is higher, it has to climb and slows.
-    // Smoothing keeps the short chop from jittering the speed.
-    const probe = seaStateAt(
-      placed.x + placed.dirX * BOAT_PROBE,
-      placed.z + placed.dirZ * BOAT_PROBE,
-      time,
-      uSea.value,
-    );
+    placed.y = surface.y;
+    placed.lane = spot.index;
+    placed.sx = spot.sx;
+    placed.sy = spot.sy;
+
+    // heading comes from where the hull actually moved: no guessing, and the
+    // course is correct even while the projection bends the path
+    if (lane.hasLast) {
+      const dx = placed.x - lane.lastX;
+      const dz = placed.z - lane.lastZ;
+      if (dx * dx + dz * dz > 1e-6) placed.heading = Math.atan2(-dz, dx);
+      else placed.heading = 0;
+    } else {
+      placed.heading = 0;
+    }
+    lane.lastX = placed.x;
+    lane.lastZ = placed.z;
+    lane.hasLast = true;
+
+    const probeX = placed.x + Math.cos(placed.heading) * BOAT_PROBE;
+    const probeZ = placed.z - Math.sin(placed.heading) * BOAT_PROBE;
+    const probe = seaStateAt(probeX, probeZ, time, uSea.value);
     const slope = (probe.y - surface.y) / BOAT_PROBE;
-    const lane = boatCruise[placed.lane];
     const wantSurge = Math.max(0.7, Math.min(1.5, 1 - 1.9 * slope));
     lane.surge += (wantSurge - lane.surge) * Math.min(1, dt * 3);
+
     boatNormal.set(surface.nx, surface.ny, surface.nz).normalize();
     boatTilt.setFromUnitVectors(BOAT_UP, boatNormal);
-    // heading follows the lane direction, so a boat reads as sailing somewhere
     boatYaw.setFromAxisAngle(BOAT_UP, placed.heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
     boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
-    // Perspective already shrinks a boat out on the approach, and a hull is only
-    // ever removed once it is past the frame edge, so the scale stays constant.
-    // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
-    // size as before, at a berth that reads as further out to sea instead of
-    // hugging the bottom edge.
     boatDummy.scale.setScalar(2.7);
     boatDummy.updateMatrix();
-    if (boatCamera) {
-      const spot = boatDummy.position.clone().project(boatCamera);
-      boatSpots.push([
-        Math.round((spot.x * 0.5 + 0.5) * 100) / 100,
-        Math.round((0.5 - spot.y * 0.5) * 100) / 100,
-      ]);
-    }
-
+    boatSpots.push([Math.round(spot.sx * 100) / 100, Math.round(spot.sy * 100) / 100]);
     boats.hull.setMatrixAt(active, boatDummy.matrix);
     boats.mast.setMatrixAt(active, boatDummy.matrix);
     boats.sail.setMatrixAt(active, boatDummy.matrix);

@@ -38,7 +38,8 @@ for (const banner of ['SECTION 10 · FLEET', 'SECTION 11 · STAR DOME']) {
 
 test('boat and star state is declared at module scope', () => {
   const names = [
-    'BOAT_MAX', 'BOAT_BASE', 'BOAT_MIN_SEP', 'boatTarget', 'boatShown',
+    'BOAT_MAX', 'BOAT_BASE', 'BOAT_MIN_SEP_FRAC', 'BOAT_EDGE_FRAC', 'waterTop',
+    'boatTarget', 'boatShown', 'boatSpots',
     'boatCamera', 'boatCruise', 'boatPlaced', 'boatAxes',
     'starLayer', 'STAR_RADIUS', 'uStarGlow', 'uMeteorGlow',
     'createBoats', 'updateBoats', 'createStarLayer', 'updateStarDome',
@@ -85,14 +86,12 @@ test('the sea level is followed over time, not snapped on every message', () => 
 })
 
 test('boats enter and leave across the frame edge, by the nearer side', () => {
-  // Entrances used to start at a fixed 26 units, which is inside the frame on a
-  // wide window, so hulls appeared mid-screen; the offset now comes from the
-  // camera frustum at the boat's own depth.
-  assert.ok(source.includes('boatApproachOffset(ahead)'), 'the off-stage offset must be derived from the view')
-  assert.equal(source.includes('BOAT_APPROACH'), false, 'no fixed approach distance left behind')
-  assert.ok(source.includes('lane.away = (lane.exitFrom || lane.side) * offStage'), 'a hull is parked past the edge before it is drawn')
+  // Entrances used to start at a fixed distance inside the frame, so hulls
+  // appeared mid-screen. The stage now lives in screen space: a hull waits just
+  // past the left or right edge and is parked there until it is drawn in.
+  assert.ok(source.includes('lane.awayFrac = (lane.exitFrom || lane.side) * BOAT_EDGE_FRAC'), 'a hull is parked past the edge before it is drawn')
   assert.ok(
-    source.includes('lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side'),
+    source.includes('lane.exitSide = Math.sign(lane.amp + lane.awayFrac) || lane.side'),
     'a departure must pick the edge the hull is actually nearer to',
   )
   assert.ok(source.includes('lane.shown = false'), 'the hull is dropped only once it is outside the frame')
@@ -124,7 +123,7 @@ test('altitude stays real until it would leave the frame', () => {
 })
 
 test('hulls keep their distance', () => {
-  assert.ok(source.includes('const BOAT_MIN_SEP = 7;'), 'separation must scale with the hull')
+  assert.ok(source.includes('const BOAT_MIN_SEP_FRAC = 0.075;'), 'separation must be measured on screen, where the overlap happens')
 })
 
 test('the constellations and the meteors are real settings', () => {
@@ -142,12 +141,22 @@ test('the constellations and the meteors are real settings', () => {
 
 const clientSource = readFileSync(join(here, '..', 'plugin', 'client.js'), 'utf8')
 
-test('lane berths sit under the horizon, not on the bottom edge', () => {
-  // With the 8 degree pitch the sea only fills the lower third of the frame, so
-  // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
-  // are too close to the bottom". Berths moved out and the hull grew to match.
-  assert.ok(source.includes('const base = 19.5 + (index % 3) * 1.6'), 'berths must stay inside the open water below the chat column')
+test('the fleet is placed in screen space, so no hull can land outside it', () => {
+  // Depth-and-lateral berths kept pushing hulls past the bottom edge while the
+  // panel grew. The fleet now picks its (sx, sy) on screen and unprojects that
+  // ray onto the sea plane, which makes "off screen" impossible by construction.
+  assert.ok(source.includes('function seaPointAt(sx, sy, out)'), 'hulls must be placed by unprojecting a screen point')
+  assert.ok(source.includes('let waterTop = 0.84;'), 'the open-water line must have a safe default')
+  assert.ok(source.includes("if (d && d.type === 'oss-water') applyWaterMessage(d);"), 'the host must be able to report the open-water line')
+  assert.ok(source.includes('waterTop,'), 'the measured line must be reported back for diagnosis')
+  assert.ok(source.includes('const BOAT_EDGE_FRAC = 1.15;'), 'entering and leaving must happen just outside the frame')
   assert.ok(source.includes('boatDummy.scale.setScalar(2.7)'), 'the hull must stay big enough to read through the glass')
+})
+
+test('the host measures where the open water starts', () => {
+  assert.ok(clientSource.includes('const measureWater = () =>'), 'the client must measure the chat column')
+  assert.ok(clientSource.includes("post({ type: 'oss-water', top });"), 'the measurement must reach the surface')
+  assert.ok(clientSource.includes('postWater();'), 'the measurement must be sent with the glass update')
 })
 
 test('boats off is the switch, not a zero count', () => {
@@ -239,11 +248,11 @@ test('hulls roam the whole frame and report where they land', () => {
   // guessed at.
   assert.ok(!clientSource.includes('measureBands'), 'the page must not probe the layout for hulls')
   assert.ok(!source.includes('applyBandsMessage'), 'no layout message may reach the lanes')
-  assert.ok(source.includes('const laneAcross = berth * halfWidth;'), 'each hull keeps its own berth across the open water')
+  assert.ok(source.includes('const sx = lane.center + sweep * lane.amp'), 'each hull sweeps its own lane of the water')
   assert.ok(source.includes('boatSpots.push(['), 'each hull must report its screen position')
   assert.ok(source.includes('boatSpots: boatSpots.slice(0, 6),'), 'the report must reach the state')
-  assert.ok(source.includes('span: 0.62 + (index % 3) * 0.05'), 'each hull must sweep the visible width')
-  assert.ok(source.includes('const berth = Math.max(-0.78, Math.min(0.78,'), 'the sweep must stop at the frame edge')
+  assert.ok(source.includes('amp: 0.33 + (index % 3) * 0.02'), 'each hull must sweep the visible width')
+  assert.ok(source.includes('lane.pushFrac = Math.max(-0.2, Math.min(0.2, lane.pushFrac));'), 'the sweep must stay inside the frame')
   assert.ok(clientSource.includes('.map((spot) =>'), 'the panel must print the positions')
 })
 
@@ -269,7 +278,7 @@ test('a saved grade survives normalize, and nothing spawns outside the frame', (
   //    reported spots); 3) meteors spawned over the whole sky, most of them
   //    behind the camera.
   assert.ok(clientSource.includes('cross: GRADE_LEVELS.includes(source.cross) ? source.cross : DEFAULTS.cross,'), 'the cross grade must survive a save')
-  assert.ok(source.includes('const ahead = Math.max(17.5, Math.min(24, lane.base + Math.cos(angle) * lane.radiusBack));'), 'every hull must stay inside the visible water band')
+  assert.ok(source.includes('waterTop + 0.035 + lane.depth + Math.sin(angle * 1.7 + index) * 0.012'), 'every hull must stay inside the visible water band')
   assert.ok(source.includes('const startAzDeg = (Math.random() * 2 - 1) * 30;'), 'meteors must spawn in the visible azimuth slice')
   assert.ok(source.includes('const startAltDeg = 13 + Math.random() * 20;'), 'meteors must spawn below the top of the frame')
   assert.ok(source.includes('skyPoint(startAzDeg, startAltDeg, meteor.from);'), 'the streak must use the shared sky helper')

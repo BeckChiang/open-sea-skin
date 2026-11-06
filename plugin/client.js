@@ -642,6 +642,32 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       post({ type: 'oss-glass', mode: state.glassMode, perf: state.perf, rects: active ? measureColumns() : [] });
     };
 
+    // The conversation card covers the middle of the screen down to a height that
+    // changes with the session, so the surface cannot guess where open water
+    // begins. Measure it here and let the fleet place itself below that line.
+    let waterKey = '';
+    const measureWater = () => {
+      const height = window.innerHeight || 1;
+      const element = COLUMN_SELECTORS.colCenter
+        .map((selector) => document.querySelector(selector))
+        .find((candidate) => {
+          if (!(candidate instanceof HTMLElement)) return false;
+          const rect = candidate.getBoundingClientRect();
+          return rect.width > 8 && rect.height > 8;
+        });
+      const fallback = 0.84;
+      if (!(element instanceof HTMLElement)) return fallback;
+      const top = element.getBoundingClientRect().bottom / height + 0.015;
+      return Math.max(0.5, Math.min(0.94, top));
+    };
+
+    const postWater = () => {
+      const top = Number(measureWater().toFixed(3));
+      if (String(top) === waterKey) return;
+      waterKey = String(top);
+      post({ type: 'oss-water', top });
+    };
+
     // ---- fleet: one boat per subagent in the open conversation --------------
     // A switch is only committed after the user rests on a session for this long;
     // flipping through the sidebar must not reshape the fleet at every stop.
@@ -1046,13 +1072,17 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       frame.addEventListener('load', () => {
         postSun();
         postGlass();
+        postWater();
           postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         // The frame boots with one boat on the water; the poll below reposts the
         // real count on the first tick after load.
         startWaveEngine();
         startFleetEngine();
         if (glassTimer) window.clearInterval(glassTimer);
-        glassTimer = window.setInterval(postGlass, 1500);
+        glassTimer = window.setInterval(() => {
+          postGlass();
+          postWater();
+        }, 1500);
       }, { once: true });
       ownsSurface = true;
       return true;
@@ -1235,6 +1265,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         updateGlass();
         postSun();
         postGlass();
+        postWater();
         if (state.waveMode === 'manual') { seaValue = state.sea; postToOcean(seaValue); }
         syncUi();
       };
@@ -1508,6 +1539,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           updateGlass();
           postSun();
           postGlass();
+          postWater();
           postToOcean();
         });
         if (typeof dispose === 'function') controllerCleanups.push(dispose);
@@ -1626,7 +1658,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.12';
+  const SKIN_BUILD = 'lab-1.5.13';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
