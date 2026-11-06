@@ -438,9 +438,11 @@ const VIEW_AZ_HALF = 40;  // degrees either side of the view axis
 // The frame sees -20°..40°: fov 60 tilted 10° up, so the horizon sits about a
 // third of the way up from the bottom. That is enough to pass the real altitude
 // through almost the whole year in Wuhan (noon ≈ 43° in November, ≈ 83° in June).
-const VIEW_EL_REAL_MAX = 30;  // up to here the altitude is passed through untouched
-const VIEW_EL_TOP = 39;       // where 90° lands: just inside the top of the frame
-const VIEW_PITCH_DEG = 10;    // camera tilt; the horizon drops this far below centre
+const VIEW_EL_REAL_MAX = 28;  // up to here the altitude is passed through untouched
+const VIEW_EL_TOP = 38;       // where 90° lands: just inside the top of the frame
+// 8° keeps the horizon at ~37% of the frame (enough sea for the fleet to read)
+// while lifting a 19° sun to two thirds of the height.
+const VIEW_PITCH_DEG = 8;
 
 function viewAzimuth(azDeg) {
   const rel = ((azDeg % 360) + 360) % 360;

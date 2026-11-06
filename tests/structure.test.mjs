@@ -112,6 +112,7 @@ test('altitude stays real until it would leave the frame', () => {
   // same afternoon. Only the part that does not fit is squeezed now, and the
   // camera gives up a slice of sea so the upper band is actually visible.
   assert.ok(source.includes('if (elDeg <= VIEW_EL_REAL_MAX) return elDeg'), 'the real altitude must pass through')
+  assert.ok(source.includes('const VIEW_PITCH_DEG = 8'), 'the horizon must leave a third of the frame for the sea')
   assert.ok(source.includes('VIEW_EL_TOP - VIEW_EL_REAL_MAX'), 'only the overflow is compressed')
   assert.ok(
     source.includes('controls.target.set(0, camera.position.y + Math.tan(VIEW_PITCH_DEG * DEG) * 17, 0)'),
