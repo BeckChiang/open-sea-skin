@@ -167,3 +167,18 @@ test('the translucent tokens stay inside #root so body portals stay opaque', () 
   )
   assert.ok(!clientSource.includes('data-hovercard-bridge'), 'no per-portal patch: the scope fix covers all of them')
 })
+
+test('a spend above the full-wave threshold still moves the sea', () => {
+  // log1p(yuan)/log1p(amountFull) exceeds 1 once the session spends more than the
+  // threshold. The panel used to post e.g. 105, the frame rejected anything over
+  // 100, and a ¥12 session stayed flat forever.
+  assert.ok(
+    clientSource.includes('target = Math.max(0, Math.min(100, target));'),
+    'the host must clamp the wave target before posting it',
+  )
+  assert.ok(
+    source.includes('Math.max(0, Math.min(100, sea))'),
+    'the frame must clamp the sea level instead of dropping the message',
+  )
+  assert.ok(!source.includes('sea >= 0 && sea <= 100'), 'a hard range check must not reject the update')
+})

@@ -881,8 +881,10 @@ if (SKIN) {
       manualTimeOfDay = d.auto !== true;
       const sea = Number(d.sea);
       const t = Number(d.t);
-      if (Number.isFinite(sea) && sea >= 0 && sea <= 100) {
-        seaGoal = 0.25 + (sea / 100) * 1.5;
+      // Clamp instead of reject: a host that computes a cost curve can overshoot
+      // 100, and dropping the message left the surface frozen at its initial level.
+      if (Number.isFinite(sea)) {
+        seaGoal = 0.25 + (Math.max(0, Math.min(100, sea)) / 100) * 1.5;
       }
       // In `real` mode the sky is driven by solar.js; a host that keeps
       // posting t (sea updates arrive at 4 Hz) must not overwrite it.

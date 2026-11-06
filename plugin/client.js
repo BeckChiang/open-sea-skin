@@ -86,6 +86,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       amountFull: '满浪金额',
       smooth: '平滑时间',
       waveNote: '吞吐模式：会话运行时按当前 token 速率起伏，停下来回落到本会话累计消费对应的浪高；金额模式：始终按累计消费。',
+      waveOutNone: '指标未连接（等一帧，或刷新页面）',
+      waveOut: '来源{src} · 消费 ¥{cost}（满浪 ¥{full}）· 吞吐 {rate} tok/s · 浪 {sea}',
+      waveSrcManual: '手动',
+      waveSrcThroughput: '吞吐',
+      waveSrcAmount: '金额',
       sunSource: '时间来源',
       manualTime: '手动日照',
       lat: '纬度',
@@ -152,6 +157,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       amountFull: 'Full-wave cost',
       smooth: 'Smoothing',
       waveNote: 'Throughput: swells with the current token rate and settles to this session\u2019s spend when idle. Cost: always follows spend.',
+      waveOutNone: 'No metrics yet (wait a tick, or reload)',
+      waveOut: '{src} · spend ¥{cost} (full wave ¥{full}) · {rate} tok/s · sea {sea}',
+      waveSrcManual: 'manual',
+      waveSrcThroughput: 'throughput',
+      waveSrcAmount: 'spend',
       sunSource: 'Time source',
       manualTime: 'Manual daylight',
       lat: 'Latitude',
@@ -705,6 +715,29 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
       if (el) el.textContent = text;
     };
 
+    // The wave has two inputs (spend and token rate) and three sources; when the
+    // sea looks flat there is no way to tell which one is missing. Print the
+    // numbers the engine actually used, right under the sliders.
+    const refreshWaveReadout = () => {
+      const el = document.getElementById(pid('wave-out'));
+      if (!el) return;
+      const snapshot = readMetrics();
+      if (!snapshot) {
+        el.textContent = copy.waveOutNone;
+        return;
+      }
+      const src = state.waveMode === 'manual'
+        ? copy.waveSrcManual
+        : state.waveMode === 'amount' ? copy.waveSrcAmount : copy.waveSrcThroughput;
+      const cost = Math.round(Math.max(0, snapshot.costYuan || 0) * 100) / 100;
+      el.textContent = copy.waveOut
+        .replace('{src}', src)
+        .replace('{cost}', cost.toFixed(2))
+        .replace('{full}', String(state.amountFull))
+        .replace('{rate}', String(Math.round(rate)))
+        .replace('{sea}', String(Math.round(seaValue)));
+    };
+
     const pollFleet = async () => {
       if (!state.boats) return;
       // Released rather than trusted: a request that never settles would
@@ -836,6 +869,11 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
         }
       }
 
+      // The cost curve is `log1p(yuan)/log1p(amountFull)`, which goes past 1 as soon
+      // as the session spends more than the threshold. Sent unclamped, the ocean
+      // frame's `sea <= 100` guard rejected the whole message and the surface sat
+      // at whatever it was born with — a ¥12 session looked dead calm.
+      target = Math.max(0, Math.min(100, target));
       // Ease with the real elapsed time, not a fixed 0.25 s: a late tick (busy
       // frame, throttled timer) would otherwise let the surface catch up in one
       // visible jump instead of a steady slide.
@@ -844,6 +882,7 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
       const alphaSea = 1 - Math.exp(-elapsed / Math.max(0.4, state.smooth / 2));
       seaValue += (target - seaValue) * alphaSea;
       postToOcean(seaValue);
+      refreshWaveReadout();
     };
 
     const startWaveEngine = () => {
@@ -984,6 +1023,7 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
           ${rangeRow(pid('r0'), 'r0', 1, 200, 1)}
           ${rangeRow(pid('amount-full'), 'amountFull', 1, 100, 1)}
           ${rangeRow(pid('smooth'), 'smooth', 2, 8, 0.5)}
+          <p class="oss-sub" id="${pid('wave-out')}"></p>
           <p class="oss-sub" data-copy="waveNote"></p>
         </div>
         <div class="oss-sec">
