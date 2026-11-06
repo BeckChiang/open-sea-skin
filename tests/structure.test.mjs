@@ -302,3 +302,11 @@ test('the geometry is sized like last time, not larger', () => {
   // stroke gets much fatter the sky turns into a mesh.
   assert.ok(source.includes('const half = STAR_RADIUS * 0.0012;'), 'keep the stroke close to its former weight')
 })
+
+test('the hulls sweep most of the frame, not a circle in the middle', () => {
+  // A fixed world-space amplitude only looked wide while the lanes were close to
+  // the camera; at 26–44 units it kept every hull inside the middle third.
+  assert.ok(source.includes('across: 0.62 + ((index * 0.11) % 0.3),'), 'the sweep must be a fraction of the frame')
+  assert.ok(source.includes('const laneAcross = Math.sin(angle) * (offStage - BOAT_MARGIN) * lane.across;'), 'the fraction must be applied to the frame half-width')
+  assert.ok(!source.includes('Math.sin(angle) * lane.radiusRight'), 'no fixed world-space sweep')
+})

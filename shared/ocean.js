@@ -1116,7 +1116,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.19';
+const OCEAN_BUILD = 'lab-1.5.20';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1383,7 +1383,8 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     base,
     // alternate sides so a burst of arrivals crosses the frame from both edges
     side: index % 2 === 0 ? 1 : -1,
-    radiusRight: 6 + ((index * 3.7) % 14),
+    // fraction of the visible half-width the hull sweeps through (0.62–0.92)
+    across: 0.62 + ((index * 0.11) % 0.3),
     radiusBack: 2 + ((index * 2.3) % 6),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
@@ -1547,9 +1548,12 @@ function updateBoats(dt) {
     lane.pushZ *= 0.92;
 
     const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
-    const laneAcross = Math.sin(angle) * lane.radiusRight;
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
+    // Sweep relative to the frame, not to an absolute distance: the lanes have
+    // different depths, so a fixed world-space amplitude made the near hulls
+    // circle the middle while the far ones barely moved.
+    const laneAcross = Math.sin(angle) * (offStage - BOAT_MARGIN) * lane.across;
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
