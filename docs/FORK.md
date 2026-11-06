@@ -45,7 +45,7 @@ plugin_manager install_bundle link:C:/Users/recko/DSH/plugins/open-sea-skin-lab
 
 回退：`remove_bundle` 本 fork，再 `install_bundle open-sea-skin@1.2.7`（npm 源）。
 
-当前状态（2026-11-05）：已按上面两步装进 profile `desktop`，`node_modules/open-sea-skin` 是指向本目录的符号链接，插件版本显示 **1.3.0**（`plugin_manager list_bundles` 可见 `source: link:C:\Users\recko\DSH\plugins\open-sea-skin-lab`）。改完源码后宿主的静态路由（`/open-sea-skin/*`）即时反映新文件，但**浏览器侧的 client.js 需要刷新页面/重启桌面端**才会重新加载。
+当前状态（2026-11-06）：已按上面两步装进 profile `desktop`，`node_modules/open-sea-skin` 是指向本目录的符号链接，插件版本显示 **1.4.1**（`plugin_manager list_bundles` 可见 `source: link:C:\Users\recko\DSH\plugins\open-sea-skin-lab`）。改完源码后宿主的静态路由（`/open-sea-skin/*`）即时反映新文件，但**浏览器侧的 client.js 需要刷新页面/重启桌面端**才会重新加载。
 
 改完一律先跑：
 
