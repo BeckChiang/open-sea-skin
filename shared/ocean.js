@@ -962,7 +962,7 @@ if (SKIN) {
     starOpacity: starLayer ? starLayer.starsOpacity : 0,
     meteor: starLayer ? starLayer.meteor.active : false,
     boats: boatShown,
-    boatSpots: boatSpots.slice(0, 6),
+    boatSpots: boatSpotList(),
     boatTarget,
     boatError,
     elapsed: uTime.value,
@@ -997,7 +997,7 @@ let BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
 let FRAME_RATE_CAP = REDUCED_MOTION ? 20 : LOW_END_DEVICE ? 30 : 60;
 let FRAME_MS = 1000 / FRAME_RATE_CAP;
 let TARGET_FPS = REDUCED_MOTION ? 18 : LOW_END_DEVICE ? 28 : SKIN ? 40 : 55;
-const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.5 : 0.55;
+const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.7 : 0.55;
 let adaptHold = 0;
 let renderScale = 1;
 // contract §3.4: the frosted glass caps the adaptive scale, it never raises it
@@ -1073,19 +1073,21 @@ function animate(now) {
   }
   if (adaptWindow >= 2) {
     adaptWindow = 0;
-    // After a change, wait two more windows before touching the scale again.
-    // Without the hold the loop pumps 0.92/1.06 every 2 s around the target,
-    // and that periodic sharpness pulse reads as stutter on the water.
+    // After a change, wait four more windows (8 s) before touching the scale
+    // again. A short hold let the loop pump the scale every couple of seconds and
+    // that periodic sharpness pulse reads as stutter on the water; the dead band
+    // is narrow now because the floor sits at 0.7 in skin mode, so a drop is
+    // cheap and rare instead of frequent and deep.
     if (adaptHold > 0) adaptHold -= 1;
     if (fpsNow > 0 && adaptHold === 0) {
-      if (fpsNow < TARGET_FPS - 8 && renderScale > MIN_SCALE) {
-        renderScale = Math.max(MIN_SCALE, +(renderScale * 0.96).toFixed(3));
+      if (fpsNow < TARGET_FPS - 6 && renderScale > MIN_SCALE) {
+        renderScale = Math.max(MIN_SCALE, +(renderScale * 0.97).toFixed(3));
         applyResolutionScale(renderScale);
-        adaptHold = 2;
-      } else if (fpsNow > TARGET_FPS + 8 && renderScale < SCALE_CAP) {
-        renderScale = Math.min(SCALE_CAP, +(renderScale * 1.02).toFixed(3));
+        adaptHold = 4;
+      } else if (fpsNow > TARGET_FPS + 6 && renderScale < SCALE_CAP) {
+        renderScale = Math.min(SCALE_CAP, +(renderScale * 1.015).toFixed(3));
         applyResolutionScale(renderScale);
-        adaptHold = 2;
+        adaptHold = 4;
       }
     }
   }
@@ -1114,7 +1116,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.17';
+const OCEAN_BUILD = 'lab-1.5.18';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1337,11 +1339,11 @@ const BOAT_EXIT_RATE = 0.72;
 // to see a swell face, short enough that a hull smaller than the wavelength.
 const BOAT_PROBE = 2.4;
 // Screen positions of the hulls that are actually drawn, for the panel readout.
-const boatSpots = [];
 const boatSpotVec = new THREE.Vector3();
 let boatError = '';
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
+let boatDrawn = 0;
 // camera the fleet is anchored to; set when the boats are created
 let boatCamera = null;
 
@@ -1448,7 +1450,11 @@ function createBoats(scene, cam) {
     material.colorNode = colorNode;
     material.side = side;
     const mesh = new THREE.InstancedMesh(geometry, material, BOAT_MAX);
-    mesh.count = 0;
+    // Every berth is in the draw from the first frame. The instance buffer is
+    // bound once, at whatever count the first draw happens to have, and a mesh
+    // that starts at 0 keeps drawing its first hull forever (see boatHidden).
+    for (let i = 0; i < BOAT_MAX; i += 1) mesh.setMatrixAt(i, boatHidden.matrix);
+    mesh.count = BOAT_MAX;
     mesh.frustumCulled = false;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(mesh);
@@ -1468,6 +1474,14 @@ function createBoats(scene, cam) {
 }
 
 const boatDummy = new THREE.Object3D();
+// An idle berth is parked four kilometres below the sea with a 1 mm scale. It
+// keeps its slot inside the draw, which is what makes the drawn count stable:
+// shrinking `count` and growing it again leaves empty instance matrices bound,
+// and that is how three boats became one visible hull under three.js WebGPU.
+const boatHidden = new THREE.Object3D();
+boatHidden.position.set(0, -4000, 0);
+boatHidden.scale.setScalar(0.001);
+boatHidden.updateMatrix();
 const BOAT_UP = new THREE.Vector3(0, 1, 0);
 const boatNormal = new THREE.Vector3();
 const boatTilt = new THREE.Quaternion();
@@ -1487,9 +1501,25 @@ function boatAxes() {
   boatRight.crossVectors(boatForward, BOAT_UP).normalize();
 }
 
+// Only the 400 ms state post reads these, so the projection is done on demand
+// rather than once per rendered frame.
+function boatSpotList() {
+  const out = [];
+  if (!boatCamera) return out;
+  for (let i = 0; i < boatDrawn && i < 6; i += 1) {
+    const placed = boatPlaced[i];
+    if (!placed) continue;
+    boatSpotVec.set(placed.x, placed.y || 0, placed.z).project(boatCamera);
+    out.push([
+      Math.round((boatSpotVec.x * 0.5 + 0.5) * 100) / 100,
+      Math.round((0.5 - boatSpotVec.y * 0.5) * 100) / 100,
+    ]);
+  }
+  return out;
+}
+
 function updateBoats(dt) {
   if (!boats) return;
-  boatSpots.length = 0;
   boatAxes();
   const originX = boatCamera ? boatCamera.position.x : 0;
   const originZ = boatCamera ? boatCamera.position.z : 17;
@@ -1639,7 +1669,8 @@ function updateBoats(dt) {
     // heading follows the lane direction, so a boat reads as sailing somewhere
     boatYaw.setFromAxisAngle(BOAT_UP, placed.heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
-    boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
+    placed.y = surface.y - 0.08;
+    boatDummy.position.set(placed.x, placed.y, placed.z);
     // Perspective already shrinks a boat out on the approach, and a hull is only
     // ever removed once it is past the frame edge, so the scale stays constant.
     // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
@@ -1648,11 +1679,6 @@ function updateBoats(dt) {
     boatDummy.scale.setScalar(2.8);
     boatDummy.updateMatrix();
 
-    boatDummy.getWorldPosition(boatSpotVec).project(boatCamera);
-    boatSpots.push([
-      Math.round((boatSpotVec.x * 0.5 + 0.5) * 100) / 100,
-      Math.round((0.5 - boatSpotVec.y * 0.5) * 100) / 100,
-    ]);
     boats.hull.setMatrixAt(active, boatDummy.matrix);
     boats.mast.setMatrixAt(active, boatDummy.matrix);
     boats.sail.setMatrixAt(active, boatDummy.matrix);
@@ -1661,8 +1687,14 @@ function updateBoats(dt) {
   }
 
   boatShown = active;
+  boatDrawn = active;
+  // The draw count stays at capacity: three.js WebGPU binds the instance buffer
+  // at the count of the first draw and never grows it afterwards, so a fleet
+  // that grows from 1 to 3 kept painting one hull while the panel read 3/3.
+  // Idle berths go to boatHidden instead of being dropped from the draw.
   for (const part of [boats.hull, boats.mast, boats.sail, boats.lantern]) {
-    part.count = active;
+    for (let i = active; i < BOAT_MAX; i += 1) part.setMatrixAt(i, boatHidden.matrix);
+    part.count = BOAT_MAX;
     part.instanceMatrix.needsUpdate = true;
   }
 }
@@ -1785,21 +1817,45 @@ function createStarLayer(scene) {
   crosses.renderOrder = 3;
   scene.add(crosses);
 
-  const lineGlowAttr = new Float32Array(segmentCount);
+  // One-pixel GPU lines alias badly on a 1x display: a diagonal leg staircases
+  // across the sky. Each leg is therefore drawn as two thin quads that fade from
+  // the centreline out to nothing, which the rasteriser blends into a smooth
+  // stroke at any angle. 8 vertices per leg is cheap next to the draw itself.
+  const lineGlowAttr = new Float32Array(segmentCount * 8);
+  const lineSideAttr = new Float32Array(segmentCount * 8);
   const lineGeometry = new THREE.BufferGeometry();
-  lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 3), 3));
+  lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 8 * 3), 3));
   lineGeometry.setAttribute('aLineGlow', new THREE.BufferAttribute(lineGlowAttr, 1));
-  const lineMaterial = new THREE.LineBasicNodeMaterial({
+  lineGeometry.setAttribute('aSide', new THREE.BufferAttribute(lineSideAttr, 1));
+  const lineIndex = new Uint32Array(segmentCount * 12);
+  for (let i = 0; i < segmentCount; i += 1) {
+    const at = i * 8;
+    const side = i * 8;
+    // left quad, then right quad
+    lineSideAttr[side + 0] = -1; lineSideAttr[side + 1] = 0;
+    lineSideAttr[side + 2] = 0; lineSideAttr[side + 3] = -1;
+    lineSideAttr[side + 4] = 0; lineSideAttr[side + 5] = 1;
+    lineSideAttr[side + 6] = 1; lineSideAttr[side + 7] = 0;
+    const o = i * 12;
+    lineIndex[o + 0] = at + 0; lineIndex[o + 1] = at + 1; lineIndex[o + 2] = at + 2;
+    lineIndex[o + 3] = at + 0; lineIndex[o + 4] = at + 2; lineIndex[o + 5] = at + 3;
+    lineIndex[o + 6] = at + 4; lineIndex[o + 7] = at + 5; lineIndex[o + 8] = at + 6;
+    lineIndex[o + 9] = at + 4; lineIndex[o + 10] = at + 6; lineIndex[o + 11] = at + 7;
+  }
+  lineGeometry.setIndex(new THREE.BufferAttribute(lineIndex, 1));
+  const lineMaterial = new THREE.MeshBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
   });
-  // Connections must not turn the sky into a wireframe, but they are the only
-  // way to read a constellation, so they carry the setting dial (`uConstellation`)
-  // and still fade out near the horizon where they would fight the sea glow.
+  // Additive blending ignores alpha, so the soft edge lives in the colour: the
+  // centreline is full strength, the outer rim is nothing.
+  const lineEdge = float(1).sub(abs(attribute('aSide', 'float')));
   lineMaterial.colorNode = vec3(0.55, 0.70, 1.0)
-    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.15);
-  const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+    .mul(lineEdge.mul(lineEdge))
+    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.5);
+  const lines = new THREE.Mesh(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
   scene.add(lines);
@@ -1824,6 +1880,10 @@ function createStarLayer(scene) {
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
+    segmentX: new Float32Array(segmentCount),
+    segmentY: new Float32Array(segmentCount),
+    segmentZ: new Float32Array(segmentCount),
+    segmentGlow: new Float32Array(segmentCount),
     lineGlow: lineGlowAttr,
     segmentCount,
     starCount,
@@ -1871,7 +1931,9 @@ function updateStarDome(now, dt) {
   uStarGlow.value = layer.starsOpacity * 0.9;
 
   // 15 deg/hour: a 5 s refresh is a 0.02 deg step, i.e. invisible
-  if (now - layer.lastSky > 5000) {
+  // A hidden sky costs nothing: skip the rebuild while the layer is faded out.
+  if (layer.starsOpacity < 0.01) return;
+  if (now - layer.lastSky > 20000) {
     layer.lastSky = now;
     const date = new Date();
     const lst = localSiderealTime(date, sunLon);
@@ -1906,16 +1968,53 @@ function updateStarDome(now, dt) {
     }
     crossPositions.needsUpdate = true;
 
+    // Ribbon legs: one soft quad pair per constellation edge. The point list is
+    // a polyline, so edge i joins point i to point i + 1 and each point is shared
+    // by the two edges around it.
     const linePositions = layer.lines.geometry.getAttribute('position');
+    const lineGlow = layer.lines.geometry.getAttribute('aLineGlow');
+    const px = layer.segmentX;
+    const py = layer.segmentY;
+    const pz = layer.segmentZ;
+    const pg = layer.segmentGlow;
     for (let i = 0; i < layer.segmentCount; i += 1) {
       starDirection(layer.segmentRA[i], layer.segmentDec[i], lat, lst, starDirA);
-      linePositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
-      // fade the connecting lines in over the first 14 degrees of altitude,
-      // so they disappear into the horizon haze instead of stopping abruptly
-      layer.lineGlow[i] = Math.max(0, Math.min(1, lastAltDeg / 14));
+      px[i] = starDirA.x;
+      py[i] = starDirA.y;
+      pz[i] = starDirA.z;
+      // fade the connections in over the first 14 degrees of altitude, so they
+      // dissolve into the horizon haze instead of stopping mid-air
+      pg[i] = Math.max(0, Math.min(1, lastAltDeg / 14));
+    }
+    const half = STAR_RADIUS * 0.0016;
+    for (let e = 0; e + 1 < layer.segmentCount; e += 1) {
+      const ax = px[e], ay = py[e], az = pz[e];
+      const bx = px[e + 1], by = py[e + 1], bz = pz[e + 1];
+      const glow = Math.min(pg[e], pg[e + 1]);
+      // normal of the ribbon: perpendicular to the leg and to the line of sight
+      let nx = (by - ay) * az - (bz - az) * ay;
+      let ny = (bz - az) * ax - (bx - ax) * az;
+      let nz = (bx - ax) * ay - (by - ay) * ax;
+      const nlen = Math.hypot(nx, ny, nz) || 1;
+      nx = (nx / nlen) * half;
+      ny = (ny / nlen) * half;
+      nz = (nz / nlen) * half;
+      const base = e * 8;
+      const push = (slot, x, y, z) => {
+        linePositions.setXYZ(base + slot, x, y, z);
+        lineGlow.setX(base + slot, glow);
+      };
+      push(0, ax - nx, ay - ny, az - nz);
+      push(1, ax, ay, az);
+      push(2, bx, by, bz);
+      push(3, bx - nx, by - ny, bz - nz);
+      push(4, ax, ay, az);
+      push(5, ax + nx, ay + ny, az + nz);
+      push(6, bx + nx, by + ny, bz + nz);
+      push(7, bx, by, bz);
     }
     linePositions.needsUpdate = true;
-    layer.lines.geometry.getAttribute('aLineGlow').needsUpdate = true;
+    lineGlow.needsUpdate = true;
   }
 
   // meteors: random streaks that only exist at night

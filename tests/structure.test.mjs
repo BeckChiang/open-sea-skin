@@ -259,6 +259,31 @@ test('module-scope collections are mutated, never reassigned', () => {
     return hits.some((hit) => !source.slice(Math.max(0, hit.index - 6), hit.index + 1).includes('const'))
   })
   assert.deepEqual(offenders, [], `reassigned const collections: ${offenders.join(', ')}`)
-  assert.ok(source.includes('boatSpots.length = 0;'), 'the spot list must be cleared in place')
+  assert.ok(source.includes('boatSpots: boatSpotList(),'), 'the panel reads the hull positions back')
+  assert.ok(source.includes('function boatSpotList() {'), 'the projection runs on demand, not per frame')
+  assert.ok(!source.includes('boatSpots.push('), 'no per-frame projection buffer is needed anymore')
   assert.ok(source.includes('boatError = String((err && err.message) || err);'), 'a fleet failure must be kept for the panel')
+})
+
+test('constellation legs are soft quads instead of hairlines', () => {
+  // A 1 px GPU line staircases across a 1x display. Each leg is now two quads
+  // that fade from the centreline outwards, which the rasteriser blends.
+  assert.ok(source.includes("const lineEdge = float(1).sub(abs(attribute('aSide', 'float')))"), 'the soft edge must be a per-vertex attribute')
+  assert.ok(source.includes('lineEdge.mul(lineEdge)'), 'the falloff must be squared so the rim disappears')
+  assert.ok(source.includes('lineSideAttr[side + 0] = -1;'), 'each leg needs the two half quads')
+  assert.ok(!source.includes('const lines = new THREE.LineSegments('), 'the line layer must not go back to hairlines')
+})
+
+test('the sky rebuild is skipped while it cannot be seen', () => {
+  // 15 deg/hour means a 20 s step is 0.08 deg, and a faded-out sky needs none.
+  assert.ok(source.includes('if (layer.starsOpacity < 0.01) return;'), 'a hidden sky must not be rebuilt')
+  assert.ok(source.includes('if (now - layer.lastSky > 20000) {'), 'the dome may only be rebuilt every 20 s')
+})
+
+test('the adaptive scale steps rarely and keeps a sharp floor', () => {
+  // The old loop pulsed the pixel ratio every 2 s and dropped to half
+  // resolution; both read as stutter on the water.
+  assert.ok(source.includes('const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.7 : 0.55;'), 'skin mode must keep a sharp floor')
+  assert.ok(source.includes('adaptHold = 4;'), 'a scale change must hold for 8 s')
+  assert.ok(source.includes('renderScale * 0.97'), 'the step must be gentle')
 })
