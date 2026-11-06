@@ -1158,10 +1158,11 @@ const BOAT_MAX = 12;
 const BOAT_BASE = 1;
 // Boats close enough to overlap get pushed apart by this much, in world units.
 const BOAT_MIN_SEP = 3.4;
-// How far out towards the horizon a boat is while it arrives or leaves. distance
-// rather than scale is what carries the transition: shrinking a hull in place
-// reads as a pop, sailing it in and out of the open sea does not.
-const BOAT_APPROACH = 16;
+// How far outside the frame a boat sits while it arrives or leaves, in world
+// units measured sideways from its lane. Distance rather than scale carries the
+// transition: a boat that grows and shrinks in place reads as a pop, one that
+// sails in and out across the edge of the screen does not.
+const BOAT_APPROACH = 26;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
 // camera the fleet is anchored to; set when the boats are created
@@ -1173,15 +1174,20 @@ const boatFade = new Float32Array(BOAT_MAX);
 // camera and points along the tangent, so it never turns around on the spot.
 const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   const spread = index / (BOAT_MAX - 1);
-  const base = 14 + ((index * 7.3) % 13);
+  // 15–25 units ahead keeps every lane inside the frame even at a narrow window;
+  // 3–7 units of lateral swing leaves room for the ~26 unit approach offset to
+  // stay off screen instead of parking a hull at the very edge.
+  const base = 15 + ((index * 7.3) % 11);
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
     // ran left and right turned around on the spot, which read as a toy sliding
     // back and forth; an ellipse keeps the heading rotating all the way round.
     phase: spread * Math.PI * 2 + index * 0.7,
     base,
-    radiusRight: 5 + ((index * 1.7) % 3.4),
-    radiusBack: 2 + ((index * 1.1) % 2.2),
+    // alternate sides so a burst of arrivals crosses the frame from both edges
+    side: index % 2 === 0 ? 1 : -1,
+    radiusRight: 3 + ((index * 1.3) % 4),
+    radiusBack: 1.5 + ((index * 1.1) % 2),
     // 0.10–0.19 rad/s: one lap takes 33–63 s
     speed: 0.1 + ((index * 0.037) % 0.09),
     // separation pushes accumulate here and decay, so boats ease apart instead
@@ -1309,22 +1315,22 @@ function updateBoats(dt) {
     lane.pushX *= 0.92;
     lane.pushZ *= 0.92;
 
-    const across = Math.sin(angle) * lane.radiusRight;
-    // fade 0..1 doubles as "how far out on the approach": a boat joins the lane by
-    // sailing in from the horizon and leaves by sailing back out to it
-    const away = (1 - fade) * BOAT_APPROACH;
-    const ahead = lane.base + Math.cos(angle) * lane.radiusBack + away;
+    const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
+    const across = Math.sin(angle) * lane.radiusRight + lane.side * (1 - fade) * BOAT_APPROACH;
+    // fade 0..1 is "how far outside the frame on the approach": a boat enters by
+    // crossing in from the left or right edge and leaves by sailing back out to
+    // that side, which is what reads as a boat coming and going on the water
     // Tangent of the ellipse in the camera's flat frame: the boat has to point
     // where it is actually going, otherwise it sails sideways or stern first.
-    // While the approach offset is moving, that radial motion is part of the
+    // While the approach offset is moving sideways, that motion is part of the
     // course too, so an arriving boat comes bow-on instead of crabbing in.
-    const radialSpeed = -BOAT_APPROACH * (want - fade) * rate;
+    const lateralSpeed = -lane.side * BOAT_APPROACH * (want - fade) * rate;
     const vx = boatRight.x * Math.cos(angle) * lane.radiusRight
       - boatForward.x * Math.sin(angle) * lane.radiusBack
-      + boatForward.x * radialSpeed;
+      + boatRight.x * lateralSpeed;
     const vz = boatRight.z * Math.cos(angle) * lane.radiusRight
       - boatForward.z * Math.sin(angle) * lane.radiusBack
-      + boatForward.z * radialSpeed;
+      + boatRight.z * lateralSpeed;
     const placed = boatPlaced[placedCount];
     placed.x = originX + boatForward.x * ahead + boatRight.x * across + lane.pushX;
     placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
@@ -1383,7 +1389,7 @@ function updateBoats(dt) {
     // perspective already shrinks a boat that is out on the approach, so the
     // scale stays near 1 and the pop that came from scaling in place is gone;
     // the tail only trims the last frame or two so nothing vanishes at full size
-    const tail = Math.min(1, placed.fade * 4);
+    const tail = Math.min(1, placed.fade * 2.5);
     boatDummy.scale.setScalar((0.72 + 0.28 * placed.fade) * tail * 2.2);
     boatDummy.updateMatrix();
 

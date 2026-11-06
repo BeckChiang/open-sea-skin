@@ -740,8 +740,13 @@ ${blurCss(state)}`;
         postSun();
         postGlass();
         postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
+        // The frame boots with one boat on the water. `postFleet` skips an
+        // unchanged count, so without this reset a refreshed frame would keep
+        // that single boat until the roster happens to change.
+        fleetCount = -1;
         startWaveEngine();
         startFleetEngine();
+        void pollFleet();
         if (glassTimer) window.clearInterval(glassTimer);
         glassTimer = window.setInterval(postGlass, 1500);
       }, { once: true });
