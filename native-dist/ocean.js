@@ -821,7 +821,10 @@ if (SKIN) {
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
     if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
-      if (Number.isFinite(count)) {
+      // `off` is the panel switch: without it "0 subagents" and "boats turned off"
+      // look identical, and the base hull would keep showing on a disabled skin.
+      if (d.off === true) boatTarget = 0;
+      else if (Number.isFinite(count)) {
         boatTarget = Math.max(BOAT_BASE, Math.min(BOAT_MAX, Math.round(count)));
       }
     }

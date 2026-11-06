@@ -542,7 +542,20 @@ ${blurCss(state)}`;
       // Posted on every poll, not only on change: the ocean frame starts at one
       // boat and can be reloaded under us, so an unchanged number still has to
       // reach it or the surface keeps the count it was born with.
-      post({ type: 'oss-fleet', count: shown });
+      post({ type: 'oss-fleet', count: shown, off: shown === 0 });
+    };
+
+    // What the ocean frame says it ended up with. Read back rather than assumed:
+    // "the note says three, the sea shows one" is a message-path question, and
+    // this is the only way to tell the two sides apart from the panel.
+    const readOceanFleet = () => {
+      try {
+        const win = frame instanceof HTMLIFrameElement ? frame.contentWindow : null;
+        const state = win && typeof win.__ossState === 'function' ? win.__ossState() : null;
+        return state ? { target: state.boatTarget, drawn: state.boats } : null;
+      } catch {
+        return null;
+      }
     };
 
     const setBoatNote = (text) => {
@@ -582,9 +595,11 @@ ${blurCss(state)}`;
         // sessionQuery, and its `running` counts the parent agent, so the fleet
         // would silently sit at one boat forever. Say it instead of guessing.
         const hostFresh = !!(data && data.services && data.services.sessionQuery === true);
+        const ocean = readOceanFleet();
+        const suffix = ocean ? `（海面 ${ocean.drawn}/${ocean.target}）` : '';
         if (data && data.ok === true) {
           if (!hostFresh) setBoatNote(copy.boatStale);
-          else if (count > 0) setBoatNote(copy.boatCount.replace('{n}', String(count)).replace('{m}', String(running)));
+          else if (count > 0) setBoatNote(copy.boatCount.replace('{n}', String(count)).replace('{m}', String(running)) + suffix);
           else setBoatNote(copy.boatIdle);
         }
         else setBoatNote(`${copy.boatOffline} ${data && data.error ? `(${data.error})` : ''}`.trim());
