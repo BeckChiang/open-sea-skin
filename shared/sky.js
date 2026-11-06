@@ -20,22 +20,28 @@ export const NIGHT = {
   shallow: [0.024, 0.055, 0.085],
 };
 
+// Sunset: orange on the horizon under a violet-blue zenith. The warm band that
+// the sky shader adds toward the sun is what turns this into 晚霞; the palette
+// only supplies the room it sits in.
 export const DUSK = {
-  zenith: [0.03, 0.05, 0.16],
-  horizon: [0.85, 0.36, 0.16],
-  sun: [1.0, 0.42, 0.14],
+  zenith: [0.05, 0.055, 0.22],
+  horizon: [0.9, 0.34, 0.13],
+  sun: [1.0, 0.40, 0.12],
   sunIntensity: 2.6,
   deep: [0.02, 0.045, 0.075],
   shallow: [0.09, 0.15, 0.2],
 };
 
+// Daytime: a saturated blue instead of the old grey-blue. The horizon was
+// [0.52, 0.68, 0.82] — nearly desaturated — which is why a cloudy noon looked
+// like fog rather than sky.
 export const DAY = {
-  zenith: [0.07, 0.2, 0.42],
-  horizon: [0.52, 0.68, 0.82],
+  zenith: [0.045, 0.20, 0.58],
+  horizon: [0.36, 0.60, 0.90],
   sun: [1.0, 0.93, 0.8],
   sunIntensity: 1.6,
-  deep: [0.015, 0.09, 0.11],
-  shallow: [0.06, 0.32, 0.36],
+  deep: [0.012, 0.085, 0.12],
+  shallow: [0.05, 0.34, 0.42],
 };
 
 // Elevation at which the sky is fully night / fully day.

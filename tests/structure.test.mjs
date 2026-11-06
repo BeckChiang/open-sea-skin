@@ -113,7 +113,13 @@ test('altitude stays real until it would leave the frame', () => {
   // camera gives up a slice of sea so the upper band is actually visible.
   assert.ok(source.includes('if (elDeg <= VIEW_EL_REAL_MAX) return elDeg'), 'the real altitude must pass through')
   assert.ok(source.includes('VIEW_EL_TOP - VIEW_EL_REAL_MAX'), 'only the overflow is compressed')
-  assert.ok(source.includes('camera.rotation.x = 8 * DEG'), 'the frame must tilt up to hold the higher sun')
+  assert.ok(
+    source.includes('controls.target.set(0, camera.position.y + Math.tan(VIEW_PITCH_DEG * DEG) * 17, 0)'),
+    'the tilt must live in controls.target: camera.rotation is overwritten by update()',
+  )
+  assert.ok(!source.includes('camera.rotation.x = 8 * DEG'), 'a rotation set here is silently discarded')
+  assert.ok(source.includes('controls.autoRotate = !REDUCED_MOTION && !SKIN'), 'skin mode must not drift the sky')
+  assert.ok(source.includes('controls.maxPolarAngle = Math.PI * 0.62'), 'looking up must not be clamped away')
 })
 
 test('the constellations and the meteors are real settings', () => {

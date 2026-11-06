@@ -56,7 +56,10 @@
 ```
 
 - `mode === 'real'`：iframe 每秒按 `Date.now()` + `lat/lon` 重算太阳/月亮，**禁止**再走 720 秒正弦循环。
-- **高度角保持真实**：相机固定朝北（略上扬 8°），可见天区约 −20°..34°。`viewAzimuth()` 只折方位（正东→左缘、正西→右缘，±40°）；`viewElevation()` 在 0..16° **原样透传真实高度**，16°..90° 才线性压进 16°..32°，保证太阳/月亮不会钉在顶边、也不会飘出画面。调色板始终用**真实高度**（`skyFromElevation`），所以正午仍是正午。
+- **高度角保持真实**：相机固定朝北、上扬 10°（`VIEW_PITCH_DEG`，fov 60），可见天区约 −20°..40°，地平线落在画面下三分之一。`viewAzimuth()` 只折方位（正东→左缘、正西→右缘，±40°）；`viewElevation()` 在 0..30° **原样透传真实高度**，30°..90° 才线性压进 30°..39°，保证太阳/月亮不会钉在顶边、也不会飘出画面。调色板始终用**真实高度**（`skyFromElevation`），所以正午仍是正午。
+- **姿态必须写在 `controls.target` 里**：OrbitControls 每次 `update()` 都按 position→target 重算朝向，直接设 `camera.rotation` 会被静默丢弃（1.5.0 的 8° 上扬就因此没生效）。`maxPolarAngle` 要放到 `π*0.62`，否则仰角被钳回 0°。
+- **skin 模式禁止 `autoRotate`**：相机自转会让太阳和星座自己在天上漂，用户会读成「太阳还在乱动」。`SKIN` 分支必须 `controls.autoRotate = false`。
+- **黄昏晚霞**：`skyColor()` 里有一段按「太阳方位 + 低太阳 + 近地平线」加权的暖色带（`vec3(1.0,0.40,0.15)`），并用 `smoothstep(-0.16, 0.03, uSunDir.y)` 门控，避免深夜地平线挂着假晚霞；云色改成取地平线色（白天偏蓝、黄昏自动变暖），不再用写死的亮灰。
 - 云量映射到 `uCloudCover`：`off .15 / low .35 / mid .55 / high .80`。
 - 星空强度：`starIntensityOf(太阳高度, 档位, 月亮亮度)`；真实星座另受 `constellation` 档位控制（`off 0 / low .5 / mid 1 / high 1.7`，写入 `uConstellation`），`meteor === false` 时不生成流星。
 - 月亮：`shared/solar.js` 的真实月位置与相位；月盘半径 0.018 rad，`uMoonVisible` 门控（亮度 > 0.002 才画），相位由 `uMoonPhaseCos` 决定明暗界线朝向太阳。

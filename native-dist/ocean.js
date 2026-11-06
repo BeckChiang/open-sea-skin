@@ -266,6 +266,20 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18));
   col.addAssign(uSunColor.mul(smoothstep(0.9994, 0.9998, s)).mul(30));
 
+  // Sunset band: a warm wash that hugs the horizon on the sun's side. The dusk
+  // palette alone tinted the whole sky evenly, which read as "grey" instead of
+  // 晚霞; this is the part that makes the hour visible.
+  const lowSun = float(1).sub(smoothstep(0.05, 0.36, uSunDir.y));
+  const flatSun = normalize(vec3(uSunDir.x, 0, uSunDir.z).add(vec3(1e-4, 0, 1e-4)));
+  const flatDir = normalize(vec3(d.x, 0, d.z).add(vec3(1e-4, 0, 1e-4)));
+  const towardSun = max(dot(flatDir, flatSun), 0);
+  const bandLow = smoothstep(0.42, 0.0, d.y);
+  // and it only exists while the sun is up or in civil twilight — without this
+  // gate the warm band would sit on the midnight horizon as a permanent fake dawn
+  const duskGate = smoothstep(-0.16, 0.03, uSunDir.y);
+  const warmBand = pow(towardSun, 5).mul(lowSun).mul(bandLow).mul(duskGate);
+  col.addAssign(vec3(1.0, 0.40, 0.15).mul(warmBand).mul(0.9));
+
   // moon: phase-shaped disc + halo, gated by uMoonVisible (brightness, 0..1)
   If(uMoonVisible.greaterThan(0.002), () => {
     const md = dot(d, uMoonDir);
@@ -307,9 +321,11 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     const low = float(0.62).add(float(CLOUD_COVER_BASELINE).sub(uCloudCover).mul(0.55));
     const density = clamp(uCloudCover.div(CLOUD_COVER_BASELINE), 0, 1);
     const cover = band.mul(smoothstep(low, low.add(0.33), cloudNoise));
-    // 1.2.7 used a fixed bright cloud tint and looked like daylight at night
-    const cloudColor = mix(vec3(0.92, 0.90, 0.87).mul(uSkyLight), uSunColor.mul(0.5), 0.45);
-    col.assign(mix(col, cloudColor, cover.mul(0.6).mul(density)));
+    // 1.2.7 used a fixed bright cloud tint and looked like daylight at night.
+    // Daytime clouds now take the horizon hue (blue) instead of near-white, so a
+    // cloudy noon no longer greys the whole sky out; at dusk uSunColor warms them.
+    const cloudColor = uHorizonColor.mul(uSkyLight.mul(1.3)).add(vec3(0.05)).toVar();
+    col.assign(mix(col, cloudColor, cover.mul(0.58).mul(density)));
   });
 
   return col;
@@ -419,8 +435,12 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const VIEW_AZ_MIN = 90;   // due east
 const VIEW_AZ_MAX = 270;  // due west
 const VIEW_AZ_HALF = 40;  // degrees either side of the view axis
-const VIEW_EL_REAL_MAX = 16;  // up to here the altitude is passed through untouched
-const VIEW_EL_TOP = 32;       // where 90° lands: inside the top of the frame
+// The frame sees -20°..40°: fov 60 tilted 10° up, so the horizon sits about a
+// third of the way up from the bottom. That is enough to pass the real altitude
+// through almost the whole year in Wuhan (noon ≈ 43° in November, ≈ 83° in June).
+const VIEW_EL_REAL_MAX = 30;  // up to here the altitude is passed through untouched
+const VIEW_EL_TOP = 39;       // where 90° lands: just inside the top of the frame
+const VIEW_PITCH_DEG = 10;    // camera tilt; the horizon drops this far below centre
 
 function viewAzimuth(azDeg) {
   const rel = ((azDeg % 360) + 360) % 360;
@@ -1068,11 +1088,12 @@ async function boot() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x05070a);
 
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 8000);
+    // 60° vertical fov: the skin is a sky as much as a sea now, and the real
+    // solar altitude has to fit. The tilt lives in controls.target below, because
+    // OrbitControls derives the orientation from position -> target and would
+    // overwrite camera.rotation on every update().
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 8000);
     camera.position.set(0, 5.5, 17);
-    // Tilted up so the real solar altitude (up to ~32°) fits the frame; the sea
-    // still fills the lower part, it just gives up a slice to the sky.
-    camera.rotation.x = 8 * DEG;
 
     // The boat lanes measure their off-stage point from this camera's frustum.
     boatCamera = camera;
@@ -1144,10 +1165,16 @@ async function boot() {
     controls.minDistance = 4;
     controls.maxDistance = 120;
     controls.minPolarAngle = 0.15;
-    controls.maxPolarAngle = Math.PI * 0.495;
-    controls.target.set(0, 1.5, 0);
-    controls.autoRotate = !REDUCED_MOTION;
-    controls.autoRotateSpeed = SKIN ? 0.12 : 0.25; // skin: extra-slow ambient drift
+    // must allow looking up: the pitch used to be clamped back to ~0°
+    controls.maxPolarAngle = Math.PI * 0.62;
+    // The tilt lives here, not in camera.rotation: update() rebuilds the
+    // orientation from position -> target. Looking up 10° puts the horizon a
+    // third of the way up the frame and lifts the sun and the moon off the water.
+    controls.target.set(0, camera.position.y + Math.tan(VIEW_PITCH_DEG * DEG) * 17, 0);
+    // In skin mode the frame must stay still: an auto-rotating camera made the
+    // sun and the constellations drift across the sky on their own.
+    controls.autoRotate = !REDUCED_MOTION && !SKIN;
+    controls.autoRotateSpeed = 0.25;
     controls.update();
 
     // --- UI bindings (full-page mode only) ----------------------------------

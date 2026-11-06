@@ -68,7 +68,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       times: ['黄昏', '金色时刻', '下午', '正午'],
       secSkin: '皮肤',
       secWave: '波浪',
-      secSun: '日照',
+      secSun: '天空控制',
       secBoat: '船',
       boats: '显示船只',
       boatNote: '每个子智能体一艘船；没有子智能体时海面保留 1 艘。切会话会跟着变。',
@@ -130,7 +130,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       times: ['Dusk', 'Golden hour', 'Afternoon', 'Midday'],
       secSkin: 'Skin',
       secWave: 'Waves',
-      secSun: 'Sunlight',
+      secSun: 'Sky',
       secBoat: 'Boats',
       boats: 'Show boats',
       boatNote: 'One boat per subagent, and one kept afloat when the session has none. Switching sessions reshapes it.',
@@ -368,6 +368,24 @@ body :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]
 body[data-ds-dark-theme] :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]):not(#${IDS.panel}) {
   background: rgba(24, 28, 35, .97) !important;
 }
+/* Hover previews (the changed-file card that opens on hover, and tooltips) are
+   body portals that paint themselves with the same tokens. With our translucent
+   tokens they turned into glass you could read the page through. Stack the token
+   over an opaque base: the theme tint survives, nothing shows through. */
+body span:has(> [data-hovercard-bridge]) > div,
+body [role="tooltip"] {
+  background-color: #0c1118 !important;
+  background-image: linear-gradient(
+    var(--dsw-alias-bg-layer-1, rgba(255, 255, 255, .06)),
+    var(--dsw-alias-bg-layer-1, rgba(255, 255, 255, .06))
+  ) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body:not([data-ds-dark-theme]) span:has(> [data-hovercard-bridge]) > div,
+body:not([data-ds-dark-theme]) [role="tooltip"] {
+  background-color: #fbfcfe !important;
+}
 /* Legacy Harness builds: these CSS-module hashes are best-effort fallbacks. */
 .wSkVaW_root,
 .pI_x6G_sidebarCol,
@@ -441,6 +459,46 @@ ${blurCss(state)}`;
 #${IDS.panel} .oss-col-head input[type='checkbox'] { width:14px; height:14px; margin:0; accent-color:#8fe9e4; cursor:pointer; }
 #${IDS.panel} .oss-col .oss-seg button { padding:4px 0; font-size:10px; }
 #${IDS.panel} .oss-col.off .oss-seg { display:none; }
+/* Light shell: the panel above is written for the dark glass, so on a light
+   theme it was white text on a pale card. Same layout, inverted inks. Every rule
+   here comes after the dark ones on purpose — equal specificity, later wins. */
+body:not([data-ds-dark-theme]) #${IDS.panel} {
+  background:rgba(247,249,252,.90);
+  border-color:rgba(12,20,28,.12);
+  box-shadow:0 18px 50px rgba(10,20,30,.16), inset 0 1px 0 rgba(255,255,255,.75);
+  color:#0d1620;
+}
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-title,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-head,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-switch label,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-col-head,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-inline > label { color:rgba(13,22,32,.70); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-note,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-sub { color:rgba(13,22,32,.60); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-sec > .oss-caption,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-mark,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-value { color:#0d7a76; }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-mini,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-reset {
+  background:rgba(12,22,32,.05); border-color:rgba(12,22,32,.16); color:#0d1620;
+}
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button { color:rgba(13,22,32,.74); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button:hover,
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-locate:hover { color:#0a4f4d; border-color:rgba(13,122,118,.35); background:rgba(13,122,118,.08); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button.on {
+  background:rgba(13,122,118,.16); border-color:rgba(13,122,118,.5); color:#0a4f4d;
+}
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-reset:hover { background:rgba(13,122,118,.12); border-color:rgba(13,122,118,.4); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-close { color:rgba(13,22,32,.55); }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-close:hover { color:#0d1620; background:rgba(12,22,32,.08); }
+body:not([data-ds-dark-theme]) #${IDS.panel} input[type='range']::-webkit-slider-runnable-track { background:rgba(12,22,32,.22); }
+body:not([data-ds-dark-theme]) #${IDS.panel} input[type='range']::-moz-range-track { background:rgba(12,22,32,.22); }
+body:not([data-ds-dark-theme]) #${IDS.panel} input[type='range']::-webkit-slider-thumb { background:#0d7a76; box-shadow:0 0 10px rgba(13,122,118,.55); }
+body:not([data-ds-dark-theme]) #${IDS.panel} input[type='range']::-moz-range-thumb { background:#0d7a76; }
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-switch input[type='checkbox'],
+body:not([data-ds-dark-theme]) #${IDS.panel} .oss-col-head input[type='checkbox'] { accent-color:#0d7a76; }
+body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { background:rgba(12,22,32,.20); }
 @media (prefers-reduced-motion: reduce) {
   #${IDS.button}, #${IDS.panel}, #${IDS.panel} * { transition:none !important; }
 }`;
