@@ -104,3 +104,19 @@ node tests/fleet.test.mjs                # /fleet 计数口径 5 个用例
 - **毛玻璃斑驳是半径不够**：14 px 的模糊对水面的高频不够狠，粗粒度的高光块留在玻璃后面变成斑点。半径 20 px 之后同一个采样结构把水纹抹平了，三栏强度降到 28/46/28 也更适合读正文（淡玻璃只做分隔，中心栏保清晰）。
 - **程序化星场不能是规则网格**：星点半径与亮度都从同一个单元哈希来，网格感会从「处处等距」直接读出来。给每颗星独立半径（0.42–1.28×）与亮度（0.55–1.45×），再叠一层更粗、偏移的星场，才像是在撒盐而不是画点阵。
 - **TSL 不能拿 JS 数字直接乘节点**：`STAR_SIZE * (0.42 + 0.86 * hs)` 里 `hs` 是节点，`0.42 + 0.86 * hs` 会先被 JS 算成 `NaN`，编译出的着色器带字面量 `NaN`，报 `Shader Error: 'NaN' : undeclared identifier`，整个天穹与星点渲染失败（画面只剩星座连线）。写成 `hs.mul(0.86).add(0.42)` 才对。**这类错误 `node --check` 看不见，无头探针的 console 里也不会标成致命错**——必须看渲染结果或 `Shader Error` 那一行。
+
+## 星点为什么不能用点精灵（2026-11-06，1.5.29）
+
+想让星点变成「圆点 + 星芒」，第一反应是给 `THREE.PointsNodeMaterial` 贴一张圆形贴图。
+在节点材质路径里行不通：vendor 的 `setupDiffuseColor` 只读 `colorNode`，`map` 与 `alphaTest` 都被忽略，
+点精灵在 WebGPU 里只能是不透明的方块。
+
+所以星层改成每颗星一个 billboard 四边形：几何里带 `aCorner`（本地四角）、`aExtent`（像素半宽）、
+`aSize`（圆盘直径）、`aSpike`（星芒长度），顶点着色器用相机的 right/up 轴把四边形推到星壳面上，
+片元里用 `pxDist = length(corner) * extent` 画圆盘、柔光与四道沿轴的星芒。
+位置只在每 20 秒重算一次，朝向靠 uniform 每帧更新，几何本身不重建。
+
+同一个教训：删掉一层渲染对象时，要把引用它的字段一起删。这次留下了一个 `crossColor: crossColorAttr`，
+`createStarLayer` 直接抛 `ReferenceError`，而 `animate` 的 try/catch 把异常变成一行
+`[open-sea-skin] star dome disabled` 警告——画面看上去只是「星星变少了」，非常难查。
+排查时先搜这行警告，再看 `__ossState().starOpacity` 是否为 0。

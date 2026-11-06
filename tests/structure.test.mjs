@@ -369,3 +369,14 @@ test('the frame rate is a budget dial, not a fixed 60', () => {
   assert.ok(clientSource.includes("const FPS_LEVELS = [24, 30, 45, 60];"), 'the panel offers the same four rates')
   assert.ok(clientSource.includes("case pid('fps'): return { fps: Number(value) };"), 'picking a rate posts the number, not a string')
 })
+
+test('the stars are billboards with a real disc, not square point sprites', () => {
+  // PointsNodeMaterial has no texture slot in the node path, so a round star has
+  // to be a camera-facing quad. These lines are the contract that keeps it that
+  // way; the stale `crossColorAttr` field (a leftover from the deleted cross
+  // layer) used to throw inside createStarLayer and blank the whole dome.
+  assert.ok(source.includes('starMaterial.positionNode = positionLocal.add(edgeOffset.mul(extent).mul(uStarPxWorld));'), 'the quad is billboarded in the shader')
+  assert.ok(source.includes('const spikeOn = smoothstep(float(2.0), float(6.0), aSpike);'), 'faint stars must not grow rays')
+  assert.ok(source.includes('const radius = aSize.mul(0.5);'), 'the bright core is a disc, sized in pixels')
+  assert.ok(!source.includes('crossColorAttr'), 'no leftover attribute references in the star layer')
+})

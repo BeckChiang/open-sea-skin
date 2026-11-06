@@ -15,7 +15,7 @@ import * as THREE from './vendor/three.webgpu.js';
 import {
   Fn, pass, uniform, uniformArray, texture, uv, float, vec2, vec3, vec4, If,
   sin, cos, tan, atan, acos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
-  abs, attribute, smoothstep, length, reflect, passTexture,
+  abs, min, attribute, smoothstep, length, reflect, passTexture,
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
@@ -165,7 +165,7 @@ const uCloudSpeed = uniform(1);
 const uCloudOpacity = uniform(1);
 
 // Star art dials (1.5.23): every one is continuous, so the panel never snaps.
-const uStarSize = uniform(7.4);
+const uStarSize = uniform(8.5);
 const uStarBase = uniform(0.82);
 const uStarHaze = uniform(1);
 const uHaloStrength = uniform(0.28);
@@ -176,9 +176,14 @@ const uTwinkleAmp = uniform(0.3);
 // Real magnitudes (1.5.25): the size floor, how fast size falls off with
 // magnitude, the colour saturation, and the magnitude below which a star gets
 // diffraction spikes instead of a plain point.
-const uStarMin = uniform(2.0);
+const uStarMin = uniform(3.0);
 const uStarFalloff = uniform(0.16);
-const uStarColor = uniform(1.35);
+const uStarColor = uniform(1.5);
+// billboard basis for the star quads: world units per screen pixel at the star
+// shell, plus the camera's own right/up axes (refreshed every frame)
+const uStarPxWorld = uniform(1.0);
+const uStarRight = uniform(new THREE.Vector3(1, 0, 0));
+const uStarUp = uniform(new THREE.Vector3(0, 1, 0));
 const uStarSpikes = uniform(1.6);
 // Milky Way band: normal of the galactic plane in world space, plus its dial.
 const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
@@ -765,7 +770,7 @@ function applySunMessage(d) {
   // 1.5.25 real magnitudes: the floor, the falloff, the colour and the spike gate
   if (Number.isFinite(Number(d.starMin))) uStarMin.value = Math.max(0.5, Math.min(4, Number(d.starMin)));
   if (Number.isFinite(Number(d.starFalloff))) uStarFalloff.value = Math.max(0.04, Math.min(0.5, Number(d.starFalloff)));
-  if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(1.6, Number(d.starColor)));
+  if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(2.2, Number(d.starColor)));
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
   if (typeof d.skyTone === 'string' && SKY_TONES[d.skyTone]) uSkyTone.value.copy(SKY_TONES[d.skyTone]);
   applyStarDials();
@@ -1380,6 +1385,9 @@ function animate(now) {
   lastFrameTime = now;
 
   uTime.value += dt * (REDUCED_MOTION ? 0.12 : 1);
+  // the star quads are billboarded in the shader, so their basis has to follow
+  // the camera every frame, not only when the sky is rebuilt
+  updateStarBillboards();
   // frame-rate independent follow of the requested sea level (see seaGoal)
   uSea.value += (seaGoal - uSea.value) * (1 - Math.exp(-dt / SEA_FOLLOW_TAU));
   controls.update();
@@ -1482,7 +1490,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.28';
+const OCEAN_BUILD = 'lab-1.5.29';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2135,12 +2143,12 @@ const uCrossGlow = uniform(CROSS_GRADES.mid / 100);
 // stars with a real magnitude and colour index, so the sky can show a first
 // magnitude beacon next to a barely-there fifth magnitude smudge.
 const BV_RAMP = [
-  [-0.3, 0.72, 0.82, 1.00],
-  [0.0, 0.90, 0.94, 1.00],
-  [0.4, 1.00, 0.97, 0.92],
-  [0.8, 1.00, 0.90, 0.78],
-  [1.4, 1.00, 0.78, 0.55],
-  [2.0, 1.00, 0.65, 0.42],
+  [-0.3, 0.52, 0.68, 1.00],
+  [0.0, 0.84, 0.91, 1.00],
+  [0.4, 1.00, 0.97, 0.90],
+  [0.8, 1.00, 0.86, 0.64],
+  [1.4, 1.00, 0.64, 0.32],
+  [2.0, 1.00, 0.50, 0.20],
 ];
 
 function writeStarColor(bv, saturation, out, at) {
@@ -2195,84 +2203,85 @@ function createStarLayer(scene) {
   }
   const segmentCount = segments.length;
 
-  const starGlowAttr = new Float32Array(starCount);
-  const starSizeAttr = new Float32Array(starCount);
+  // One camera-facing quad per star now carries the dot, its halo and its
+  // diffraction spikes in a single additive draw. A GPU point sprite is always a
+  // square and PointsNodeMaterial has no texture slot on the node path, so the
+  // round star has to be geometry.
+  const quadCount = starCount * 6;
+  const quadPositions = new Float32Array(quadCount * 3);
+  const quadCorner = new Float32Array(quadCount * 2);
+  const quadExtent = new Float32Array(quadCount);
+  const quadSize = new Float32Array(quadCount);
+  const quadSpike = new Float32Array(quadCount);
+  const quadGlow = new Float32Array(quadCount);
+  const quadPhase = new Float32Array(quadCount);
+  const quadColor = new Float32Array(quadCount * 3);
   const starPhaseAttr = new Float32Array(starCount);
-  const starColorAttr = new Float32Array(starCount * 3);
+  const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
   for (let i = 0; i < starCount; i += 1) {
     starPhaseAttr[i] = Math.random() * Math.PI * 2;
+    for (let v = 0; v < 6; v += 1) {
+      const at = i * 6 + v;
+      quadPhase[at] = starPhaseAttr[i];
+      quadCorner[at * 2 + 0] = CORNERS[v][0];
+      quadCorner[at * 2 + 1] = CORNERS[v][1];
+    }
   }
 
   const starGeometry = new THREE.BufferGeometry();
-  starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 3), 3));
-  starGeometry.setAttribute('aGlow', new THREE.BufferAttribute(starGlowAttr, 1));
-  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(starSizeAttr, 1));
-  starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhaseAttr, 1));
-  starGeometry.setAttribute('aColor', new THREE.BufferAttribute(starColorAttr, 3));
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(quadPositions, 3));
+  starGeometry.setAttribute('aCorner', new THREE.BufferAttribute(quadCorner, 2));
+  starGeometry.setAttribute('aExtent', new THREE.BufferAttribute(quadExtent, 1));
+  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(quadSize, 1));
+  starGeometry.setAttribute('aSpike', new THREE.BufferAttribute(quadSpike, 1));
+  starGeometry.setAttribute('aGlow', new THREE.BufferAttribute(quadGlow, 1));
+  starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(quadPhase, 1));
+  starGeometry.setAttribute('aColor', new THREE.BufferAttribute(quadColor, 3));
 
-  const aGlow = attribute('aGlow', 'float');
+  const corner = attribute('aCorner', 'vec2');
+  const extent = attribute('aExtent', 'float');
   const aSize = attribute('aSize', 'float');
+  const aSpike = attribute('aSpike', 'float');
+  const aGlow = attribute('aGlow', 'float');
   const aPhase = attribute('aPhase', 'float');
   const aColor = attribute('aColor', 'vec3');
   // 1.5 rad/s reads as scintillation; anything faster looks like blinking.
   // 1.5.23: both the rate and the depth are dials now.
   const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(1.5).add(aPhase))
     .mul(uTwinkleAmp).add(float(1).sub(uTwinkleAmp));
-  const starMaterial = new THREE.PointsNodeMaterial({
-    size: 5.4,
-    sizeAttenuation: false,
+
+  const starMaterial = new THREE.MeshBasicNodeMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
   });
-  starMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase);
-  starMaterial.sizeNode = aSize;
-  const stars = new THREE.Points(starGeometry, starMaterial);
+  // billboard: push each corner along the camera's own right/up axes, so the
+  // quad always faces the viewer without any per-frame JS rebuilding.
+  const edgeOffset = uStarRight.mul(corner.x).add(uStarUp.mul(corner.y));
+  starMaterial.positionNode = positionLocal.add(edgeOffset.mul(extent).mul(uStarPxWorld));
+
+  const pxDist = length(corner).mul(extent);
+  // pxDist and aSize are both in pixels: aSize is the disc diameter, so the
+  // bright core fades out over one pixel at the rim instead of stretching into
+  // a soft blob.
+  const radius = aSize.mul(0.5);
+  const core = smoothstep(radius, radius.sub(0.75), pxDist);
+  const halo = smoothstep(aSize.mul(0.95), aSize.mul(0.45), pxDist).mul(uHaloStrength).mul(0.32);
+  // four rays along the quad axes; the length is per star, so only the bright
+  // ones get spikes and the faint ones stay clean dots
+  const spikeOn = smoothstep(float(2.0), float(6.0), aSpike);
+  const axisGap = min(abs(corner.x), abs(corner.y)).mul(extent);
+  const rayCore = smoothstep(float(1.4), float(0.0), axisGap);
+  const reach = smoothstep(aSpike, aSpike.mul(0.12).max(1.0), pxDist);
+  const spikeGlow = rayCore.mul(reach).mul(spikeOn).mul(0.9).mul(uCrossGlow);
+  const shape = core.add(halo).add(spikeGlow).min(1.0);
+  starMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase).mul(shape);
+
+  const stars = new THREE.Mesh(starGeometry, starMaterial);
   stars.frustumCulled = false;
   stars.renderOrder = 2;
   scene.add(stars);
-
-  // A second, larger and much fainter copy: one extra additive draw that reads
-  // as the glow around a star. Without it an additive point is a 1 px dot and
-  // the figure it belongs to never looks like a sky.
-  const haloMaterial = new THREE.PointsNodeMaterial({
-    size: 9,
-    sizeAttenuation: false,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  haloMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uHaloStrength);
-  haloMaterial.sizeNode = aSize.mul(1.67);
-  const halos = new THREE.Points(starGeometry, haloMaterial);
-  halos.frustumCulled = false;
-  halos.renderOrder = 2;
-  scene.add(halos);
-
-
-  // A cross on every constellation vertex: two short segments centred on the
-  // star, built in the camera plane so they never foreshorten. The arms twinkle
-  // out of phase with one another, which is what makes a pin point read as a
-  // star instead of a dash.
-  const crossGeometry = new THREE.BufferGeometry();
-  crossGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 4 * 3), 3));
-  const crossPhase = new Float32Array(starCount * 4);
-  for (let i = 0; i < starCount; i += 1) {
-    for (let k = 0; k < 4; k += 1) crossPhase[i * 4 + k] = starPhaseAttr[i];
-  }
-  crossGeometry.setAttribute('aPhase', new THREE.BufferAttribute(crossPhase, 1));
-  const crossMaterial = new THREE.LineBasicNodeMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  crossMaterial.colorNode = vec3(0.96, 0.98, 1.0)
-    .mul(sin(uTime.mul(2.4).add(attribute('aPhase', 'float'))).mul(0.55).add(0.75))
-    .mul(uStarGlow).mul(uCrossGlow).mul(2.2);
-  const crosses = new THREE.LineSegments(crossGeometry, crossMaterial);
-  crosses.frustumCulled = false;
-  crosses.renderOrder = 3;
-  scene.add(crosses);
 
   // One-pixel GPU lines alias badly on a 1x display: a diagonal leg staircases
   // across the sky. Each leg is therefore drawn as two thin quads that fade from
@@ -2351,7 +2360,7 @@ function createStarLayer(scene) {
 
   const layer = {
     // NOTE: `meteor` is the state machine below, so the Line needs its own key
-    stars, halos, crosses, lines, meteorLine: meteor, meteorHead,
+    stars, lines, meteorLine: meteor, meteorHead,
     starRA, starDec, starMag, starBV,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
@@ -2381,15 +2390,38 @@ function refreshStarArt(layer) {
   const glow = layer.stars.geometry.getAttribute('aGlow');
   const size = layer.stars.geometry.getAttribute('aSize');
   const color = layer.stars.geometry.getAttribute('aColor');
-  const saturation = Math.max(0, Math.min(1.6, uStarColor.value));
+  const spike = layer.stars.geometry.getAttribute('aSpike');
+  const extent = layer.stars.geometry.getAttribute('aExtent');
+  const saturation = Math.max(0, Math.min(2.2, uStarColor.value));
+  const spikeLimit = uStarSpikes.value;
+  const tint = [0, 0, 0];
   for (let i = 0; i < layer.starCount; i += 1) {
-    glow.setX(i, starGlowFor(layer.starMag[i]));
-    size.setX(i, starPixelsFor(layer.starMag[i]));
-    writeStarColor(layer.starBV[i], saturation, color.array, i * 3);
+    const mag = layer.starMag[i];
+    const px = starPixelsFor(mag);
+    // spikes reach a couple of dot diameters past the disc; a faint star keeps
+    // the same quad but with zero spike length, so it renders as a clean dot
+    const ray = mag <= spikeLimit ? Math.max(7, px * 2.4) : 0;
+    // the quad has to cover the halo (1.15 diameters) and the rays; any tighter
+    // and the disc gets clipped into a square.
+    const half = Math.max(px * 0.9, ray * 0.75 + 2);
+    const value = starGlowFor(mag);
+    writeStarColor(layer.starBV[i], saturation, tint, 0);
+    for (let v = 0; v < 6; v += 1) {
+      const at = i * 6 + v;
+      glow.setX(at, value);
+      size.setX(at, px);
+      spike.setX(at, ray);
+      extent.setX(at, half);
+      color.array[at * 3 + 0] = tint[0];
+      color.array[at * 3 + 1] = tint[1];
+      color.array[at * 3 + 2] = tint[2];
+    }
   }
   glow.needsUpdate = true;
   size.needsUpdate = true;
   color.needsUpdate = true;
+  spike.needsUpdate = true;
+  extent.needsUpdate = true;
 }
 
 let lastAltDeg = 0;
@@ -2460,6 +2492,24 @@ const starDirA = new THREE.Vector3();
 const cameraRight = new THREE.Vector3(1, 0, 0);
 const cameraUp = new THREE.Vector3(0, 1, 0);
 
+// The star quads are billboards: the shader needs the camera's own right/up
+// axes and the world size of one screen pixel at the star shell. Stars all sit
+// on the same radius, so one scalar covers every one of them.
+function updateStarBillboards() {
+  if (!boatCamera) return;
+  cameraRight.setFromMatrixColumn(boatCamera.matrixWorld, 0).normalize();
+  cameraUp.setFromMatrixColumn(boatCamera.matrixWorld, 1).normalize();
+  uStarRight.value.copy(cameraRight);
+  uStarUp.value.copy(cameraUp);
+  // Sizes are authored in render-target pixels: the dome is a distant object and
+  // the dots have to stay readable after the adaptive resolution scale kicks in,
+  // which is exactly what the buffer height gives us.
+  const bufferHeight = renderer && renderer.domElement ? renderer.domElement.height : 0;
+  const pixels = bufferHeight > 0 ? bufferHeight : Math.max(240, window.innerHeight || 720);
+  const halfFov = (boatCamera.fov * Math.PI) / 360;
+  uStarPxWorld.value = (2 * STAR_RADIUS * Math.tan(halfFov)) / pixels;
+}
+
 // azimuth 0 faces -z (the camera's forward), altitude is degrees above the horizon
 function skyPoint(azDeg, altDeg, out) {
   const az = azDeg * DEG_TO_RAD;
@@ -2512,39 +2562,13 @@ function updateStarDome(now, dt) {
     refreshStarArt(layer);
     for (let i = 0; i < layer.starCount; i += 1) {
       starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
-      starPositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
+      for (let v = 0; v < 6; v += 1) {
+        starPositions.setXYZ(i * 6 + v, starDirA.x, starDirA.y, starDirA.z);
+      }
     }
     starPositions.needsUpdate = true;
 
-    // arms: +-right and +-up around the star, sized to read as ~4 px on screen
-    // graded arms: a bigger cross for a bolder sky, still built per-star so the
-    // four vertices stay square to the camera
-    const armBase = STAR_RADIUS * 0.0042 * (0.72 + 0.42 * uCrossGlow.value);
-    const spikeLimit = uStarSpikes.value;
-    if (boatCamera) {
-      cameraRight.setFromMatrixColumn(boatCamera.matrixWorld, 0);
-      cameraUp.setFromMatrixColumn(boatCamera.matrixWorld, 1);
-    }
-    const crossPositions = layer.crosses.geometry.getAttribute('position');
-    for (let i = 0; i < layer.starCount; i += 1) {
-      starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
-      // diffraction spikes belong to the bright stars; a 5 mag smudge with a
-      // cross on it is what made the old sky look like a chart instead of a sky
-      const mag = layer.starMag[i];
-      const armLength = mag <= spikeLimit
-        ? armBase * Math.max(0.35, 1.2 - 0.14 * Math.max(0, mag))
-        : 0;
-      const base = i * 4;
-      crossPositions.setXYZ(base + 0, starDirA.x - cameraRight.x * armLength,
-        starDirA.y - cameraRight.y * armLength, starDirA.z - cameraRight.z * armLength);
-      crossPositions.setXYZ(base + 1, starDirA.x + cameraRight.x * armLength,
-        starDirA.y + cameraRight.y * armLength, starDirA.z + cameraRight.z * armLength);
-      crossPositions.setXYZ(base + 2, starDirA.x - cameraUp.x * armLength,
-        starDirA.y - cameraUp.y * armLength, starDirA.z - cameraUp.z * armLength);
-      crossPositions.setXYZ(base + 3, starDirA.x + cameraUp.x * armLength,
-        starDirA.y + cameraUp.y * armLength, starDirA.z + cameraUp.z * armLength);
-    }
-    crossPositions.needsUpdate = true;
+
 
     // Ribbon legs: one soft quad pair per constellation edge. The point list is
     // a polyline, so edge i joins point i to point i + 1 and each point is shared
