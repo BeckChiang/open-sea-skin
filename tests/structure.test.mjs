@@ -146,7 +146,7 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // With the 8 degree pitch the sea only fills the lower third of the frame, so
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
-  assert.ok(source.includes('const base = 18 + (index % 4) * 2.4 + Math.floor(index / 4) * 1.2'), 'berths must stay inside the open water below the chat column')
+  assert.ok(source.includes('const base = 18 + (index % 4) * 1.2 + Math.floor(index / 4) * 0.8'), 'berths must stay inside the open water below the chat column')
   assert.ok(source.includes('boatDummy.scale.setScalar(2.1)'), 'the hull must grow with the berth')
 })
 
@@ -239,8 +239,9 @@ test('hulls roam the whole frame and report where they land', () => {
   // guessed at.
   assert.ok(!clientSource.includes('measureBands'), 'the page must not probe the layout for hulls')
   assert.ok(!source.includes('applyBandsMessage'), 'no layout message may reach the lanes')
-  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight;'), 'lanes sweep the full frame')
+  assert.ok(source.includes('const laneAcross = berth * halfWidth;'), 'each hull keeps its own berth across the open water')
   assert.ok(source.includes('boatSpots.push(['), 'each hull must report its screen position')
   assert.ok(source.includes('boatSpots: boatSpots.slice(0, 6),'), 'the report must reach the state')
+  assert.ok(source.includes('offset: [-0.6, 0, 0.6][index % 3]'), 'three berths must be far apart')
   assert.ok(clientSource.includes('.map((spot) =>'), 'the panel must print the positions')
 })

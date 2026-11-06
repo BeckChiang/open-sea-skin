@@ -1103,7 +1103,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.7';
+const OCEAN_BUILD = 'lab-1.5.8';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1355,7 +1355,7 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   // lower third of the frame and anything nearer than ~30 units sits on the very
   // bottom edge. 3–7 units of lateral swing still leaves room for the approach
   // offset to stay off screen instead of parking a hull at the edge.
-  const base = 18 + (index % 4) * 2.4 + Math.floor(index / 4) * 1.2;
+  const base = 18 + (index % 4) * 1.2 + Math.floor(index / 4) * 0.8;
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
@@ -1374,8 +1374,10 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     // how far out in the visible band a lane rides: the middle of the frame is
     // covered by the conversation column, so a hull parked at x≈0 is drawn but
     // never seen. Lanes live in the left and right thirds instead.
-    band: 0.46 + (index % 3) * 0.08,
-    radiusRight: 4 + ((index * 2.6) % 8),
+    // A fixed lateral berth (left / middle / right of the open water) plus a
+    // small swing: three hulls must read as three boats, not one that moves.
+    offset: [-0.6, 0, 0.6][index % 3],
+    radiusRight: 3 + ((index * 2.6) % 5),
     radiusBack: 2 + ((index * 2.3) % 6),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
@@ -1518,7 +1520,11 @@ function updateBoats(dt) {
     // The whole frame is fair water: a hull may cross behind the chat column,
     // which is what a real sea behind the window would look like. No layout
     // probing, no gaps to dodge.
-    const laneAcross = Math.sin(angle) * lane.radiusRight;
+    // Half the water the camera can see at this depth: the berth is placed as a
+    // fraction of it, so a hull never swings past the frame edge.
+    const halfWidth = Math.max(1, offStage - BOAT_MARGIN);
+    const berth = Math.max(-0.82, Math.min(0.82, lane.offset + Math.sin(angle) * 0.16));
+    const laneAcross = berth * halfWidth;
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
@@ -1767,6 +1773,30 @@ function createStarLayer(scene) {
   halos.renderOrder = 2;
   scene.add(halos);
 
+  // A cross on every constellation vertex: two short segments centred on the
+  // star, built in the camera plane so they never foreshorten. The arms twinkle
+  // out of phase with one another, which is what makes a pin point read as a
+  // star instead of a dash.
+  const crossGeometry = new THREE.BufferGeometry();
+  crossGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 4 * 3), 3));
+  const crossPhase = new Float32Array(starCount * 4);
+  for (let i = 0; i < starCount; i += 1) {
+    for (let k = 0; k < 4; k += 1) crossPhase[i * 4 + k] = starPhaseAttr[i];
+  }
+  crossGeometry.setAttribute('aPhase', new THREE.BufferAttribute(crossPhase, 1));
+  const crossMaterial = new THREE.LineBasicNodeMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  crossMaterial.colorNode = vec3(0.94, 0.97, 1.0)
+    .mul(sin(uTime.mul(2.1).add(attribute('aPhase', 'float'))).mul(0.4).add(0.6))
+    .mul(uStarGlow).mul(1.35);
+  const crosses = new THREE.LineSegments(crossGeometry, crossMaterial);
+  crosses.frustumCulled = false;
+  crosses.renderOrder = 3;
+  scene.add(crosses);
+
   const lineGlowAttr = new Float32Array(segmentCount);
   const lineGeometry = new THREE.BufferGeometry();
   lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 3), 3));
@@ -1802,7 +1832,7 @@ function createStarLayer(scene) {
 
   return {
     // NOTE: `meteor` is the state machine below, so the Line needs its own key
-    stars, halos, lines, meteorLine: meteor,
+    stars, halos, crosses, lines, meteorLine: meteor,
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
@@ -1831,6 +1861,8 @@ function starDirection(raDeg, decDeg, latDeg, lstDeg, out) {
 }
 
 const starDirA = new THREE.Vector3();
+const cameraRight = new THREE.Vector3(1, 0, 0);
+const cameraUp = new THREE.Vector3(0, 1, 0);
 
 function updateStarDome(now, dt) {
   if (!starLayer) return;
@@ -1854,6 +1886,27 @@ function updateStarDome(now, dt) {
       starPositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
     }
     starPositions.needsUpdate = true;
+
+    // arms: +-right and +-up around the star, sized to read as ~4 px on screen
+    const armLength = STAR_RADIUS * 0.0026;
+    if (boatCamera) {
+      cameraRight.setFromMatrixColumn(boatCamera.matrixWorld, 0);
+      cameraUp.setFromMatrixColumn(boatCamera.matrixWorld, 1);
+    }
+    const crossPositions = layer.crosses.geometry.getAttribute('position');
+    for (let i = 0; i < layer.starCount; i += 1) {
+      starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
+      const base = i * 4;
+      crossPositions.setXYZ(base + 0, starDirA.x - cameraRight.x * armLength,
+        starDirA.y - cameraRight.y * armLength, starDirA.z - cameraRight.z * armLength);
+      crossPositions.setXYZ(base + 1, starDirA.x + cameraRight.x * armLength,
+        starDirA.y + cameraRight.y * armLength, starDirA.z + cameraRight.z * armLength);
+      crossPositions.setXYZ(base + 2, starDirA.x - cameraUp.x * armLength,
+        starDirA.y - cameraUp.y * armLength, starDirA.z - cameraUp.z * armLength);
+      crossPositions.setXYZ(base + 3, starDirA.x + cameraUp.x * armLength,
+        starDirA.y + cameraUp.y * armLength, starDirA.z + cameraUp.z * armLength);
+    }
+    crossPositions.needsUpdate = true;
 
     const linePositions = layer.lines.geometry.getAttribute('position');
     for (let i = 0; i < layer.segmentCount; i += 1) {
