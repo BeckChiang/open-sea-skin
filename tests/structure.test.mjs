@@ -90,7 +90,7 @@ test('boats enter and leave across the frame edge, by the nearer side', () => {
   // camera frustum at the boat's own depth.
   assert.ok(source.includes('boatApproachOffset(ahead)'), 'the off-stage offset must be derived from the view')
   assert.equal(source.includes('BOAT_APPROACH'), false, 'no fixed approach distance left behind')
-  assert.ok(source.includes('lane.away = lane.side * offStage'), 'a hull is parked past the edge before it is drawn')
+  assert.ok(source.includes('lane.away = (lane.exitFrom || lane.side) * offStage'), 'a hull is parked past the edge before it is drawn')
   assert.ok(
     source.includes('lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side'),
     'a departure must pick the edge the hull is actually nearer to',
@@ -219,4 +219,15 @@ test('the surface reports its state back to the panel', () => {
   assert.ok(clientSource.includes('return lastOceanState'), 'the posted copy must be the fallback')
   assert.ok(source.includes("type: 'oss-state'"), 'the frame must post its state')
   assert.ok(source.includes('STATE_POST_MS'), 'the report must be throttled')
+})
+
+test('a session switch settles before it reshapes the fleet', () => {
+  // 2026-11-06: flipping through the sidebar posted every intermediate roster,
+  // so hulls were recalled and dropped mid-stride. A switch only counts once the
+  // user rests on it, and a recalled hull re-enters by the edge it left.
+  assert.ok(clientSource.includes('FLEET_SETTLE_MS'), 'the settle window must be named')
+  assert.ok(clientSource.includes('now >= fleetSettleAt'), 'the poll must wait for the switch to settle')
+  assert.ok(!clientSource.includes('fleetAt = 0;\n        void pollFleet();'), 'a switch must not poll immediately')
+  assert.ok(source.includes('lane.exitFrom || lane.side'), 'a recalled hull must re-enter by the edge it left')
+  assert.ok(source.includes('lane.exitFrom = lane.exitSide'), 'the leaving edge must be remembered')
 })

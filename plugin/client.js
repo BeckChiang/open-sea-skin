@@ -638,9 +638,13 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     };
 
     // ---- fleet: one boat per subagent in the open conversation --------------
+    // A switch is only committed after the user rests on a session for this long;
+    // flipping through the sidebar must not reshape the fleet at every stop.
+    const FLEET_SETTLE_MS = 600;
     let fleetInFlight = false;
     let fleetSince = 0;
     let fleetAt = 0;
+    let fleetSettleAt = 0;
 
     const boatOutEl = () => document.getElementById(`${IDS.panel}-${'boat-out'}`);
 
@@ -848,7 +852,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const startFleetEngine = () => {
       stopFleetEngine();
       fleetAt = 0;
-      void pollFleet();
+      fleetSettleAt = performance.now() + FLEET_SETTLE_MS;
     };
 
     // The poll itself is driven from the wave tick (see stepWave): one loop owns
@@ -881,9 +885,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
       const snapshot = readMetrics();
       const sessionId = snapshot ? snapshot.sessionId : null;
-      // The open conversation is what decides the fleet, so watch it here rather
-      // than in a timer that a session switch can strand: one tick loop owns the
-      // page, and switching sessions re-reads the roster immediately.
+      // The open conversation decides the fleet, but only once the user has come
+      // to rest on one: rapid switching would otherwise post every intermediate
+      // roster, and boats still sailing out get yanked back or dropped mid-stride.
       if (sessionId && sessionId !== lastSession) {
         lastSession = sessionId;
         lastTotal = snapshot
@@ -892,9 +896,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         lastAt = now;
         rate = 0;
         fleetAt = 0;
-        void pollFleet();
+        fleetSettleAt = now + FLEET_SETTLE_MS;
       }
-      if (now - fleetAt > 4000) {
+      if (sessionId && now >= fleetSettleAt && now - fleetAt > 4000) {
         fleetAt = now;
         void pollFleet();
       }
@@ -1602,7 +1606,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.3';
+  const SKIN_BUILD = 'lab-1.5.4';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

@@ -1102,7 +1102,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.3';
+const OCEAN_BUILD = 'lab-1.5.4';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1379,6 +1379,8 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     lastAway: 0,
     // which edge the boat left by; 0 = not leaving, pick the nearer side
     exitSide: 0,
+    // remembered after the hull is dropped, so a recall re-enters the same edge
+    exitFrom: 0,
     // false = the hull is outside the frame and is not being drawn at all
     shown: false,
   };
@@ -1511,9 +1513,12 @@ function updateBoats(dt) {
     if (want) {
       if (!lane.shown) {
         // First appearance: park the hull beyond an edge while it is still not
-        // drawn, then let it sail in. Nothing ever pops into the middle.
+        // drawn, then let it sail in. Nothing ever pops into the middle. A hull
+        // that was recalled while it was still leaving comes back from the side
+        // it had already committed to, so the eye does not see it swap edges.
         lane.shown = true;
-        lane.away = lane.side * offStage;
+        lane.away = (lane.exitFrom || lane.side) * offStage;
+        lane.exitFrom = 0;
         lane.lastAway = lane.away;
       }
       lane.exitSide = 0;
@@ -1525,7 +1530,10 @@ function updateBoats(dt) {
       }
       lane.away += (lane.exitSide * offStage - lane.away) * Math.min(1, dt * laneExit);
       if (Math.abs(lane.away) >= offStage - 1) {
-        // Fully outside the frame: dropping the hull here cannot be seen.
+        // Fully outside the frame: dropping the hull here cannot be seen. Keep
+        // the edge it left by, in case the same index is wanted again moments
+        // later (fast session switching does exactly that).
+        lane.exitFrom = lane.exitSide;
         lane.shown = false;
         lane.exitSide = 0;
         lane.away = 0;
