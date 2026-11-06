@@ -20,6 +20,8 @@
 | `lon` | -180–180 | 121.47 | 经度 |
 | `moon` | bool | true | 显示月亮 |
 | `stars` | `off`/`low`/`mid`/`high` | `mid` | 星空密度 |
+| `constellation` | `off`/`low`/`mid`/`high` | `mid` | 真实星座连线的显示强度 |
+| `meteor` | bool | true | 是否出现流星 |
 | `clouds` | `off`/`low`/`mid`/`high` | `mid` | 云量 |
 | `glassMode` | `render` / `css` | `render` | 毛玻璃实现方式 |
 | `colLeft` / `colCenter` / `colRight` | `{on:bool, level:'off'\|'weak'\|'medium'\|'strong'}` | 左 `{true,'weak'}`、中 `{true,'medium'}`、右 `{true,'weak'}` | 分栏玻璃开关与模糊档 |
@@ -48,14 +50,17 @@
   t: 0..100,            // 仅 mode==='manual' 时使用
   moon: boolean,
   stars: 'off'|'low'|'mid'|'high',
+  constellation: 'off'|'low'|'mid'|'high',
+  meteor: boolean,
   clouds: 'off'|'low'|'mid'|'high' }
 ```
 
 - `mode === 'real'`：iframe 每秒按 `Date.now()` + `lat/lon` 重算太阳/月亮，**禁止**再走 720 秒正弦循环。
-- 太阳高度角 `elevDeg` 映射到既有日光值：`t = clamp((elevDeg + 4) / 44, 0, 1) * 100`（elev ≥ 40° 即满日光；≤ -4° 为夜）。
+- **高度角保持真实**：相机固定朝北（略上扬 8°），可见天区约 −20°..34°。`viewAzimuth()` 只折方位（正东→左缘、正西→右缘，±40°）；`viewElevation()` 在 0..16° **原样透传真实高度**，16°..90° 才线性压进 16°..32°，保证太阳/月亮不会钉在顶边、也不会飘出画面。调色板始终用**真实高度**（`skyFromElevation`），所以正午仍是正午。
 - 云量映射到 `uCloudCover`：`off .15 / low .35 / mid .55 / high .80`。
-- 星空强度：`clamp(-elevDeg / 8, 0, 1) * starLevel * (1 - 0.65 * moonBrightness)`；`starLevel` = `off 0 / low .33 / mid .66 / high 1`。
-- 月亮：位置取反日点近似 + 月赤纬近似，相位按朔望周期；`moonBrightness = 相位亮面比例 × 高度可见度`。
+- 星空强度：`starIntensityOf(太阳高度, 档位, 月亮亮度)`；真实星座另受 `constellation` 档位控制（`off 0 / low .5 / mid 1 / high 1.7`，写入 `uConstellation`），`meteor === false` 时不生成流星。
+- 月亮：`shared/solar.js` 的真实月位置与相位；月盘半径 0.018 rad，`uMoonVisible` 门控（亮度 > 0.002 才画），相位由 `uMoonPhaseCos` 决定明暗界线朝向太阳。
+- `__ossState()` 额外回传 `moonAzimuthDeg / moonPhase01 / moonIllum / constellation / meteorEnabled / starOpacity`，供面板「月亮：上弦月，亮面 32%，高度 18°」这类读数与自动化检查使用。
 
 ### 2.3 `oss-glass`（新增）
 
@@ -120,4 +125,6 @@
 
 - `shared/stars-data.js`：d3-celestial 的 88 星座 / 150 折线 / 893 点（BSD-3-Clause），坐标已换成 `[RA 0..360, Dec -90..90]`。
 - `shared/sky-astro.js`：GMST + 球面地平转换 + 顶点去重 + 亮度映射，纯函数。
-- 渲染端 `SECTION 10`：`LineSegments` 画星座连线、`Points` 画顶点恒星，每 5 s 按当前 LST / 纬度重算一次（15°/h ≈ 0.02°/5s，肉眼不可辨）；不透明度 = 星空档位 × 夜间因子 × 月光压制；地平线下的点被推到 y=-6000 自然隐藏。流星是复用的一条 2 点线段，随机间隔 4–13 s、时长 0.55–1.15 s。
+- 渲染端 `SECTION 10`（结构测试称之为 STAR DOME）：`LineSegments` 画星座连线、`Points` 画顶点恒星，每 5 s 按当前 LST / 纬度重算一次（15°/h ≈ 0.02°/5s，肉眼不可辨）；不透明度 = 星空档位 × 夜间因子 × 月光压制；地平线下的点被推到 y=-6000 自然隐藏。流星是复用的一条 2 点线段，随机间隔 4–13 s、时长 0.55–1.15 s。
+- **可调**：星点大小 3.6 px、带 `aGlow/aPhase/aHue`（亮度递增、闪烁、偏暖到偏冷）；连线亮度 = `uStarGlow × uConstellation × 0.55`，`uConstellation` 由设置项 `constellation` 映射（`off 0 / low .5 / mid 1 / high 1.7`），近地平线 14° 内淡出；`meteor: false` 时不再生成流星。
+- **面板读数**：`#…-moon-out` 每拍从 `__ossState()` 读回真实月相与高度，显示「月亮：上弦月，亮面 32%，高度 18°」；在地平线下时明说「现在在地平线下」。

@@ -106,3 +106,22 @@ test('the sun is aimed where the fixed camera can see it', () => {
   assert.ok(source.includes('skyFromElevation(elevationDeg)'), 'the palette still comes from the real elevation')
   assert.ok(source.includes('VIEW_AZ_HALF'), 'the squeeze needs a named span')
 })
+
+test('altitude stays real until it would leave the frame', () => {
+  // Folding the whole 0..90° arc into 1.5..24.5° made every noon look like the
+  // same afternoon. Only the part that does not fit is squeezed now, and the
+  // camera gives up a slice of sea so the upper band is actually visible.
+  assert.ok(source.includes('if (elDeg <= VIEW_EL_REAL_MAX) return elDeg'), 'the real altitude must pass through')
+  assert.ok(source.includes('VIEW_EL_TOP - VIEW_EL_REAL_MAX'), 'only the overflow is compressed')
+  assert.ok(source.includes('camera.rotation.x = 8 * DEG'), 'the frame must tilt up to hold the higher sun')
+})
+
+test('the constellations and the meteors are real settings', () => {
+  // The sky used to be procedural only; it now draws the actual 88 constellations,
+  // so how strongly they read has to be a dial instead of a compile-time constant.
+  assert.ok(source.includes("constellationSetting = d.constellation"), 'the constellation grade must come from settings')
+  assert.ok(source.includes('uConstellation'), 'the line material needs the dial uniform')
+  assert.ok(source.includes('uMoonPhaseCos'), 'the moon disc must be shaped by the real phase')
+  assert.ok(source.includes('&& meteorEnabled'), 'meteors must be switchable off')
+  assert.ok(source.includes('moonPhase01,'), 'the panel needs the phase read back from the sky')
+})

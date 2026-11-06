@@ -70,6 +70,8 @@ let sunLat = NUMBER_QUERY('lat', -90, 90, 31.23);
 let sunLon = NUMBER_QUERY('lon', -180, 180, 121.47);
 let moonEnabled = true;
 let starsSetting = 'mid';
+let constellationSetting = 'mid';
+let meteorEnabled = true;
 let cloudsSetting = 'mid';
 // reported back through window.__ossState()
 let sunElevationDeg = 0;
@@ -78,12 +80,15 @@ let sunAzimuthDeg = 0;
 let sunViewElevationDeg = 0;
 let sunViewAzimuthDeg = 0;
 let moonElevationDeg = 0;
+let moonAzimuthDeg = 0;
+let moonPhase01 = 0;
 let moonBrightness = 0;
 let starsIntensity = 0;
 let cloudCover = cloudCoverOf(cloudsSetting);
 let sunClock = 0;
 
 const SKY_LEVELS = ['off', 'low', 'mid', 'high'];
+const CONSTELLATION_GRADES = Object.freeze({ off: 0, low: 0.5, mid: 1, high: 1.7 });
 
 const GLASS_MAX_RECTS = 3;
 
@@ -246,9 +251,9 @@ const hash31 = Fn(([p]) => fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))).mul(
 
 const STAR_SCALE = 190;        // cells per radian: ~0.3° per cell
 const STAR_SIZE = 0.19;        // cell-space radius of one star
-const MOON_DISC_RADIUS = 0.012; // radians, ~0.7° (a little larger than the real 0.26°)
-const MOON_DISC_IN = 0.99986;
-const MOON_DISC_OUT = 0.99993;
+const MOON_DISC_RADIUS = 0.018; // radians, ~1.0° (a little larger than the real 0.26°)
+const MOON_DISC_IN = 0.99976;
+const MOON_DISC_OUT = 0.99984;
 
 const skyColor = Fn(([dir, cloudMask, astro]) => {
   const d = dir; // Both callers supply a normalized direction.
@@ -265,15 +270,15 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
   If(uMoonVisible.greaterThan(0.002), () => {
     const md = dot(d, uMoonDir);
     const disc = smoothstep(MOON_DISC_IN, MOON_DISC_OUT, md);
-    const halo = pow(max(md, 0), 260).mul(0.05)
-      .add(smoothstep(0.999, 0.99986, md).mul(0.06));
+    const halo = pow(max(md, 0), 260).mul(0.06)
+      .add(smoothstep(0.999, 0.99976, md).mul(0.08));
     // local axis across the disc; computed on the CPU so a moon near the
     // zenith cannot produce a degenerate normalize()
     const mx = dot(d.sub(uMoonDir.mul(md)), uMoonRight).div(MOON_DISC_RADIUS).toVar();
     const lit = smoothstep(-0.22, 0.22, mx.add(uMoonPhaseCos));
     const moonColor = mix(vec3(0.10, 0.12, 0.16), vec3(1, 0.97, 0.9), lit);
     const moonGlow = pow(uMoonVisible, 0.5);
-    col.addAssign(moonColor.mul(disc).mul(moonGlow).mul(2.2));
+    col.addAssign(moonColor.mul(disc).mul(moonGlow).mul(2.9));
     col.addAssign(vec3(0.55, 0.62, 0.78).mul(halo).mul(moonGlow));
   });
 
@@ -403,18 +408,19 @@ const lerp = (a, b, t) => a + (b - a) * t;
 // shared/sky.js). horizonF = 0 deep night, 1 at/above the horizon; dayF = 0 at
 // the horizon, 1 once the sun is 12 deg up. DUSK sits exactly at the horizon so
 // the 1.2.7 sunset look is preserved, and a real NIGHT fills in below -18 deg.
-// The wallpaper is one fixed camera pointing north over the water: it sees about
-// 55° of sky, nothing above roughly 26°, and nothing behind itself. A true
-// compass sky therefore hides the sun for most of the day — it is behind the
-// camera all afternoon and above the frame near noon. The daily arc is folded
-// into that view instead: due east -> left edge, due west -> right edge, and
-// elevation 0..90° -> 1.5..24.5°. The palette still comes from the REAL
-// elevation (see applyElevation), so noon is still noon; only the disc moves.
+// The wallpaper is one fixed camera pointing north over the water. With a slight
+// upward tilt it covers roughly -20°..34° of sky, nothing above that and nothing
+// behind itself. A true compass sky would therefore hide the sun all afternoon
+// (behind the camera) and above the frame near noon. Only the bearing is folded
+// (due east -> left edge, due west -> right edge); the ALTITUDE stays the real one
+// as long as it fits the frame, and only what is left above that is squeezed into
+// the top band. The palette always comes from the real elevation, so noon is still
+// noon and the disc never pins to one edge for hours.
 const VIEW_AZ_MIN = 90;   // due east
 const VIEW_AZ_MAX = 270;  // due west
 const VIEW_AZ_HALF = 40;  // degrees either side of the view axis
-const VIEW_EL_FLOOR = 1.5;
-const VIEW_EL_SCALE = 23 / 90;
+const VIEW_EL_REAL_MAX = 16;  // up to here the altitude is passed through untouched
+const VIEW_EL_TOP = 32;       // where 90° lands: inside the top of the frame
 
 function viewAzimuth(azDeg) {
   const rel = ((azDeg % 360) + 360) % 360;
@@ -423,9 +429,10 @@ function viewAzimuth(azDeg) {
 }
 
 function viewElevation(elDeg) {
-  if (elDeg > 0) return VIEW_EL_FLOOR + Math.min(90, elDeg) * VIEW_EL_SCALE;
-  // below the horizon it drops away quickly, so a set sun is really gone
-  return VIEW_EL_FLOOR + elDeg * 2.5;
+  if (elDeg <= 0) return elDeg;
+  if (elDeg <= VIEW_EL_REAL_MAX) return elDeg;
+  const t = Math.min(1, (elDeg - VIEW_EL_REAL_MAX) / (90 - VIEW_EL_REAL_MAX));
+  return VIEW_EL_REAL_MAX + t * (VIEW_EL_TOP - VIEW_EL_REAL_MAX);
 }
 
 // elevationDeg drives the palette and the stars; the view pair only aims the
@@ -468,11 +475,12 @@ function applyTimeOfDay(t) {
 function syncMoon(now) {
   const moon = moonPosition(new Date(now), sunLat, sunLon);
   moonElevationDeg = moon.elevationDeg;
+  moonAzimuthDeg = moon.azimuthDeg;
+  moonPhase01 = moon.phase01;
   moonBrightness = moonEnabled ? moon.brightness : 0;
   uMoonVisible.value = moonBrightness;
 
-  // same squeeze as the sun: a real azimuth and elevation would put the moon
-  // behind the camera or above the frame for most of the month
+  // same rule as the sun: real altitude while it fits the frame, bearing folded
   const el = viewElevation(moon.elevationDeg) * DEG;
   const az = viewAzimuth(moon.azimuthDeg) * DEG;
   const ce = Math.cos(el);
@@ -526,6 +534,9 @@ function applySunMessage(d) {
   if (Number.isFinite(lon) && lon >= -180 && lon <= 180) sunLon = lon;
   if (typeof d.moon === 'boolean') moonEnabled = d.moon;
   if (SKY_LEVELS.indexOf(d.stars) >= 0) starsSetting = d.stars;
+  if (SKY_LEVELS.indexOf(d.constellation) >= 0) constellationSetting = d.constellation;
+  uConstellation.value = CONSTELLATION_GRADES[constellationSetting] ?? CONSTELLATION_GRADES.mid;
+  if (typeof d.meteor === 'boolean') meteorEnabled = d.meteor;
   if (SKY_LEVELS.indexOf(d.clouds) >= 0) cloudsSetting = d.clouds;
   uCloudCover.value = cloudCoverOf(cloudsSetting);
   cloudCover = uCloudCover.value;
@@ -879,7 +890,12 @@ if (SKIN) {
     sunViewElevationDeg,
     sunViewAzimuthDeg,
     moonElevationDeg,
+    moonAzimuthDeg,
+    moonPhase01,
+    moonIllum: moonBrightness,
     moonBrightness,
+    constellation: constellationSetting,
+    meteorEnabled,
     starsIntensity,
     cloudCover,
     blurRects: glassRectState.map((rect) => ({
@@ -893,7 +909,7 @@ if (SKIN) {
     renderScale,
     reducedMotion: REDUCED_MOTION,
     lowEndDevice: LOW_END_DEVICE,
-    stars: starLayer ? starLayer.starsOpacity : 0,
+    starOpacity: starLayer ? starLayer.starsOpacity : 0,
     meteor: starLayer ? starLayer.meteor.active : false,
     boats: boatShown,
     boatTarget,
@@ -1054,6 +1070,12 @@ async function boot() {
 
     const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 8000);
     camera.position.set(0, 5.5, 17);
+    // Tilted up so the real solar altitude (up to ~32°) fits the frame; the sea
+    // still fills the lower part, it just gives up a slice to the sky.
+    camera.rotation.x = 8 * DEG;
+
+    // The boat lanes measure their off-stage point from this camera's frustum.
+    boatCamera = camera;
 
     // --- ocean --------------------------------------------------------------
     // 256x256 segments instead of 440x440: 66k verts vs 194k (~8 MB less
@@ -1562,6 +1584,8 @@ let starLayer = null;
 // dangling material state behind
 const uStarGlow = uniform(0);
 const uMeteorGlow = uniform(0);
+// how strongly the real constellations are drawn: a settings dial, not a compile flag
+const uConstellation = uniform(CONSTELLATION_GRADES.mid);
 
 function createStarLayer(scene) {
   const vertices = constellationVertices(CONSTELLATION_LINES);
@@ -1609,7 +1633,7 @@ function createStarLayer(scene) {
   // 1.5 rad/s reads as scintillation; anything faster looks like blinking
   const twinkle = sin(uTime.mul(1.5).add(aPhase)).mul(0.3).add(0.7);
   const starMaterial = new THREE.PointsNodeMaterial({
-    size: 3.0,
+    size: 3.6,
     sizeAttenuation: false,
     transparent: true,
     depthWrite: false,
@@ -1631,10 +1655,11 @@ function createStarLayer(scene) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  // Connections must not turn the sky into a wireframe: dim, and faded out
-  // near the horizon where they would fight the sea glow.
-  lineMaterial.colorNode = vec3(0.42, 0.56, 0.84)
-    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(0.3);
+  // Connections must not turn the sky into a wireframe, but they are the only
+  // way to read a constellation, so they carry the setting dial (`uConstellation`)
+  // and still fade out near the horizon where they would fight the sea glow.
+  lineMaterial.colorNode = vec3(0.44, 0.58, 0.86)
+    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(0.55);
   const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -1741,7 +1766,7 @@ function updateStarDome(now, dt) {
     }
   } else {
     uMeteorGlow.value = 0;
-    if (elapsed > meteor.next && layer.starsOpacity > 0.25) {
+    if (elapsed > meteor.next && layer.starsOpacity > 0.25 && meteorEnabled) {
       const startAz = Math.random() * Math.PI * 2;
       const startAlt = (25 + Math.random() * 40) * DEG_TO_RAD;
       const travel = (10 + Math.random() * 16) * DEG_TO_RAD;

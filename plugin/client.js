@@ -37,6 +37,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     lon: 114.31,
     moon: true,
     stars: 'mid',
+    constellation: 'mid',
+    meteor: true,
     clouds: 'mid',
     glassMode: 'render',
     colLeft: Object.freeze({ on: true, level: 'weak' }),
@@ -94,9 +96,16 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       locateFail: '定位失败，请手动填经纬度',
       moon: '显示月亮',
       stars: '星空',
+      constellation: '星座连线',
+      meteor: '流星',
+      moonOut: '月亮：—',
+      moonInfo: '月亮：{name}，亮面 {p}%，高度 {h}°',
+      moonBelow: '月亮：{name}，亮面 {p}%，现在在地平线下',
+      moonOff: '月亮：已关闭',
       clouds: '云量',
-      sunNote: '真实时钟按经纬度计算太阳高度，离线计算，不联网。',
+      sunNote: '按经纬度用真实时钟计算太阳与月亮的位置；高度角尽量保持真实，只有方位折进画面，不联网。',
       realTime: '真实',
+      moonNames: ['新月', '娥眉月', '上弦月', '盈凸月', '满月', '亏凸月', '下弦月', '残月'],
       glassMode: '实现方式',
       perf: '高性能模式',
       glassNote: '渲染器内模糊最省；CSS 模糊更兼容但更吃帧。三栏可分别开关与调强度。',
@@ -149,9 +158,16 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       locateFail: 'Location unavailable, type it manually',
       moon: 'Show moon',
       stars: 'Stars',
+      constellation: 'Constellations',
+      meteor: 'Meteors',
+      moonOut: 'Moon: \u2014',
+      moonInfo: 'Moon: {name}, {p}% lit, {h}\u00b0 up',
+      moonBelow: 'Moon: {name}, {p}% lit, below the horizon',
+      moonOff: 'Moon: off',
       clouds: 'Clouds',
-      sunNote: 'Real time computes the solar altitude from your coordinates, offline.',
+      sunNote: 'Sun and moon come from your coordinates and the real clock; altitude stays true, only the bearing is folded into the frame. Offline.',
       realTime: 'Real',
+      moonNames: ['New moon', 'Waxing crescent', 'First quarter', 'Waxing gibbous', 'Full moon', 'Waning gibbous', 'Last quarter', 'Waning crescent'],
       glassMode: 'Implementation',
       perf: 'Performance mode',
       glassNote: 'In-renderer blur is cheapest; CSS blur is more compatible but costs frames. Each column toggles separately.',
@@ -215,6 +231,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       lon: legacyDefaultLocation(source) ? DEFAULTS.lon : clamp(source.lon, -180, 180, DEFAULTS.lon),
       moon: source.moon !== false,
       stars: GRADE_LEVELS.includes(source.stars) ? source.stars : DEFAULTS.stars,
+      constellation: GRADE_LEVELS.includes(source.constellation) ? source.constellation : DEFAULTS.constellation,
+      meteor: source.meteor !== false,
       clouds: GRADE_LEVELS.includes(source.clouds) ? source.clouds : DEFAULTS.clouds,
       glassMode: source.glassMode === 'css' ? 'css' : 'render',
       colLeft: normalizeColumn(source.colLeft, DEFAULTS.colLeft),
@@ -485,6 +503,8 @@ ${blurCss(state)}`;
         lon: state.lon,
         moon: state.moon,
         stars: state.stars,
+        constellation: state.constellation,
+        meteor: state.meteor,
         clouds: state.clouds,
       });
     };
@@ -545,17 +565,53 @@ ${blurCss(state)}`;
       post({ type: 'oss-fleet', count: shown, off: shown === 0 });
     };
 
+    const readOceanState = () => {
+      try {
+        const win = frame instanceof HTMLIFrameElement ? frame.contentWindow : null;
+        return win && typeof win.__ossState === 'function' ? win.__ossState() : null;
+      } catch {
+        return null;
+      }
+    };
+
     // What the ocean frame says it ended up with. Read back rather than assumed:
     // "the note says three, the sea shows one" is a message-path question, and
     // this is the only way to tell the two sides apart from the panel.
     const readOceanFleet = () => {
-      try {
-        const win = frame instanceof HTMLIFrameElement ? frame.contentWindow : null;
-        const state = win && typeof win.__ossState === 'function' ? win.__ossState() : null;
-        return state ? { target: state.boatTarget, drawn: state.boats } : null;
-      } catch {
-        return null;
+      const state = readOceanState();
+      return state ? { target: state.boatTarget, drawn: state.boats } : null;
+    };
+
+    const phaseName = (phase01) => {
+      const names = copy.moonNames;
+      if (!names || !names.length) return '';
+      const t = ((Number(phase01) || 0) % 1 + 1) % 1;
+      if (t < 0.03 || t > 0.97) return names[0];
+      if (t < 0.22) return names[1];
+      if (t < 0.28) return names[2];
+      if (t < 0.47) return names[3];
+      if (t < 0.53) return names[4];
+      if (t < 0.72) return names[5];
+      if (t < 0.78) return names[6];
+      return names[7];
+    };
+
+    // The moon line is read straight off the frame, so it reports what the sky
+    // really shows instead of what the settings say it should.
+    const refreshMoonReadout = () => {
+      const el = document.getElementById(pid('moon-out'));
+      if (!el) return;
+      const ocean = readOceanState();
+      if (!ocean || typeof ocean.moonIllum !== 'number') return;
+      if (!state.moon) {
+        el.textContent = copy.moonOff;
+        return;
       }
+      const lit = Math.round(Math.max(0, Math.min(1, ocean.moonIllum)) * 100);
+      const height = Math.round(Number(ocean.moonElevationDeg) || 0);
+      const name = phaseName(ocean.moonPhase01);
+      if (height <= 0) el.textContent = copy.moonBelow.replace('{name}', name).replace('{p}', String(lit));
+      else el.textContent = copy.moonInfo.replace('{name}', name).replace('{p}', String(lit)).replace('{h}', String(height));
     };
 
     const setBoatNote = (text) => {
@@ -663,6 +719,7 @@ ${blurCss(state)}`;
         fleetAt = now;
         void pollFleet();
       }
+      refreshMoonReadout();
 
       if (state.waveMode === 'manual') {
         rate = 0;
@@ -850,7 +907,10 @@ ${blurCss(state)}`;
           <div class="oss-row"><button type="button" class="oss-mini oss-locate" id="${pid('locate')}" data-copy="locate"></button><span class="oss-sub oss-locate-out" id="${pid('locate-out')}"></span></div>
           ${switchRow(pid('moon'), 'moon')}
           ${segRow(pid('stars'), 'stars', gradeOptions)}
+          ${segRow(pid('constellation'), 'constellation', gradeOptions)}
+          ${switchRow(pid('meteor'), 'meteor')}
           ${segRow(pid('clouds'), 'clouds', gradeOptions)}
+          <p class="oss-sub" id="${pid('moon-out')}" data-copy="moonOut"></p>
           <p class="oss-sub" data-copy="sunNote"></p>
         </div>
         <div class="oss-sec">
@@ -901,6 +961,7 @@ ${blurCss(state)}`;
       const segWave = seg('wave-mode');
       const segSun = seg('sun-mode');
       const segStars = seg('stars');
+      const segConstellation = seg('constellation');
       const segClouds = seg('clouds');
       const segGlassMode = seg('glass-mode');
       const columns = {
@@ -926,10 +987,13 @@ ${blurCss(state)}`;
         enabledBox.checked = state.enabled;
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
+        const meteorBox = panel.querySelector(`#${pid('meteor')}`);
+        if (meteorBox) meteorBox.checked = state.meteor;
         if (boatsBox) boatsBox.checked = state.boats;
         setSeg(segWave, state.waveMode);
         setSeg(segSun, state.sunMode);
         setSeg(segStars, state.stars);
+        setSeg(segConstellation, state.constellation);
         setSeg(segClouds, state.clouds);
         setSeg(segGlassMode, state.glassMode);
         for (const [key, entry] of Object.entries(columns)) {
@@ -1080,6 +1144,7 @@ ${blurCss(state)}`;
             case pid('wave-mode'): return { waveMode: value };
             case pid('sun-mode'): return { sunMode: value };
             case pid('stars'): return { stars: value };
+            case pid('constellation'): return { constellation: value };
             case pid('clouds'): return { clouds: value };
             case pid('glass-mode'): return { glassMode: value };
             case pid('col-left-level'): return { colLeft: { ...state.colLeft, level: value } };
@@ -1111,7 +1176,15 @@ ${blurCss(state)}`;
       on(moonBox, 'change', () => {
         void save({ moon: moonBox.checked });
         postSun();
+        refreshMoonReadout();
       });
+      const meteorBox = panel.querySelector(`#${pid('meteor')}`);
+      if (meteorBox) {
+        on(meteorBox, 'change', () => {
+          void save({ meteor: meteorBox.checked });
+          postSun();
+        });
+      }
       on(boatsBox, 'change', () => {
         void save({ boats: boatsBox.checked });
         if (!boatsBox.checked) postFleet(0);
@@ -1258,6 +1331,8 @@ ${blurCss(state)}`;
     lon: 'ossLon',
     moon: 'ossMoon',
     stars: 'ossStars',
+    constellation: 'ossConstellation',
+    meteor: 'ossMeteor',
     clouds: 'ossClouds',
     glassMode: 'ossGlassMode',
     colLeft: 'ossColLeft',
@@ -1267,9 +1342,9 @@ ${blurCss(state)}`;
     boats: 'ossBoats',
   });
 
-  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'perf', 'boats']);
+  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
-  const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'clouds', 'glassMode']);
+  const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'constellation', 'clouds', 'glassMode']);
 
   function readSetting(key, fallback) {
     try {
