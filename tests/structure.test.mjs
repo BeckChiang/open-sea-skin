@@ -132,3 +132,38 @@ test('the constellations and the meteors are real settings', () => {
   assert.ok(source.includes('&& meteorEnabled'), 'meteors must be switchable off')
   assert.ok(source.includes('moonPhase01,'), 'the panel needs the phase read back from the sky')
 })
+
+// --- 2026-11-06 evening round ------------------------------------------------
+// Three separate regressions, each with a shape that is easy to reintroduce.
+
+const clientSource = readFileSync(join(here, '..', 'plugin', 'client.js'), 'utf8')
+
+test('lane berths sit under the horizon, not on the bottom edge', () => {
+  // With the 8 degree pitch the sea only fills the lower third of the frame, so
+  // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
+  // are too close to the bottom". Berths moved out and the hull grew to match.
+  assert.ok(source.includes('const base = 36 + ((index * 5.3) % 16)'), 'berths must be 36-52 units out')
+  assert.ok(source.includes('boatDummy.scale.setScalar(3.2)'), 'the hull must grow with the berth')
+})
+
+test('boats off is the switch, not a zero count', () => {
+  // count 0 used to be posted as `off`, so a session without subagents lost even
+  // the one hull the copy promises.
+  assert.ok(
+    clientSource.includes('const shown = enabled ? Math.max(1, count) : 0;'),
+    'a zero count must still keep the base boat',
+  )
+  assert.ok(clientSource.includes('off: !enabled'), 'only the switch may turn the fleet off')
+})
+
+test('the translucent tokens stay inside #root so body portals stay opaque', () => {
+  // Hover cards, tooltips and dialogs are body-level portals. While the tokens sat
+  // on body they inherited the glass fill and the "changed files" preview became
+  // unreadable glass.
+  assert.ok(clientSource.includes('body #root,'), 'the glass tokens must be scoped to #root')
+  assert.ok(
+    !/body \{\s*background: transparent !important;\s*--dsw-alias-bg-base/s.test(clientSource),
+    'the tokens must not be declared on body again',
+  )
+  assert.ok(!clientSource.includes('data-hovercard-bridge'), 'no per-portal patch: the scope fix covers all of them')
+})

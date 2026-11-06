@@ -94,6 +94,8 @@
 - `glassMode === 'css'`：按栏输出 `backdrop-filter: blur(<px>) saturate(1.1..1.3)` 与半透明底色；`render` 模式**不得**输出 backdrop-filter。
 - 两栏/三栏的选择器沿用 1.2.7 已有语义标记（`[data-slot="sidebar"]`、`[data-slot="main.conversation"]`、`[data-rightbar-col]`、`.dshDesktopSidebarSurface` 等），不要新增 CSS-module 哈希。
 - 分区遮罩与 `rects` 必须同源：rect 由父页对同一选择器做 `getBoundingClientRect()` 得到，避免「模糊位置」与「半透明区域」错位。
+- **半透明 token 只能覆写在 `#root` 上，不能覆写在 `body` 上**：悬停预览卡（「已编辑 N 个文件」）、tooltip、dialog 都是 `document.body` 的 portal，挂在 `body` 上会让它们继承玻璃底色，内容直接透出页面、无法阅读。写成 `body #root, body:not(:has(#root)) { --dsw-alias-bg-*: … }`：`#root` 内是玻璃，`#root` 外的 portal 保留主题原本的不透明色。禁止再针对单个 portal 打补丁（`data-hovercard-bridge` 之类）。
+- 主题判定以 `body[data-ds-dark-theme]` 为准（app 自身 CSS 用的就是它），面板的浅色规则写成 `body:not([data-ds-dark-theme]) #<panel> …` 并且必须排在深色规则之后（同特异性靠后取胜）。
 
 ## 4 · 船（oss-fleet）
 
@@ -112,14 +114,15 @@
 - 判定方法：`subagentCatalog` 条目只有 `{id, createdAt, mode, label?}`，**没有 running 字段**；而 team members 里包含父智能体自己。所以逐个 `sessionQuery.observeSession(childId, { projectionMode: 'all' })`，读 `projections.values.subagentTiming.active`——有 open turn 就是 running，`lastTurnCompleted` 后就不是。每个 child 结果缓存 2.5 s（轮询间隔 4 s），observation 用 `Symbol.asyncDispose`/`Symbol.dispose` 释放；最多观察 24 个 child。
 - `members` 只作为诊断字段保留，不参与计数（否则父智能体永远贡献一艘幽灵船）。
 - 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
-- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe，`count` = `children.length`（clamp 0..12，渲染端再按 `BOAT_BASE`/`BOAT_MAX` 收边）；`sessionId` 一变立即重拉，不用等下一轮。宿主返回的是旧形状（没有 `children`）时，面板显示「宿主半是旧版本，需要重启」提示。
-- 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base = 15 + ((i*7.3) % 11)` 即 15–25、`radiusRight = 3 + ((i*1.3) % 4)`、`radiusBack = 1.5 + ((i*1.1) % 2)`、角速度 0.10–0.19 rad/s 即静水下一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
+- 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe，`count` = `children.length`（clamp 0..12，渲染端再按 `BOAT_BASE`/`BOAT_MAX` 收边）；**`off` 只表示「船」开关关闭，不能用 `count === 0` 代替**——否则没有子智能体的会话会连保底的那一艘都消失；`sessionId` 一变立即重拉，不用等下一轮。宿主返回的是旧形状（没有 `children`）时，面板显示「宿主半是旧版本，需要重启」提示。
+- 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base = 36 + ((i*5.3) % 16)` 即 36–52（相机上扬 8° 后海面只占画面下三分之一，近于 30 单位的泊位会贴着底边，故整体外推、船体缩放同步放大到 3.2）、`radiusRight = 3 + ((i*1.3) % 4)`、`radiusBack = 1.5 + ((i*1.1) % 2)`、角速度 0.10–0.19 rad/s 即静水下一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
 - **进出场只靠横向位移，不用缩放**（缩放会「凭空冒出/凭空消失」）：每艘船有一个带符号的横向偏移 `lane.away`——巡航时为 0，出场时等于 `±offStage`。`offStage = boatApproachOffset(ahead) = |ahead| * tan(fov/2) * aspect + BOAT_MARGIN(6)`，即**按相机视锥在该深度的半宽算**，所以入场点是画面左/右边缘外侧一点，宽窗口下也不会「直接出现在中间」。
   - 入场：船被需要而 `lane.shown === false` 时，先把它停在 `lane.side * offStage`（此时还没被绘制），再按 `BOAT_ENTER_RATE = 0.95 /s × (0.85 + (i%4)*0.1)` 指数逼近 0，于是它是**从一侧边缘横着驶入**。
   - 出场：`lane.exitSide` 在开始离开的那一刻按 `Math.sign(laneAcross + lane.away)` 取**离船最近的一侧**（而不是入场时分配的那侧），按 `BOAT_EXIT_RATE = 0.72 /s × (0.8 + (i%3)*0.1)` 驶出；只有当 `|lane.away| >= offStage - 1`（已在画面外）才 `lane.shown = false` 丢弃该实例，所以消失永远发生在画面之外。
   - 朝向把横向速度算进航向：`awaySpeed = (away - lastAway) / dt`，`vx/vz` 各加 `boatRight * awaySpeed`，来船船头朝你、离船船头朝外，不会横着平移。
 - **会话切换以新会话为准，且允许过渡**：`boatTarget` 一变，多出来的船按上面的出场规则驶离，缺的船从边缘驶入；若某艘船还没完全离开就又变回需要的状态，它只是从当前位置被拉回航道（`lane.away` 连续，不重置），不会瞬移。
 - **速度来自浪，不来自秒表**：轨道角是逐帧积分 `lane.angle += dt * lane.speed * cruise * lane.surge`，不是 `phase + time * speed`。`cruise = 0.65 + 0.95 * seaNorm`（`seaNorm = (uSea-0.25)/1.5`，静水慢、大浪快）；`surge` 由船头前方 2.4 单位处的水面高差（`BOAT_PROBE`）算出——下坡加速、上坡减速，钳在 0.7–1.5 并按 3/s 平滑（避免小碎浪抖速度）。所以浪高变化时船速真会跟着变，而不是恒速绕圈。
+- **保底一艘**：`postFleet` 发包时 `Math.max(1, count)`，`off` 才是关船；两者不能混（面板文案承诺「没有子智能体时保留 1 艘」）。
 - **每次轮询都发，不做去重**：iframe 帧每次加载都从 `BOAT_BASE`（1 艘）起步，也可能被重载，所以数字没变也必须发；只发变化量会让海面一直停在它出生时的数量上。
 - **轮询挂在波浪 tick 上**：`stepWave`（250 ms）里每 4 s `void pollFleet()`，会话 id 一变立刻重取一次。船数不靠独立 `setInterval`——切会话时界面重挂载容易把单独的定时器留在旧会话上，而波浪 tick 是页面唯一常驻的循环。
 - **指标桥在渲染期写入**：`Bridge` 组件不做 `useEffect` 延迟，直接在下发时 `metricsStore.push(...)`，保证切会话后的第一拍就拿得到新 `sessionId`。

@@ -1303,10 +1303,12 @@ function boatApproachOffset(ahead) {
 // camera and points along the tangent, so it never turns around on the spot.
 const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   const spread = index / (BOAT_MAX - 1);
-  // 15–25 units ahead keeps every lane inside the frame even at a narrow window;
-  // 3–7 units of lateral swing leaves room for the ~26 unit approach offset to
-  // stay off screen instead of parking a hull at the very edge.
-  const base = 15 + ((index * 7.3) % 11);
+  // 36–52 units ahead keeps the hulls in the upper band of the sea, just under
+  // the horizon. The camera now pitches 8 degrees up, so the water only fills the
+  // lower third of the frame and anything nearer than ~30 units sits on the very
+  // bottom edge. 3–7 units of lateral swing still leaves room for the approach
+  // offset to stay off screen instead of parking a hull at the edge.
+  const base = 36 + ((index * 5.3) % 16);
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
@@ -1582,7 +1584,10 @@ function updateBoats(dt) {
     boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
     // Perspective already shrinks a boat out on the approach, and a hull is only
     // ever removed once it is past the frame edge, so the scale stays constant.
-    boatDummy.scale.setScalar(2.2);
+    // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
+    // size as before, at a berth that reads as further out to sea instead of
+    // hugging the bottom edge.
+    boatDummy.scale.setScalar(3.2);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);

@@ -288,9 +288,17 @@ ${column('body [data-rightbar-col], body .dshDesktopDetailsSurface', 'colRight')
     const light = glass / 100;
     const dark = Math.max(0.40, light - 0.12);
     return `
-/* Open Sea Skin: one translucent shell; nested fills must not compound. */
+/* Open Sea Skin: one translucent shell; nested fills must not compound.
+   The tokens are scoped to #root rather than body on purpose. Hover cards,
+   tooltips and dialogs are body-level portals: with the translucent tokens on
+   body they inherited them and turned into glass you could read the page
+   through (the "changed files" preview was the worst case). Outside #root they
+   now keep whatever the theme itself paints, which is opaque in both modes. */
 body {
   background: transparent !important;
+}
+body #root,
+body:not(:has(#root)) {
   --dsw-alias-bg-base: rgba(255, 255, 255, ${alpha(light)}) !important;
   --dsw-alias-bg-layer-1: rgba(255, 255, 255, ${alpha(light)}) !important;
   --dsw-alias-bg-layer-2: rgba(255, 255, 255, ${alpha(light)}) !important;
@@ -301,7 +309,8 @@ body {
   --dsw-specific-sidebar-fill: rgba(249, 250, 251, ${alpha(Math.max(0.36, light - 0.04))}) !important;
   --dsw-specific-selector: rgba(245, 246, 247, ${alpha(light + 0.02)}) !important;
 }
-body[data-ds-dark-theme] {
+body[data-ds-dark-theme] #root,
+body[data-ds-dark-theme]:not(:has(#root)) {
   --dsw-alias-bg-base: rgba(9, 12, 16, ${alpha(dark)}) !important;
   --dsw-alias-bg-layer-1: rgba(12, 16, 22, ${alpha(dark)}) !important;
   --dsw-alias-bg-layer-2: rgba(16, 20, 27, ${alpha(dark)}) !important;
@@ -375,24 +384,6 @@ body :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]
 }
 body[data-ds-dark-theme] :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]):not(#${IDS.panel}) {
   background: rgba(24, 28, 35, .97) !important;
-}
-/* Hover previews (the changed-file card that opens on hover, and tooltips) are
-   body portals that paint themselves with the same tokens. With our translucent
-   tokens they turned into glass you could read the page through. Stack the token
-   over an opaque base: the theme tint survives, nothing shows through. */
-body span:has(> [data-hovercard-bridge]) > div,
-body [role="tooltip"] {
-  background-color: #0c1118 !important;
-  background-image: linear-gradient(
-    var(--dsw-alias-bg-layer-1, rgba(255, 255, 255, .06)),
-    var(--dsw-alias-bg-layer-1, rgba(255, 255, 255, .06))
-  ) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-body:not([data-ds-dark-theme]) span:has(> [data-hovercard-bridge]) > div,
-body:not([data-ds-dark-theme]) [role="tooltip"] {
-  background-color: #fbfcfe !important;
 }
 /* Legacy Harness builds: these CSS-module hashes are best-effort fallbacks. */
 .wSkVaW_root,
@@ -624,11 +615,15 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
     const boatOutEl = () => document.getElementById(`${IDS.panel}-${'boat-out'}`);
 
     const postFleet = (count) => {
-      const shown = state.boats && state.enabled ? count : 0;
+      // One hull stays out even when the session has no subagents (the copy says
+      // so), so "off" must mean the switch alone — otherwise 0 would be posted as
+      // "boats off" and the base boat would vanish with the note still promising it.
+      const enabled = !!(state.boats && state.enabled);
+      const shown = enabled ? Math.max(1, count) : 0;
       // Posted on every poll, not only on change: the ocean frame starts at one
       // boat and can be reloaded under us, so an unchanged number still has to
       // reach it or the surface keeps the count it was born with.
-      post({ type: 'oss-fleet', count: shown, off: shown === 0 });
+      post({ type: 'oss-fleet', count: shown, off: !enabled });
     };
 
     const readOceanState = () => {
@@ -743,7 +738,8 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
         // would silently sit at one boat forever. Say it instead of guessing.
         const hostFresh = !!(data && data.services && data.services.sessionQuery === true);
         const ocean = readOceanFleet();
-        const suffix = ocean ? `（海面 ${ocean.drawn}/${ocean.target}）` : '';
+        const sessionTag = sessionId ? `会话 ${String(sessionId).slice(-6)} · ` : '';
+        const suffix = ocean ? `（${sessionTag}海面 ${ocean.drawn}/${ocean.target}）` : '';
         if (data && data.ok === true) {
           if (!hostFresh) setBoatNote(copy.boatStale);
           else if (count > 0) setBoatNote(copy.boatCount.replace('{n}', String(count)).replace('{m}', String(running)) + suffix);
