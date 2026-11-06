@@ -336,6 +336,8 @@ test('the panel is one searchable set of collapsible groups', () => {
   }
   assert.ok(!clientSource.includes("pid('col-left-level')"), 'the four-step column button must be gone')
   assert.ok(clientSource.includes("setRowVisible(el('tz-offset'), state.tzMode === 'manual')"), 'the offset slider follows the clock mode')
+  assert.ok(clientSource.includes('const titleHit'), 'searching a group title must keep that group open')
+  assert.ok(clientSource.includes('data-open0'), 'clearing the search must restore the groups as they were built')
 })
 
 test('the surface takes every new dial instead of a fixed look', () => {

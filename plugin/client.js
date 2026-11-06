@@ -1336,7 +1336,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // One slider per column: the shared radius times this column's share.
       const colRow = (id, key) => `<div class="oss-col" id="${id}"><div class="oss-col-head"><label for="${id}-on" data-copy="${key}"></label><input type="checkbox" id="${id}-on" /></div><div class="oss-head"><span data-copy="colStrength"></span><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}-strength" min="0" max="100" step="1" /></div>`;
       // Collapsible group: eleven of them do not fit on one screen unfolded.
-      const group = (key, rows, open) => `<details class="oss-sec"${open ? ' open' : ''}><summary class="oss-caption" data-copy="${key}"></summary>${rows}</details>`;
+      const group = (key, rows, open) => `<details class="oss-sec"${open ? ' open' : ''} data-open0="${open ? '1' : '0'}"><summary class="oss-caption" data-copy="${key}"></summary>${rows}</details>`;
 
       panel.innerHTML = `
         <div class="oss-title"><span>OPEN SEA <span class="oss-mark">·</span> SKIN</span><button class="oss-close" type="button" aria-label="${copy.close}">×</button></div>
@@ -1743,14 +1743,24 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         on(searchBox, 'input', () => {
           const needle = searchBox.value.trim().toLowerCase();
           for (const section of panel.querySelectorAll('.oss-sec')) {
+            // a hit on the group's own title keeps every row of that group
+            const caption = section.querySelector('.oss-caption');
+            const titleHit = Boolean(needle) && Boolean(caption) && caption.textContent.toLowerCase().includes(needle);
             let hits = 0;
             for (const item of section.querySelectorAll('.oss-row, .oss-inline, .oss-col')) {
-              const match = !needle || item.textContent.toLowerCase().includes(needle);
+              const match = !needle || titleHit || item.textContent.toLowerCase().includes(needle);
               item.hidden = !match;
               if (match) hits += 1;
             }
-            if (needle) section.open = true;
-            section.hidden = Boolean(needle) && hits === 0;
+            // searching opens whatever it found; clearing restores the built shape
+            section.open = needle ? true : section.dataset.open0 === '1';
+            section.hidden = Boolean(needle) && !titleHit && hits === 0;
+          }
+          // the mode-gated rows are hidden for their own reasons, not for search
+          if (!needle) {
+            setRowVisible(el('sea-range'), state.waveMode === 'manual');
+            setRowVisible(el('time-range'), state.sunMode === 'manual');
+            setRowVisible(el('tz-offset'), state.tzMode === 'manual');
           }
         });
       }

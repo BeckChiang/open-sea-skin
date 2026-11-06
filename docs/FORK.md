@@ -73,3 +73,10 @@ node tests/fleet.test.mjs                # /fleet 计数口径 5 个用例
 - **船数对齐顶部栏**：顶部栏用 `runningSubagentCount`，判据是子会话「有未结束的 turn」。而 `subagents.listChildren()` 返回的 catalog 条目只有 `{id, createdAt, mode, label?}`，没有 running 字段；`agentTeams.listMembers()` 里还含父智能体自己。旧的实现把两者混着数，结果永远是 1 艘幽灵船。现在逐个 `sessionQuery.observeSession(childId, { projectionMode: 'all' })` 读 `subagentTiming.active`，members 只当诊断字段。改这个文件要**完全重启桌面端**。
 - **夜海发雾**：夜里海面加过两项平坦亮色（0.55 的星光项 + 写死亮灰的浪花），浪一起来就糊成一层奶白。星光项改成掠射角项 `grazing = (1 - N·V)^2`，浪花色改为 `vec3(0.82,0.88,0.90) * (uSkyLight*0.78 + 0.16)`，白天的观感不变、夜里跟着天光变暗。
 - **船不再飘走**：原来每艘船有固定的世界坐标 berth，镜头一转就出画。现在船沿相机前侧的可见带巡航，到边缘折返，两轮分离避碰。
+
+## 全天连续的天色与穹顶投影（2026-11-06，1.5.23）
+
+- **十五个小时长得一样**：`skyFromElevation` 把 DAY 钳在 +12°、NIGHT 钳在 −18°，两段 smoothstep 之间只有 9 小时的窗口；实测 08:00–16:00 `skyLight` 恒为 1、天顶恒为 DAY 色，深度夜间一小时色板距离 0.000000。现在白昼混合区间拉到 0…90°，`skyLight` 是单条 `smoothstep01(-18,12,el)` 曲线，夜色里补了月光散射、气辉与银河底色；实测单分钟最大色板跳变 0.024（只出现在真实日出那一刻），夜间每小时都有可见位移。`tests/sky.test.mjs` 用「0.25° 步长 < 0.03」「20°→35° 与 −25°→−60° 都必须有变化」守住。
+- **压缩天空时的生硬**：旧做法把星方向朝视轴 slerp，星座整体缩小、地平线附近抬升，而着色器里的程序化星场不参与压缩，2.0× 时两层会互相滑动。现在几何用 `r = 2tan(θ/2)` 的立体投影（保角）到 `θ' = 2atan(tan(θ/2)/fold)`，`fold = 1 + (skyZoom−1)·domeAmount`；着色器里的星场按同一映射**反向展开**（`tan(θ'/2)·fold`）再取 hash，两层同步。
+- **面板**：5 组 → 11 组 `<details>` + 搜索；旧的 `off/low/mid/high` 枚举换成 0–100 或物理量的滑杆，`RANGE_ROWS` 一张表同时驱动模板、回填、事件与格式化，避免三处各写一遍。
+
