@@ -53,10 +53,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     skyTone: 'real',
     // stars: brightness, art, haze
     stars: 100,
-    starSize: 5.4,
-    starMin: 1.4,
+    starSize: 7.4,
+    starMin: 2.0,
     starFalloff: 0.16,
-    starColor: 1,
+    starColor: 1.35,
     starSpikes: 1.6,
     starBase: 1,
     starHalo: 0.28,
@@ -83,10 +83,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   fps: 30,
     glow: 55,
     glassMode: 'render',
-    glassRadius: 14,
-    colLeft: Object.freeze({ on: true, strength: 40 }),
-    colCenter: Object.freeze({ on: true, strength: 60 }),
-    colRight: Object.freeze({ on: true, strength: 40 }),
+    glassRadius: 20,
+    colLeft: Object.freeze({ on: true, strength: 28 }),
+    colCenter: Object.freeze({ on: true, strength: 46 }),
+    colRight: Object.freeze({ on: true, strength: 28 }),
     perf: false,
     boats: true,
     boatSpread: 2,
@@ -1417,7 +1417,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           <p class="oss-sub" id="${pid('sun-out')}" data-copy="sunOut"></p>
           <p class="oss-sub" id="${pid('moon-out')}" data-copy="moonOut"></p>
           <p class="oss-sub" id="${pid('twilight-out')}"></p>
-          <p class="oss-sub" data-copy="sunNote"></p>`, true)}
+          <p class="oss-sub" data-copy="sunNote"></p>`)}
         ${group('secStars', `
           ${rangeRow(pid('sky-dist'), 'skyDist', 0.6, 3, 0.05)}
           ${rangeRow(pid('dome-amount'), 'domeAmount', 0, 1, 0.01)}
@@ -2087,7 +2087,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.27';
+  const SKIN_BUILD = 'lab-1.5.28';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

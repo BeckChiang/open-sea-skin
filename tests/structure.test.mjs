@@ -28,7 +28,12 @@ const previousCodeLine = (bannerIndex) => {
 }
 
 for (const banner of ['SECTION 10 · FLEET', 'SECTION 11 · STAR DOME']) {
-  test(`${banner} starts at module scope, not inside boot()`, () => {
+  test('the sky section is closed by default and folds against the horizon', () => {
+  assert.ok(!clientSource.includes('data-copy="sunNote"></p>`, true)'), 'no section opens itself')
+  assert.ok(source.includes('skyAxis.y = 0;'), 'the fold axis sits on the horizon, not on the view axis')
+})
+
+test(`${banner} starts at module scope, not inside boot()`, () => {
     const at = indexOf(banner)
     assert.ok(at > 0, `${banner} banner must exist`)
     assert.equal(lines[at - 1].trim().startsWith('//'), true, 'banner must sit inside its own rule')

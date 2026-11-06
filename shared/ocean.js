@@ -165,8 +165,8 @@ const uCloudSpeed = uniform(1);
 const uCloudOpacity = uniform(1);
 
 // Star art dials (1.5.23): every one is continuous, so the panel never snaps.
-const uStarSize = uniform(5.4);
-const uStarBase = uniform(1);
+const uStarSize = uniform(7.4);
+const uStarBase = uniform(0.82);
 const uStarHaze = uniform(1);
 const uHaloStrength = uniform(0.28);
 const uLineWidth = uniform(1);
@@ -176,9 +176,9 @@ const uTwinkleAmp = uniform(0.3);
 // Real magnitudes (1.5.25): the size floor, how fast size falls off with
 // magnitude, the colour saturation, and the magnitude below which a star gets
 // diffraction spikes instead of a plain point.
-const uStarMin = uniform(1.4);
+const uStarMin = uniform(2.0);
 const uStarFalloff = uniform(0.16);
-const uStarColor = uniform(1);
+const uStarColor = uniform(1.35);
 const uStarSpikes = uniform(1.6);
 // Milky Way band: normal of the galactic plane in world space, plus its dial.
 const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
@@ -329,6 +329,13 @@ const MOON_DISC_RADIUS = 0.018; // radians, ~1.0° (a little larger than the rea
 const MOON_DISC_IN = 0.99976;
 const MOON_DISC_OUT = 0.99984;
 
+const skyReflect = Fn(([dir]) => {
+  const up = max(dir.y, 0);
+  const base = mix(uHorizonColor, uZenithColor, pow(up, 0.42));
+  const glint = pow(max(dot(dir, uSunDir), 0), 18).mul(0.16);
+  return base.add(uSunColor.mul(glint));
+});
+
 const skyColor = Fn(([dir, cloudMask, astro]) => {
   const d = dir; // Both callers supply a normalized direction.
   const up = clamp(d.y, -0.15, 1);
@@ -399,9 +406,26 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     const hx = hash31(cell);
     const hy = hash31(cell.add(vec3(19.3, 7.7, 41.1)));
     const hg = hash31(cell.add(vec3(53.1, 29.9, 11.7)));
-    const dist = length(local.xy.sub(vec2(hx, hy).sub(0.5).mul(0.62)));
-    const core = float(1).sub(smoothstep(0, STAR_SIZE, dist));
-    const gate = smoothstep(0.972, 0.9985, hg);
+    const hs = hash31(cell.add(vec3(71.9, 3.3, 88.1)));
+    const hb = hash31(cell.add(vec3(5.7, 61.3, 23.9)));
+    // a second, coarser layer fills the gaps the grid leaves behind
+    const p2 = unfolded.mul(STAR_SCALE * 0.61).add(vec3(0.37, 0.11, 0.73));
+    const cell2 = floor(p2);
+    const local2 = fract(p2).sub(0.5);
+    const jx = hash31(cell2.add(vec3(11.1, 43.7, 5.9)));
+    const jy = hash31(cell2.add(vec3(93.4, 7.7, 61.1)));
+    const jg = hash31(cell2.add(vec3(29.2, 83.6, 17.4)));
+    // TSL nodes do not overload JS arithmetic: every mix has to stay on the
+    // node graph, or the constant folds to NaN and the shader fails to compile.
+    const sizeJitter = hs.mul(0.86).add(0.42);
+    const starOf = (loc, cx, cy) => {
+      const radius = sizeJitter.mul(STAR_SIZE);
+      const dist = length(loc.xy.sub(vec2(cx, cy).sub(0.5).mul(0.72)));
+      return float(1).sub(smoothstep(0, radius, dist));
+    };
+    const core = starOf(local, hx, hy)
+      .add(starOf(local2, jx, jy).mul(0.62));
+    const gate = smoothstep(0.965, 0.999, hg).mul(hb.mul(0.9).add(0.55));
     const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(hg.mul(2.4).add(1.3)).add(hx.mul(29.7))).mul(0.22).add(0.78);
     const altitude = smoothstep(0.02, 0.32, d.y);
     col.addAssign(vec3(0.86, 0.92, 1).mul(core).mul(gate).mul(twinkle).mul(altitude).mul(uStars).mul(2.2).mul(uStarHaze));
@@ -417,8 +441,8 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
 
   // Airglow: a very faint green-blue wash that never leaves a dark sky, and the
   // moon's lift of the whole dome (scattered moonlight), both night-gated.
-  col.addAssign(vec3(0.010, 0.016, 0.030).mul(uAirglow).mul(smoothstep(0.55, 0, d.y)));
-  col.addAssign(vec3(0.030, 0.038, 0.058).mul(uMoonVisible).mul(uNightF).mul(uAirglow));
+  col.addAssign(vec3(0.0034, 0.0048, 0.0074).mul(uAirglow).mul(smoothstep(0.55, 0, d.y)));
+  col.addAssign(vec3(0.012, 0.014, 0.019).mul(uMoonVisible).mul(uNightF).mul(uAirglow));
 
   // clouds only inside the low band: skips one FBM for most sky pixels
   const band = smoothstep(0.03, 0.16, d.y).mul(smoothstep(0.6, 0.22, d.y));
@@ -504,7 +528,7 @@ const oceanColor = Fn(() => {
   const R = reflect(V.negate(), N).toVar();
   R.y.assign(max(R.y, 0.04));
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(max(dot(N, V), 0)), 5)));
-  col.assign(mix(col, skyColor(R.normalize(), float(0), float(0)), fresnel));
+  col.assign(mix(col, skyReflect(R.normalize()), fresnel));
 
   // moon sheen: a cool glitter path plus a broad glow, so a clear night sea
   // reads as water instead of a black void (uMoonVisible is 0 when the moon is
@@ -1317,8 +1341,8 @@ function applyResolutionScale(scale) {
 // 'balanced' is the desktop default, 'low' suits a laptop on battery.
 const QUALITY_PRESETS = {
   high: { pixelRatio: 1.5, targetFps: 60, scaleCap: 1, minScale: 0.7 },
-  balanced: { pixelRatio: 1.2, targetFps: 45, scaleCap: 1, minScale: 0.6 },
-  low: { pixelRatio: 1, targetFps: 30, scaleCap: 0.85, minScale: 0.5 },
+  balanced: { pixelRatio: 1, targetFps: 40, scaleCap: 1, minScale: 0.5 },
+  low: { pixelRatio: 0.85, targetFps: 30, scaleCap: 0.8, minScale: 0.42 },
 };
 
 // 1.5.27: the frame budget is a first-class dial. A wallpaper does not need
@@ -1458,7 +1482,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.27';
+const OCEAN_BUILD = 'lab-1.5.28';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2389,8 +2413,16 @@ function compressSky(dir) {
   const fold = Math.max(0.35, 1 + (skyZoom - 1) * skyDome);
   uSkyFold.value = fold;
   if (Math.abs(fold - 1) < 0.001) return dir;
-  if (boatCamera) boatCamera.getWorldDirection(skyAxis);
-  else skyAxis.set(0, 0, -1);
+  if (boatCamera) {
+    boatCamera.getWorldDirection(skyAxis);
+    // anchor the fold on the horizon under the view direction, not on the view
+    // axis itself: folding toward the axis lifts everything off the sea line
+    skyAxis.y = 0;
+    if (skyAxis.lengthSq() < 1e-6) skyAxis.set(0, 0, -1);
+    skyAxis.normalize();
+  } else {
+    skyAxis.set(0, 0, -1);
+  }
   uSkyAxisDir.value.copy(skyAxis);
   const length = dir.length();
   if (length < 1e-6) return dir;

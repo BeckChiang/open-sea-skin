@@ -19,24 +19,24 @@
 // sheen in ocean.js is what makes it read as a surface); the horizon carries a
 // faint airglow. Both stay >10x darker than DUSK — see tests/sky.test.mjs.
 export const NIGHT = {
-  zenith: [0.006, 0.012, 0.032],
-  horizon: [0.016, 0.042, 0.1],
+  zenith: [0.0055, 0.0066, 0.0092],
+  horizon: [0.011, 0.014, 0.019],
   sun: [0.0, 0.0, 0.0],
   sunIntensity: 0,
-  deep: [0.01, 0.024, 0.045],
-  shallow: [0.024, 0.055, 0.085],
+  deep: [0.0075, 0.0092, 0.0115],
+  shallow: [0.013, 0.016, 0.02],
 };
 
 // Below astronomical twilight the sun is far enough down that even the last
 // scattered light is gone; only airglow and the Milky Way keep the sky from
 // being a flat black plate.
 export const DEEP_NIGHT = {
-  zenith: [0.0035, 0.0055, 0.011],
-  horizon: [0.008, 0.015, 0.028],
+  zenith: [0.0026, 0.0030, 0.0038],
+  horizon: [0.0044, 0.0052, 0.0064],
   sun: [0.0, 0.0, 0.0],
   sunIntensity: 0,
-  deep: [0.006, 0.012, 0.02],
-  shallow: [0.012, 0.024, 0.038],
+  deep: [0.0034, 0.0040, 0.0048],
+  shallow: [0.0052, 0.0062, 0.0074],
 };
 
 // Sunset: orange on the horizon under a violet-blue zenith. The warm band that

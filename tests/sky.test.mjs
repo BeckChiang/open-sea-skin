@@ -18,6 +18,17 @@ const paletteDistance = (a, b) => {
   return total
 }
 
+test('night stays neutral black, not blue', () => {
+  for (const el of [-90, -60, -30]) {
+    const sky = skyFromElevation(el);
+    for (const key of ['zenith', 'horizon']) {
+      const c = sky[key];
+      const ratio = Math.max(...c) / Math.max(1e-6, Math.min(...c));
+      assert.ok(ratio < 1.9, `${key} at ${el}° should be near neutral, ratio ${ratio.toFixed(2)}`);
+    }
+  }
+})
+
 test('deep night is NIGHT, not dusk (regression: 21:00 looked like sunset)', () => {
   const sky = skyFromElevation(-57.7)
   assert.equal(sky.horizonF, 0)

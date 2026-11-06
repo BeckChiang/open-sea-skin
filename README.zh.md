@@ -1,10 +1,10 @@
-# Open Sea Skin · Lab 分支说明（1.5.27）
+# Open Sea Skin · Lab 分支说明（1.5.28）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 上游只提供「海洋 + 夕阳 + 玻璃界面」；本分支在它的地基上加了三块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**，并把所有能调的参数搬进了设置面板。
 
 - 上游版本：1.2.7（`plugin/client.js` 与 `native-dist/*` 原样起步）
-- 本分支版本：**1.5.27**
+- 本分支版本：**1.5.28**
 - 许可证：MIT（见 `LICENSE`；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`）
 - 只在这台机器的 `C:\Users\recko\DSH\plugins\open-sea-skin-lab` 开发，profile 用 `link:` 安装
 
@@ -30,7 +30,7 @@
 
 ```powershell
 # 1. 解压到任意位置（不要放进同步盘的 DSH 工作区根目录以外也可以，但路径不要含中文空格）
-Expand-Archive .\open-sea-skin-lab-1.5.27.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+Expand-Archive .\open-sea-skin-lab-1.5.28.zip -DestinationPath C:\Users\<你>\DSH\plugins\
 
 # 2. 如果装过官方版，先卸掉（同一个包名，只能存在一个）
 #    在 DSH 里让它执行 plugin_manager remove_bundle open-sea-skin
@@ -46,7 +46,7 @@ Expand-Archive .\open-sea-skin-lab-1.5.27.zip -DestinationPath C:\Users\<你>\DS
 
 1. 左下角出现海洋图标按钮，点开有十一组折叠面板（顶部还有搜索框）；
 2. 面板「天空控制」里能看到「今日 日出 …· 日落 …」；
-3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.27` 与 `[open-sea-skin] ocean lab-1.5.27`。
+3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.28` 与 `[open-sea-skin] ocean lab-1.5.28`。
 
 > 只改渲染半边（`shared/ocean.js` 等）时，F5 就够；改了宿主半边（`plugin/index.js`）必须**完全退出重开**，或者在装了 `dsh-unlag` 的情况下点它的刷新按钮。
 
@@ -68,7 +68,7 @@ open-sea-skin-lab/
 │  └─ styles.css       皮肤在非 skin 页面用的样式
 ├─ native-dist/        构建产物（由 scripts/build-runtime.mjs 生成，不要手改）
 ├─ scripts/build-runtime.mjs   把 shared/ 里 6 个文件复制进 native-dist/
-├─ tests/              node:test 单文件测试（6 个文件，81 条）
+├─ tests/              node:test 单文件测试（6 个文件，84 条）
 ├─ docs/
 │  ├─ CONTRACT.md      面板 ↔ 渲染端 ↔ 宿主的接口契约（改消息先读它）
 │  └─ FORK.md          为什么这样分叉、怎么构建、怎么回退
@@ -123,10 +123,10 @@ open-sea-skin-lab/
 | 星空距离 | 0.6–3.0× | **2.0×** | 2.0 时画面里能装下 18–22 个星座 |
 | 穹顶比例 | 0–100% | 55% | 距离怎么生效：0=旧式「整体缩小」，100=完全立体投影（保角，星座不走形） |
 | 星星亮度 | 0–200% | 100% | 100% 等于 1.5.22 的「中」档，可作为亮度总闸 |
-| 星点大小 | 1–14 px | 5.4 | 0 等星的直径；更暗的星按星等衰减 |
-| 最暗星大小 | 0.5–4 px | 1.4 | 星等下限处的最小直径，调小会让银河般的暗星更细 |
+| 星点大小 | 1–14 px | 7.4 | 0 等星的直径；更暗的星按星等衰减 |
+| 最暗星大小 | 0.5–4 px | 2.0 | 星等下限处的最小直径，调小会让银河般的暗星更细 |
 | 星等衰减 | 0.04–0.5 | 0.16 | 每差一等，直径乘 `10^(−衰减)`；0.16 ≈ 每等缩小到 69% |
-| 色温饱和度 | 0–1.6 | 1.0 | 0 = 单色天空，1 = 按 B−V 的真实蓝白到橙红，>1 夸张 |
+| 色温饱和度 | 0–1.6 | 1.35 | 0 = 单色天空，1 = 按 B−V 的真实蓝白到橙红，>1 夸张 |
 | 亮星增益 | 0–2 | 1.0 | 星点整体亮度倍数（真实星等已决定层次，这里是总闸） |
 | 星芒阈值 | 0–6 等 | 1.6 | 只有比它亮的星才画十字星芒（约 20 颗）；调到 6 就人人有 |
 | 光晕 | 0–2 | 0.28 | 主星点外面那层柔光 |
@@ -173,14 +173,14 @@ open-sea-skin-lab/
 |---|---|---|---|
 | 实现方式 | 渲染器内/CSS | 渲染器内 | 渲染器内=在 three.js 后处理里对三栏区域做模糊；CSS=用 `backdrop-filter` |
 | 面板不透明度 | 40–90% | 72% | 面板自身 |
-| 模糊半径 | 0–24 px | 14 px | 真实的模糊半径（渲染器内映射到 9-tap 的采样间距，CSS 模式直接当 px 用） |
-| 左/中/右栏 | 开关 + 0–100% | 开/40%·60%·40% | 每栏的强度是模糊混合权重，不再是四档硬跳 |
+| 模糊半径 | 0–24 px | 20 px | 真实的模糊半径（渲染器内映射到 9-tap 的采样间距，CSS 模式直接当 px 用） |
+| 左/中/右栏 | 开关 + 0–100% | 开/28%·46%·28% | 每栏的强度是模糊混合权重，不再是四档硬跳 |
 | 高性能模式 | 开/关 | 关 | 关掉所有模糊，只留半透明 |
 
 ### 高级
 | 项 | 说明 |
 |---|---|
-| 画质档位 | 高 / 平衡 / 省电：直接改像素比上限（1.5 / 1.2 / 1.0）与目标帧率（60 / 45 / 30）；画面是填充率瓶颈，这是最有效的一档 |
+| 画质档位 | 高 / 平衡 / 省电：直接改像素比上限（1.5 / 1.0 / 0.85）与目标帧率（60 / 40 / 30）；画面是填充率瓶颈，这是最有效的一档 |
 | 帧率上限 | 24 / 30 / 45 / 60 fps，皮肤默认 **30**。每帧都是一次全屏填充，帧率减半等于 GPU 时间减半；独立演示页仍默认 60 |
 | 泛光 | 0–100%，默认 55%。0 会完全关掉泛光的两个 pass（1/4 分辨率的亮部提取 + 可分离模糊） |
 | 恢复默认 | 全部参数回 `DEFAULTS`（等于手动清 `localStorage` 的 `oss*` 键） |
@@ -206,7 +206,7 @@ node tests\stars.test.mjs
 node tests\sky-astro.test.mjs
 ```
 
-当前：**81 条全绿**（structure 31 / fleet 5 / stars 6 / sky 13 / solar 14 / sky-astro 12）。
+当前：**84 条全绿**（structure 33 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
 
 `tests/structure.test.mjs` 是本项目的防线，里面有几次真实事故的回归断言：
 
