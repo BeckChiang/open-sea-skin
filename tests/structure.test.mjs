@@ -1,4 +1,4 @@
-﻿// Guards against the failure mode that turned the whole skin into a white
+// Guards against the failure mode that turned the whole skin into a white
 // canvas on 2026-11-05: module-level sections had been spliced into the middle
 // of boot(), so their `const`s were still in the temporal dead zone when boot()
 // ran, and the animation loop died before it ever presented a frame.
@@ -147,7 +147,7 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
   assert.ok(source.includes('const base = 26 + (index % 4) * 9 + Math.floor(index / 4) * 3'), 'berths must step 9 units apart so hulls do not stack')
-  assert.ok(source.includes('boatDummy.scale.setScalar(2.8)'), 'the hull must grow with the berth')
+  assert.ok(source.includes('let boatScale = 2.8;'), 'the hull defaults to the 1.5.19 size')
 })
 
 test('boats off is the switch, not a zero count', () => {
@@ -303,10 +303,22 @@ test('the geometry is sized like last time, not larger', () => {
   assert.ok(source.includes('const half = STAR_RADIUS * 0.0012;'), 'keep the stroke close to its former weight')
 })
 
-test('the hulls sweep most of the frame, not a circle in the middle', () => {
-  // A fixed world-space amplitude only looked wide while the lanes were close to
-  // the camera; at 26–44 units it kept every hull inside the middle third.
-  assert.ok(source.includes('across: 0.62 + ((index * 0.11) % 0.3),'), 'the sweep must be a fraction of the frame')
-  assert.ok(source.includes('const laneAcross = Math.sin(angle) * (offStage - BOAT_MARGIN) * lane.across;'), 'the fraction must be applied to the frame half-width')
-  assert.ok(!source.includes('Math.sin(angle) * lane.radiusRight'), 'no fixed world-space sweep')
+test('the hulls keep the 1.5.3 lanes, widened only by the panel setting', () => {
+  // 1.5.20 scaled the sweep to the frame half-width and every hull vanished, so
+  // 1.5.21 went back to the fixed 6..20 unit amplitude and made it adjustable
+  // instead. Nothing may reintroduce the frame-relative `across` field.
+  assert.ok(source.includes('radiusRight: 6 + ((index * 3.7) % 14),'), 'the lanes must keep the fixed amplitude')
+  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;'), 'the amplitude must be scaled by the setting')
+  assert.ok(!source.includes('lane.across'), 'the frame-relative sweep must stay gone')
+})
+
+test('boat range, pace and scale are panel settings', () => {
+  // The hulls went missing twice this week; every knob that changes where they
+  // are drawn has to be adjustable from the panel instead of hard-coded.
+  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;'), 'the sweep must come from the setting')
+  assert.ok(source.includes('lane.angle += dt * lane.speed * cruise * lane.surge * boatPace;'), 'the pace must come from the setting')
+  assert.ok(source.includes('boatDummy.scale.setScalar(boatScale);'), 'the size must come from the setting')
+  assert.ok(source.includes("if (d && d.type === 'oss-boats') applyBoatsMessage(d);"), 'the surface must accept the settings')
+  assert.ok(clientSource.includes("type: 'oss-boats',"), 'the panel must send the settings')
+  assert.ok(clientSource.includes("rangeRow(pid('boat-spread'), 'boatSpread', 0.2, 3, 0.1)"), 'the range slider must exist')
 })

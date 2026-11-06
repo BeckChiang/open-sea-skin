@@ -917,6 +917,7 @@ if (SKIN) {
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
+    if (d && d.type === 'oss-boats') applyBoatsMessage(d);
     if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
       // `off` is the panel switch: without it "0 subagents" and "boats turned off"
@@ -962,6 +963,9 @@ if (SKIN) {
     starOpacity: starLayer ? starLayer.starsOpacity : 0,
     meteor: starLayer ? starLayer.meteor.active : false,
     boats: boatShown,
+    boatSpread,
+    boatPace,
+    boatScale,
     boatSpots: boatSpotList(),
     boatTarget,
     boatError,
@@ -1116,7 +1120,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.20';
+const OCEAN_BUILD = 'lab-1.5.21';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1383,8 +1387,7 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     base,
     // alternate sides so a burst of arrivals crosses the frame from both edges
     side: index % 2 === 0 ? 1 : -1,
-    // fraction of the visible half-width the hull sweeps through (0.62–0.92)
-    across: 0.62 + ((index * 0.11) % 0.3),
+    radiusRight: 6 + ((index * 3.7) % 14),
     radiusBack: 2 + ((index * 2.3) % 6),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
@@ -1519,6 +1522,21 @@ function boatSpotList() {
   return out;
 }
 
+// The panel drives these three: how wide a lap is, how fast it runs and how big
+// the hulls read. Defaults reproduce the 1.5.19 look exactly.
+let boatSpread = 1;
+let boatPace = 1;
+let boatScale = 2.8;
+
+function applyBoatsMessage(data) {
+  const spread = Number(data.spread);
+  const pace = Number(data.pace);
+  const scale = Number(data.scale);
+  if (Number.isFinite(spread)) boatSpread = Math.max(0.2, Math.min(3, spread));
+  if (Number.isFinite(pace)) boatPace = Math.max(0.3, Math.min(2.5, pace));
+  if (Number.isFinite(scale)) boatScale = Math.max(1.4, Math.min(4.6, scale));
+}
+
 function updateBoats(dt) {
   if (!boats) return;
   boatAxes();
@@ -1542,7 +1560,7 @@ function updateBoats(dt) {
     }
     // The swell, not a stopwatch, drives the orbit: `cruise` scales with the sea
     // state and `surge` with the slope of the face the boat is on.
-    lane.angle += dt * lane.speed * cruise * lane.surge;
+    lane.angle += dt * lane.speed * cruise * lane.surge * boatPace;
     const angle = lane.angle;
     lane.pushX *= 0.92;
     lane.pushZ *= 0.92;
@@ -1550,10 +1568,8 @@ function updateBoats(dt) {
     const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
-    // Sweep relative to the frame, not to an absolute distance: the lanes have
-    // different depths, so a fixed world-space amplitude made the near hulls
-    // circle the middle while the far ones barely moved.
-    const laneAcross = Math.sin(angle) * (offStage - BOAT_MARGIN) * lane.across;
+    // 1.5.3's fixed amplitude, scaled by the "range" setting (1 = untouched).
+    const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
@@ -1680,7 +1696,7 @@ function updateBoats(dt) {
     // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
     // size as before, at a berth that reads as further out to sea instead of
     // hugging the bottom edge.
-    boatDummy.scale.setScalar(2.8);
+    boatDummy.scale.setScalar(boatScale);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);

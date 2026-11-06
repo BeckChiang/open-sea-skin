@@ -52,6 +52,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     colRight: Object.freeze({ on: true, level: 'weak' }),
     perf: false,
     boats: true,
+    boatSpread: 1,
+    boatPace: 1,
+    boatScale: 2.8,
   });
 
   // Blur strength per column, sent to the ocean as a 0..1 weight.
@@ -61,6 +64,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
 
   const COPY = Object.freeze({
     zh: {
+      boatSpread: '横向范围',
+      boatPace: '航速',
+      boatScale: '船的大小',
       button: '海洋皮肤设置',
       close: '关闭',
       sea: '波浪大小',
@@ -138,6 +144,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       levels: { off: '关', weak: '弱', medium: '中', strong: '强' },
     },
     en: {
+      boatSpread: 'Sweep',
+      boatPace: 'Pace',
+      boatScale: 'Hull size',
       button: 'Open Sea skin settings',
       close: 'Close',
       sea: 'Sea state',
@@ -277,6 +286,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
       perf: source.perf === true,
       boats: source.boats !== false,
+      boatSpread: clamp(source.boatSpread, 0.2, 3, DEFAULTS.boatSpread),
+      boatPace: clamp(source.boatPace, 0.3, 2.5, DEFAULTS.boatPace),
+      boatScale: clamp(source.boatScale, 1.4, 4.6, DEFAULTS.boatScale),
     };
   }
 
@@ -665,6 +677,16 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       post({ type: 'oss-fleet', count: shown, off: !enabled });
     };
 
+    // Hull shape: the panel owns these numbers, the surface just applies them.
+    const postBoats = () => {
+      post({
+        type: 'oss-boats',
+        spread: state.boatSpread,
+        pace: state.boatPace,
+        scale: state.boatScale,
+      });
+    };
+
     // The panel and the surface are two documents, and the surface is served from
     // its own origin, so its window cannot be read from here. It posts back the
     // state it ended up with; keep the latest one and prefer it when the direct
@@ -1047,6 +1069,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       frame.addEventListener('load', () => {
         postSun();
         postGlass();
+        postBoats();
           postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         // The frame boots with one boat on the water; the poll below reposts the
         // real count on the first tick after load.
@@ -1124,6 +1147,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         <div class="oss-sec">
           <p class="oss-caption" data-copy="secBoat"></p>
           ${switchRow(pid('boats'), 'boats')}
+          ${rangeRow(pid('boat-spread'), 'boatSpread', 0.2, 3, 0.1)}
+          ${rangeRow(pid('boat-pace'), 'boatPace', 0.3, 2.5, 0.1)}
+          ${rangeRow(pid('boat-scale'), 'boatScale', 1.4, 4.6, 0.1)}
           <p class="oss-sub" id="${pid('boat-out')}"></p>
           <p class="oss-sub" data-copy="boatNote"></p>
         </div>
@@ -1192,6 +1218,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         if (row instanceof HTMLElement) row.style.display = visible ? '' : 'none';
       };
 
+      const boatRangeRows = [
+        ['boat-spread', 'boatSpread', '×'],
+        ['boat-pace', 'boatPace', '×'],
+        ['boat-scale', 'boatScale', '×'],
+      ];
+
       const syncUi = () => {
         enabledBox.checked = state.enabled;
         moonBox.checked = state.moon;
@@ -1225,6 +1257,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         smoothOut.textContent = `${state.smooth}s`;
         glassOut.textContent = `${state.glass}%`;
         timeOut.textContent = state.sunMode === 'real' ? copy.realTime : timeLabel(copy, state.time);
+        for (const [id, key, suffix] of boatRangeRows) {
+          const el = panel.querySelector(`#${pid(id)}`);
+          const out = panel.querySelector(`#${pid(id)}-out`);
+          if (el) el.value = String(state[key]);
+          if (out) out.textContent = `${state[key]}${suffix}`;
+        }
         latInput.value = String(state.lat);
         lonInput.value = String(state.lon);
         setRowVisible(seaRange, state.waveMode === 'manual');
@@ -1236,6 +1274,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         updateGlass();
         postSun();
         postGlass();
+        postBoats();
         if (state.waveMode === 'manual') { seaValue = state.sea; postToOcean(seaValue); }
         syncUi();
       };
@@ -1290,6 +1329,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         smoothOut.textContent = `${state.smooth}s`;
         void save({ smooth: state.smooth });
       });
+      for (const [id, key, suffix] of boatRangeRows) {
+        const el = panel.querySelector(`#${pid(id)}`);
+        const out = panel.querySelector(`#${pid(id)}-out`);
+        if (!el) continue;
+        on(el, 'input', () => {
+          state[key] = clamp(el.value, Number(el.min), Number(el.max), DEFAULTS[key]);
+          if (out) out.textContent = `${state[key]}${suffix}`;
+          void save({ [key]: state[key] });
+          postBoats();
+        });
+      }
+
       on(timeRange, 'input', () => {
         state.time = clamp(timeRange.value, 0, 100, DEFAULTS.time);
         state.autoCycle = false;
@@ -1553,6 +1604,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     colRight: 'ossColRight',
     perf: 'ossPerf',
     boats: 'ossBoats',
+    boatSpread: 'ossBoatSpread',
+    boatPace: 'ossBoatPace',
+    boatScale: 'ossBoatScale',
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
@@ -1627,7 +1681,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.20';
+  const SKIN_BUILD = 'lab-1.5.21';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
