@@ -284,3 +284,30 @@ test('a saved grade survives normalize, and nothing spawns outside the frame', (
   assert.ok(source.includes('skyPoint(startAzDeg, startAltDeg, meteor.from);'), 'the streak must use the shared sky helper')
   assert.ok(source.includes('Math.sin(progress * Math.PI) * 2.6'), 'the streak must be bright enough to notice')
 })
+
+test('no constant is used before it is declared', () => {
+  // 2026-11-06: a rewrite of SECTION 10 kept `BOAT_ENTER_RATE`, `BOAT_EXIT_RATE`
+  // and `BOAT_PROBE` in the body but dropped their declarations. The animate()
+  // catch swallowed the ReferenceError and set boats = null, so the sea showed
+  // zero hulls with nothing in the console. Static check: every screaming-case
+  // name in the code must be declared, imported, or a known global.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    .replace(/'[^'\n]*'/g, "''")
+    .replace(/`[^`]*`/g, '``')
+    .replace(/\.[A-Za-z_$][\w$]*/g, '')
+  const used = new Set(code.match(/\b[A-Z][A-Z0-9_]{2,}\b/g) || [])
+  const declared = new Set(
+    (code.match(/(?:const|let|var|function|class)\s+([A-Z][A-Z0-9_]{2,})\b/g) || [])
+      .map((hit) => hit.split(/\s+/)[1]),
+  )
+  const imported = new Set(
+    (source.match(/import\s*\{([^}]+)\}/g) || [])
+      .flatMap((clause) => clause.replace(/import\s*\{|\}/g, '').split(','))
+      .map((part) => part.trim().split(/\s+as\s+/).pop()),
+  )
+  const globals = new Set(['THREE', 'URL', 'NaN', 'Infinity', 'PI'])
+  const missing = [...used].filter((name) => !declared.has(name) && !imported.has(name) && !globals.has(name))
+  assert.deepEqual(missing, [], `used but never declared: ${missing.join(', ')}`)
+})

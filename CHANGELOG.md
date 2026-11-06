@@ -2,6 +2,17 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.14 — 2026-11-06
+
+### Fixed
+
+- **一艘船都没有了**：1.5.13 重写 SECTION 10 时，`BOAT_ENTER_RATE`、`BOAT_EXIT_RATE`、
+  `BOAT_PROBE` 三个常量的声明被连带删掉，函数体还在用它们。`animate()` 里
+  `try { updateBoats(dt) } catch { boats = null }` 把 ReferenceError 吞了，于是把整个船层关掉、
+  控制台只留一行警告——看起来就是"船全没了"。三个常量已补回。
+- 新增结构测试「no constant is used before it is declared」：去掉注释和字符串后，源码里每个
+  全大写常量都必须有声明或来自 import。拿它跑 1.5.13 的代码会正好报出这三个名字。
+
 ## 1.5.13 — 2026-11-06
 
 ### Fixed

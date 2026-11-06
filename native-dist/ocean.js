@@ -1111,7 +1111,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.13';
+const OCEAN_BUILD = 'lab-1.5.14';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1325,6 +1325,11 @@ const BOAT_BASE = 1;
 // edge of the chat column (waterTop); hulls ride just below it.
 const BOAT_EDGE_FRAC = 1.15;
 const BOAT_MIN_SEP_FRAC = 0.075;
+// How fast a hull slides across the frame when it enters or leaves.
+const BOAT_ENTER_RATE = 0.95;
+const BOAT_EXIT_RATE = 0.72;
+// How far ahead of the bow we sample the swell to read the slope it is climbing.
+const BOAT_PROBE = 2.4;
 
 let boatCamera = null;
 let boatTarget = BOAT_BASE;
