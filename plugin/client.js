@@ -58,7 +58,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     starFalloff: 0.16,
     starColor: 1.35,
     starSpikes: 1.6,
-    starBase: 1,
+    starBase: 0.82,
     starHalo: 0.28,
     starCount: 1,
     twinkleSpeed: 1.5,
