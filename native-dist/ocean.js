@@ -1109,7 +1109,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.11';
+const OCEAN_BUILD = 'lab-1.5.12';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1361,7 +1361,7 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   // lower third of the frame and anything nearer than ~30 units sits on the very
   // bottom edge. 3–7 units of lateral swing still leaves room for the approach
   // offset to stay off screen instead of parking a hull at the edge.
-  const base = 18 + (index % 4) * 1.2 + Math.floor(index / 4) * 0.8;
+  const base = 19.5 + (index % 3) * 1.6;
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
@@ -1380,11 +1380,12 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     // how far out in the visible band a lane rides: the middle of the frame is
     // covered by the conversation column, so a hull parked at x≈0 is drawn but
     // never seen. Lanes live in the left and right thirds instead.
-    // A fixed lateral berth (left / middle / right of the open water) plus a
-    // small swing: three hulls must read as three boats, not one that moves.
-    offset: [-0.6, 0, 0.6][index % 3],
-    radiusRight: 3 + ((index * 2.6) % 5),
-    radiusBack: 2 + ((index * 2.3) % 6),
+    // How far across the frame the hull sweeps (fraction of the visible half
+    // width) and a small permanent drift so three lanes do not run in lockstep.
+    // A hull that parks on a fixed berth reads as a boat that never travels.
+    span: 0.62 + (index % 3) * 0.05,
+    drift: ((index % 3) - 1) * 0.06,
+    radiusBack: 1.4 + ((index * 0.6) % 1),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
     // separation pushes accumulate here and decay, so boats ease apart instead
@@ -1531,7 +1532,9 @@ function updateBoats(dt) {
     // Half the water the camera can see at this depth: the berth is placed as a
     // fraction of it, so a hull never swings past the frame edge.
     const halfWidth = Math.max(1, offStage - BOAT_MARGIN);
-    const berth = Math.max(-0.82, Math.min(0.82, lane.offset + Math.sin(angle) * 0.16));
+    // Hard limit on the sweep: ±0.78 of the half width keeps every hull inside
+    // the frame no matter what the depth is doing. The frame is the boundary.
+    const berth = Math.max(-0.78, Math.min(0.78, Math.sin(angle) * lane.span + lane.drift));
     const laneAcross = berth * halfWidth;
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
@@ -1580,10 +1583,11 @@ function updateBoats(dt) {
     // where it is actually going, otherwise it sails sideways or stern first.
     // The sideways travel is part of the course too, so an arriving boat comes
     // bow-on instead of crabbing in.
-    const vx = boatRight.x * Math.cos(angle) * lane.radiusRight
+    const lateralRate = Math.cos(angle) * lane.span * Math.max(1, halfWidth - BOAT_MARGIN);
+    const vx = boatRight.x * lateralRate
       - boatForward.x * Math.sin(angle) * lane.radiusBack
       + boatRight.x * awaySpeed;
-    const vz = boatRight.z * Math.cos(angle) * lane.radiusRight
+    const vz = boatRight.z * lateralRate
       - boatForward.z * Math.sin(angle) * lane.radiusBack
       + boatRight.z * awaySpeed;
     const placed = boatPlaced[placedCount];

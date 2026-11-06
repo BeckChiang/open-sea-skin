@@ -146,7 +146,7 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // With the 8 degree pitch the sea only fills the lower third of the frame, so
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
-  assert.ok(source.includes('const base = 18 + (index % 4) * 1.2 + Math.floor(index / 4) * 0.8'), 'berths must stay inside the open water below the chat column')
+  assert.ok(source.includes('const base = 19.5 + (index % 3) * 1.6'), 'berths must stay inside the open water below the chat column')
   assert.ok(source.includes('boatDummy.scale.setScalar(2.7)'), 'the hull must stay big enough to read through the glass')
 })
 
@@ -242,7 +242,8 @@ test('hulls roam the whole frame and report where they land', () => {
   assert.ok(source.includes('const laneAcross = berth * halfWidth;'), 'each hull keeps its own berth across the open water')
   assert.ok(source.includes('boatSpots.push(['), 'each hull must report its screen position')
   assert.ok(source.includes('boatSpots: boatSpots.slice(0, 6),'), 'the report must reach the state')
-  assert.ok(source.includes('offset: [-0.6, 0, 0.6][index % 3]'), 'three berths must be far apart')
+  assert.ok(source.includes('span: 0.62 + (index % 3) * 0.05'), 'each hull must sweep the visible width')
+  assert.ok(source.includes('const berth = Math.max(-0.78, Math.min(0.78,'), 'the sweep must stop at the frame edge')
   assert.ok(clientSource.includes('.map((spot) =>'), 'the panel must print the positions')
 })
 
