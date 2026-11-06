@@ -80,3 +80,9 @@ node tests/fleet.test.mjs                # /fleet 计数口径 5 个用例
 - **压缩天空时的生硬**：旧做法把星方向朝视轴 slerp，星座整体缩小、地平线附近抬升，而着色器里的程序化星场不参与压缩，2.0× 时两层会互相滑动。现在几何用 `r = 2tan(θ/2)` 的立体投影（保角）到 `θ' = 2atan(tan(θ/2)/fold)`，`fold = 1 + (skyZoom−1)·domeAmount`；着色器里的星场按同一映射**反向展开**（`tan(θ'/2)·fold`）再取 hash，两层同步。
 - **面板**：5 组 → 11 组 `<details>` + 搜索；旧的 `off/low/mid/high` 枚举换成 0–100 或物理量的滑杆，`RANGE_ROWS` 一张表同时驱动模板、回填、事件与格式化，避免三处各写一遍。
 
+## 真实星等，以及两次「不像原来」的回归（2026-11-06，1.5.25）
+
+- **整屏灰：百分比当成了比例**。1.5.23 把 `STAR_GRADES` / `CONSTELLATION_GRADES` / `CROSS_GRADES` 从 0..1 改成百分比（mid = 100），但 `ocean.js` 里两个 uniform 仍写 `uniform(CROSS_GRADES.mid)`。`uCrossGlow = 100` 把星芒臂长从 15 个世界单位撑到 574，757 颗星的十字铺满天空，加法混合后就是均匀灰白；`uConstellation = 100` 同时把星座腿放大百倍。教训：**换单位必须同时改播种值**，灰屏不一定是渲染管线坏了，也可能只是一个数值放大了 100 倍。
+- **星座连线变虚线**：腿是两片渐细四边形，半宽 `STAR_RADIUS * 0.0012 = 3.84` 世界单位；在小窗口里折算不到 1 像素，光栅化成断续的点。现在给一个像素下限 `pxWorld * 0.9`（`pxWorld = 2·STAR_RADIUS·tan(fov/2)/innerHeight`），大窗口下这条下限不生效，观感与 1.5.22 一致。
+- **星表**：`scripts/gen-stars-catalog.mjs` 从 d3-celestial 的 `stars.6.json` 抽 mag ≤ 5.5 的 2851 颗写进 `shared/stars-catalog.js`（79 KB）；星径 `uStarSize·10^(−falloff·mag)`、颜色按 B−V 插值、星芒只给 mag ≤ `uStarSpikes`。星表是静态产物，换源或调阈值后要重跑生成器（`--check` 校验），CC BY-SA 4.0 的署名写在 `THIRD_PARTY_NOTICES.md`。
+
