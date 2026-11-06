@@ -912,6 +912,7 @@ if (SKIN) {
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
+    if (d && d.type === 'oss-bands') applyBandsMessage(d);
     if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
       // `off` is the panel switch: without it "0 subagents" and "boats turned off"
@@ -1102,7 +1103,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.4';
+const OCEAN_BUILD = 'lab-1.5.5';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1326,6 +1327,29 @@ const BOAT_EXIT_RATE = 0.72;
 const BOAT_PROBE = 2.4;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
+// Normalised x ranges the page is not covering with a shell surface. Hulls are
+// steered into these: a boat behind the chat column is drawn and counted, yet
+// nobody can see it, which reads as "the count is wrong".
+let boatBands = [[0, 1]];
+
+// Keep only sane, wide-enough gaps; a page that reports nothing leaves the last
+// known layout in place rather than collapsing the fleet into the middle.
+function applyBandsMessage(data) {
+  const raw = data && data.bands;
+  if (!Array.isArray(raw)) return;
+  const bands = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const a = Number(entry[0]);
+    const b = Number(entry[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    const x0 = Math.max(0, Math.min(1, Math.min(a, b)));
+    const x1 = Math.max(0, Math.min(1, Math.max(a, b)));
+    if (x1 - x0 < 0.04) continue;
+    bands.push([x0, x1]);
+  }
+  if (bands.length > 0) boatBands = bands.slice(0, 4);
+}
 // camera the fleet is anchored to; set when the boats are created
 let boatCamera = null;
 
@@ -1365,7 +1389,11 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
     base,
     // alternate sides so a burst of arrivals crosses the frame from both edges
     side: index % 2 === 0 ? 1 : -1,
-    radiusRight: 6 + ((index * 3.7) % 14),
+    // how far out in the visible band a lane rides: the middle of the frame is
+    // covered by the conversation column, so a hull parked at x≈0 is drawn but
+    // never seen. Lanes live in the left and right thirds instead.
+    band: 0.46 + (index % 3) * 0.08,
+    radiusRight: 4 + ((index * 2.6) % 8),
     radiusBack: 2 + ((index * 2.3) % 6),
     // 0.10–0.19 rad/s: one lap takes 33–63 s in a flat calm
     speed: 0.1 + ((index * 0.037) % 0.09),
@@ -1502,9 +1530,19 @@ function updateBoats(dt) {
     lane.pushZ *= 0.92;
 
     const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
-    const laneAcross = Math.sin(angle) * lane.radiusRight;
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
+    // Half the width the camera can see at this depth.
+    const halfWidth = Math.max(1, offStage - BOAT_MARGIN);
+    // Steer into the gaps the page reports (left of the sidebar, right of the
+    // conversation, ...): the middle of the frame is covered by the chat column,
+    // so a hull cruising through x≈0 would be drawn but never seen.
+    const band = boatBands[index % boatBands.length];
+    const bandMid = (band[0] + band[1]) / 2;
+    const bandWidth = Math.max(0.05, band[1] - band[0]);
+    const laneCenter = (bandMid - 0.5) * 2 * halfWidth;
+    const laneAcross = laneCenter
+      + Math.sin(angle) * lane.radiusRight * Math.min(1, bandWidth * 2.4);
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);

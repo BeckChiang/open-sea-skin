@@ -637,6 +637,46 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       post({ type: 'oss-glass', mode: state.glassMode, perf: state.perf, rects: active ? measureColumns() : [] });
     };
 
+    // Where can a hull actually be seen? The shell surfaces (sidebar, chat column,
+    // details rail) paint over the ocean frame, so a boat steered behind one of
+    // them is drawn and counted but invisible. Report the gaps instead, whatever
+    // the glass setting is — this is layout, not styling.
+    const measureBands = () => {
+      const width = window.innerWidth || 1;
+      const covered = [];
+      for (const selectors of Object.values(COLUMN_SELECTORS)) {
+        const element = selectors
+          .map((selector) => document.querySelector(selector))
+          .find((candidate) => candidate instanceof HTMLElement
+            && candidate.getBoundingClientRect().width > 8);
+        if (!(element instanceof HTMLElement)) continue;
+        const rect = element.getBoundingClientRect();
+        const x0 = Math.max(0, rect.left / width);
+        const x1 = Math.min(1, rect.right / width);
+        if (x1 - x0 > 0.02) covered.push([x0, x1]);
+      }
+      covered.sort((a, b) => a[0] - b[0]);
+      const bands = [];
+      let cursor = 0;
+      for (const [x0, x1] of covered) {
+        if (x0 - cursor > 0.05) bands.push([Number(cursor.toFixed(3)), Number(x0.toFixed(3))]);
+        cursor = Math.max(cursor, x1);
+      }
+      if (1 - cursor > 0.05) bands.push([Number(cursor.toFixed(3)), 1]);
+      // A single full-width column leaves no gap at all; fall back to the edges
+      // rather than parking every hull in the middle behind the chat.
+      return bands.length ? bands : [[0.02, 0.12], [0.88, 0.98]];
+    };
+
+    let bandKey = '';
+    const postBands = () => {
+      const bands = measureBands();
+      const key = JSON.stringify(bands);
+      if (key === bandKey) return;
+      bandKey = key;
+      post({ type: 'oss-bands', bands });
+    };
+
     // ---- fleet: one boat per subagent in the open conversation --------------
     // A switch is only committed after the user rests on a session for this long;
     // flipping through the sidebar must not reshape the fleet at every stop.
@@ -1031,13 +1071,19 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       frame.addEventListener('load', () => {
         postSun();
         postGlass();
+        postBands();
         postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         // The frame boots with one boat on the water; the poll below reposts the
         // real count on the first tick after load.
         startWaveEngine();
         startFleetEngine();
         if (glassTimer) window.clearInterval(glassTimer);
-        glassTimer = window.setInterval(postGlass, 1500);
+        glassTimer = window.setInterval(() => {
+          postGlass();
+          // Layout moves when the window resizes or panels open, and the gaps are
+          // the only places a hull can be seen.
+          postBands();
+        }, 1500);
       }, { once: true });
       ownsSurface = true;
       return true;
@@ -1606,7 +1652,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.4';
+  const SKIN_BUILD = 'lab-1.5.5';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

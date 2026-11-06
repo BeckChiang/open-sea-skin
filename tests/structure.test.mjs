@@ -231,3 +231,13 @@ test('a session switch settles before it reshapes the fleet', () => {
   assert.ok(source.includes('lane.exitFrom || lane.side'), 'a recalled hull must re-enter by the edge it left')
   assert.ok(source.includes('lane.exitFrom = lane.exitSide'), 'the leaving edge must be remembered')
 })
+
+test('hulls are steered into the gaps the page leaves visible', () => {
+  // 2026-11-06: the panel said 3/3 and three hulls were drawn, but two sat behind
+  // the chat column, so the sea looked like it had one boat.
+  assert.ok(clientSource.includes('measureBands'), 'the page must measure its own gaps')
+  assert.ok(clientSource.includes("type: 'oss-bands'"), 'the gaps must be reported to the frame')
+  assert.ok(source.includes('function applyBandsMessage'), 'the frame must accept the reported gaps')
+  assert.ok(source.includes('boatBands[index % boatBands.length]'), 'lanes must be assigned to gaps')
+  assert.ok(source.includes('boatBands = bands.slice(0, 4)'), 'the reported layout must be kept')
+})
