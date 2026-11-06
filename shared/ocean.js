@@ -15,7 +15,7 @@ import * as THREE from './vendor/three.webgpu.js';
 import {
   Fn, pass, uniform, uniformArray, texture, uv, float, vec2, vec3, vec4, If,
   sin, cos, dot, cross, normalize, mix, pow, max, clamp, fract, floor,
-  attribute, smoothstep, length, reflect, passTexture,
+  abs, attribute, smoothstep, length, reflect, passTexture,
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
