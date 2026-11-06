@@ -82,6 +82,9 @@ let meteorEnabled = true;
 let cloudsSetting = 'mid';
 // reported back through window.__ossState()
 let sunElevationDeg = 0;
+// altitude of the galactic centre: the one number that decides whether the band
+// is the bright core or the faint outer arm
+let galacticCentreAlt = -90;
 let sunAzimuthDeg = 0;
 // true while the sun is climbing: picks the morning paint for the twilight band
 let sunRising = true;
@@ -185,6 +188,14 @@ const uStarPxWorld = uniform(1.0);
 const uStarRight = uniform(new THREE.Vector3(1, 0, 0));
 const uStarUp = uniform(new THREE.Vector3(0, 1, 0));
 const uStarSpikes = uniform(1.6);
+const uStarFade = uniform(1);
+const uStarDaylight = uniform(0);
+const uStarBias = uniform(0);
+const uStarMode = uniform(0);
+const uStarCut = uniform(5.5);
+const uLineTwinkle = uniform(0.18);
+const uMilkyVisible = uniform(0);
+const uOverflow = uniform(0);
 // Milky Way band: normal of the galactic plane in world space, plus its dial.
 const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
 const uMilky = uniform(0.35);
@@ -205,6 +216,8 @@ const uGlassLevels = uniformArray([0, 0, 0]);
 const uGlassActive = uniform(0);
 const uGlassEdge = uniform(0.0035);
 const uGlassSpread = uniform(2);
+// 0 gaussian, 1 box, 2 double, 3 radial, 4 frost, 5 tile: one dial, six looks
+const uGlassStyle = uniform(0);
 // 1.5.26: the soft glow that replaced the mip-chain bloom
 const uGlowThreshold = uniform(0.62);
 const uGlowStrength = uniform(0.28);
@@ -438,10 +451,18 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
 
   // Milky Way: a soft band along the galactic plane. Faint, and only at night —
   // it is the one night-sky term that is not a point light.
-  If(uMilky.mul(uNightF).mul(astro).greaterThan(0.001), () => {
+  const milkyOn = uMilky.mul(uMilkyVisible).mul(uNightF).mul(astro);
+  If(milkyOn.greaterThan(0.001), () => {
     const gal = abs(dot(d, normalize(uGalNormal)));
-    const bandGlow = pow(float(1).sub(clamp(gal, 0, 1)), 6);
-    col.addAssign(vec3(0.055, 0.050, 0.070).mul(bandGlow).mul(uMilky).mul(uStars).mul(uNightF));
+    const near = float(1).sub(clamp(gal, 0, 1));
+    // a wide disc and a much tighter core, minus the dust lane that splits the
+    // band in two: that lane is what makes it read as the Milky Way and not as a
+    // blurry gradient.
+    const wide = pow(near, 2.2);
+    const core = pow(near, 12).mul(0.85);
+    const lane = smoothstep(float(0.17), float(0.02), gal).mul(pow(near, 3)).mul(0.4);
+    const band = wide.add(core).sub(lane);
+    col.addAssign(vec3(0.085, 0.078, 0.108).mul(band).mul(milkyOn));
   });
 
   // Airglow: a very faint green-blue wash that never leaves a dark sky, and the
@@ -518,7 +539,11 @@ const oceanColor = Fn(() => {
 
     // crest foam
     const foamNoise = clamp(gradNoise(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
-    foam.assign(smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest)).mul(0.85));
+    // Past the wave ceiling the sea cannot rise any further, so it gets angrier
+  // instead: thicker caps plus a spray of glints. Both are pure shader work.
+  const foamBase = smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest));
+  const spray = pow(foamNoise, 8).mul(smoothstep(0.15, 0.85, uOverflow)).mul(0.65);
+  foam.assign(foamBase.mul(float(0.85).add(uOverflow.mul(0.45))).add(spray));
   });
 
   // base water color + backlit crest glow
@@ -772,6 +797,14 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.starFalloff))) uStarFalloff.value = Math.max(0.04, Math.min(0.5, Number(d.starFalloff)));
   if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(2.2, Number(d.starColor)));
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
+  if (d.starDaylight !== undefined) uStarDaylight.value = d.starDaylight ? 1 : 0;
+  if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(0.6, Number(d.lineTwinkle)));
+  if (Number.isFinite(Number(d.overflow))) uOverflow.value = Math.max(0, Math.min(1, Number(d.overflow)));
+  let repaint = false;
+  if (Number.isFinite(Number(d.starBias))) { uStarBias.value = Math.max(-0.3, Math.min(0.3, Number(d.starBias))); repaint = true; }
+  if (d.starMode !== undefined) { uStarMode.value = Math.max(0, Math.min(2, Number(d.starMode) || 0)); repaint = true; }
+  if (Number.isFinite(Number(d.starCut))) { uStarCut.value = Math.max(1.5, Math.min(6, Number(d.starCut))); repaint = true; }
+  if (repaint && starLayer) refreshStarArt(starLayer);
   if (typeof d.skyTone === 'string' && SKY_TONES[d.skyTone]) uSkyTone.value.copy(SKY_TONES[d.skyTone]);
   applyStarDials();
   const skyDist = Number(d.skyDist);
@@ -1107,9 +1140,48 @@ function buildComposite(sceneColor, sceneGlow, glassNode) {
   const blurred = glassNode.getTextureNode();
   const composite = Fn(() => {
     const rgb = sceneColor.add(sceneGlow).rgb.toVar();
-    const weight = glassWeight();
+    const weight = glassWeight().toVar();
     If(weight.greaterThan(0.001), () => {
-      rgb.assign(mix(rgb, blurred.sample(uv()).rgb, weight));
+      const coord = uv().toVar();
+      const style = uGlassStyle;
+      // Each branch writes through assign(); a JS-level reassignment would be
+      // folded at build time and apply every branch at once.
+      const frosted = blurred.sample(coord).rgb.toVar();
+      // frost: jitter the lookup so the pane reads as ground glass, not a lens
+      If(style.greaterThan(3.5), () => {
+        If(style.lessThan(4.5), () => {
+          const grain = fract(sin(dot(coord.mul(913.0), vec2(12.9898, 78.233))).mul(43758.5453));
+          const jitter = vec2(grain.sub(0.5), fract(grain.mul(13.7)).sub(0.5)).mul(0.012);
+          frosted.assign(blurred.sample(coord.add(jitter)).rgb);
+        });
+      });
+      // tile: quantise the lookup into panes, the closest thing to glass bricks
+      If(style.greaterThan(4.5), () => {
+        const cell = coord.div(vec2(0.045, 0.075)).floor().add(0.5).mul(vec2(0.045, 0.075));
+        frosted.assign(blurred.sample(cell).rgb);
+      });
+      // double: two offset refractions averaged, a harder, doubled pane
+      If(style.greaterThan(1.5), () => {
+        If(style.lessThan(2.5), () => {
+          frosted.assign(blurred.sample(coord.add(vec2(0.0035, 0.0))).rgb
+            .add(blurred.sample(coord.sub(vec2(0.0035, 0.0))).rgb).mul(0.5));
+        });
+      });
+      const localWeight = weight.toVar();
+      // radial: harder toward the pane edges, like a lens pressed flat
+      If(style.greaterThan(2.5), () => {
+        If(style.lessThan(3.5), () => {
+          const edge = clamp(length(coord.sub(vec2(0.5, 0.5))).mul(1.6), 0, 1);
+          localWeight.assign(weight.mul(float(0.45).add(edge.mul(0.85))));
+        });
+      });
+      // box: the same taps, flatter — a cheaper, more even smear
+      If(style.greaterThan(0.5), () => {
+        If(style.lessThan(1.5), () => {
+          localWeight.assign(weight.mul(1.12));
+        });
+      });
+      rgb.assign(mix(rgb, frosted, clamp(localWeight, 0, 1)));
     });
     return vec4(rgb, 1);
   });
@@ -1152,6 +1224,10 @@ function applyGlassMessage(d) {
   // maps it onto the spread of the blur taps; the CSS path uses it directly.
   const radius = Number(d.radius);
   if (Number.isFinite(radius)) uGlassSpread.value = Math.max(0, Math.min(24, radius)) / 24 * 9;
+  if (typeof d.style === 'string') {
+    const index = ['gaussian', 'box', 'double', 'radial', 'frost', 'tile'].indexOf(d.style);
+    if (index >= 0) uGlassStyle.value = index;
+  }
   const rects = [];
   if (wanted && Array.isArray(d.rects)) {
     for (const rect of d.rects) {
@@ -1174,6 +1250,26 @@ function applyGlassMessage(d) {
     }
   }
   applyGlass(wanted && rects.length > 0, rects);
+}
+
+// Deterministic per-name phase: the same constellation keeps the same rhythm
+// across reloads, so the sky does not reshuffle on every refresh.
+function hashName(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 1000;
+}
+
+// Smooth 0..1 ramp that also accepts a reversed range (edge0 > edge1), which is
+// how the star fade is written: fully out above +6 deg, fully in below -2 deg.
+function smoothstepRange(edge0, edge1, x) {
+  const span = edge1 - edge0;
+  const t = span === 0 ? (x >= edge0 ? 1 : 0) : (x - edge0) / span;
+  const c = Math.max(0, Math.min(1, t));
+  return c * c * (3 - 2 * c);
 }
 
 function clamp01(value) {
@@ -1237,6 +1333,9 @@ if (SKIN) {
       if (Number.isFinite(sea)) {
         seaGoal = 0.25 + (Math.max(0, Math.min(100, sea)) / 100) * 1.5;
       }
+      if (Number.isFinite(Number(d.overflow))) {
+        uOverflow.value = Math.max(0, Math.min(1, Number(d.overflow)));
+      }
       // In `real` mode the sky is driven by solar.js; a host that keeps
       // posting t (sea updates arrive at 4 Hz) must not overwrite it.
       if (Number.isFinite(t) && t >= 0 && t <= 100 && sunMode === 'manual') {
@@ -1290,6 +1389,10 @@ if (SKIN) {
     reducedMotion: REDUCED_MOTION,
     lowEndDevice: LOW_END_DEVICE,
     starOpacity: starLayer ? starLayer.starsOpacity : 0,
+    starFade: starLayer ? starLayer.starFade : 0,
+    milkyVisible: uMilkyVisible.value,
+    galacticCentreAlt,
+    overflow: uOverflow.value,
     meteor: starLayer ? starLayer.meteor.active : false,
     boats: boatShown,
     boatSpread,
@@ -1490,7 +1593,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.30';
+const OCEAN_BUILD = 'lab-1.5.31';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2195,10 +2298,12 @@ function createStarLayer(scene) {
   // One segment per polyline edge; raw points are fine here because the extra
   // vertices cost nothing next to a line width.
   const segments = [];
+  const segmentNames = [];
   for (const line of CONSTELLATION_LINES) {
     const points = line.points || line;
     for (let i = 1; i < points.length; i += 1) {
       segments.push(points[i - 1], points[i]);
+      segmentNames.push(line.name || '');
     }
   }
   const segmentCount = segments.length;
@@ -2290,10 +2395,20 @@ function createStarLayer(scene) {
   const edgeCount = Math.floor(segmentCount / 2);
   const lineGlowAttr = new Float32Array(edgeCount * 8);
   const lineSideAttr = new Float32Array(edgeCount * 8);
+  const linePhaseAttr = new Float32Array(edgeCount * 8);
+  const namePhase = new Map();
+  for (let i = 0; i < edgeCount; i += 1) {
+    const owner = segmentNames[i] || '';
+    if (!namePhase.has(owner)) namePhase.set(owner, (hashName(owner) % 628) / 100);
+    // 2.4 rad steps decorrelate neighbouring legs while staying deterministic
+    const phase = namePhase.get(owner) + ((i * 2.399963) % 6.283);
+    for (let v = 0; v < 8; v += 1) linePhaseAttr[i * 8 + v] = phase;
+  }
   const lineGeometry = new THREE.BufferGeometry();
   lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgeCount * 8 * 3), 3));
   lineGeometry.setAttribute('aLineGlow', new THREE.BufferAttribute(lineGlowAttr, 1));
   lineGeometry.setAttribute('aSide', new THREE.BufferAttribute(lineSideAttr, 1));
+  lineGeometry.setAttribute('aLinePhase', new THREE.BufferAttribute(linePhaseAttr, 1));
   const lineIndex = new Uint32Array(edgeCount * 12);
   for (let i = 0; i < edgeCount; i += 1) {
     const at = i * 8;
@@ -2319,9 +2434,16 @@ function createStarLayer(scene) {
   // Additive blending ignores alpha, so the soft edge lives in the colour: the
   // centreline is full strength, the outer rim is nothing.
   const lineEdge = float(1).sub(abs(attribute('aSide', 'float')));
+  const linePhase = attribute('aLinePhase', 'float');
+  // Two incommensurate rates make each constellation breathe on its own clock,
+  // and the per-edge phase keeps neighbouring legs from pulsing together. The
+  // result never flashes as one sky; it drifts.
+  const lineWobble = sin(uTime.mul(0.9).add(linePhase)).mul(0.62)
+    .add(sin(uTime.mul(2.3).add(linePhase.mul(1.73))).mul(0.38));
   lineMaterial.colorNode = vec3(0.55, 0.70, 1.0)
     .mul(lineEdge.mul(lineEdge))
-    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.5);
+    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.5)
+    .mul(float(1).add(lineWobble.mul(uLineTwinkle)));
   const lines = new THREE.Mesh(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -2372,6 +2494,7 @@ function createStarLayer(scene) {
     segmentCount,
     starCount,
     starsOpacity: 0,
+    starFade: 1,
     lastSky: -1e9,
     meteor: {
       active: false, elapsed: 0, duration: 1, next: 5,
@@ -2397,15 +2520,20 @@ function refreshStarArt(layer) {
   const tint = [0, 0, 0];
   for (let i = 0; i < layer.starCount; i += 1) {
     const mag = layer.starMag[i];
-    const px = starPixelsFor(mag);
+    // magnitude cut: stars past the limit keep their slot but cost nothing
+    const cut = mag > uStarCut.value;
+    const px = cut ? 0 : starPixelsFor(mag);
     // spikes reach a couple of dot diameters past the disc; a faint star keeps
     // the same quad but with zero spike length, so it renders as a clean dot
-    const ray = mag <= spikeLimit ? Math.max(7, px * 2.4) : 0;
+    const ray = !cut && mag <= spikeLimit ? Math.max(7, px * 2.4) : 0;
     // the quad has to cover the halo (1.15 diameters) and the rays; any tighter
     // and the disc gets clipped into a square.
     const half = Math.max(px * 0.9, ray * 0.75 + 2);
-    const value = starGlowFor(mag);
-    writeStarColor(layer.starBV[i], saturation, tint, 0);
+    const value = cut ? 0 : starGlowFor(mag);
+    // colour modes: 0 = catalogue B-V, 1 = one warm white, 2 = exaggerated split
+    const mode = uStarMode.value;
+    const bv = mode > 0.5 && mode < 1.5 ? 0.35 : layer.starBV[i] + uStarBias.value;
+    writeStarColor(bv, mode >= 1.5 ? saturation * 1.5 : mode > 0.5 && mode < 1.5 ? 0 : saturation, tint, 0);
     for (let v = 0; v < 6; v += 1) {
       const at = i * 6 + v;
       glow.setX(at, value);
@@ -2535,11 +2663,27 @@ function updateStarDome(now, dt) {
   if (!starLayer) return;
   const layer = starLayer;
   const grade = starLevelOf(starsSetting);
-  // stars fade with daylight and are washed out by a bright moon
-  const visible = grade * Math.max(0, Math.min(1, uNightF.value * 1.15 - moonBrightness * 0.35));
-  const targetOpacity = visible;
-  layer.starsOpacity += (targetOpacity - layer.starsOpacity) * 0.08;
+  // Stars follow the sun instead of a switch: they begin to go at +6 deg and are
+  // gone by -2 deg, so dusk never pops. "Keep stars in daylight" pins the fade
+  // at 1 for people who want to read the chart at noon (and pay the fill for it).
+  const daylight = uStarDaylight.value > 0.5;
+  const targetFade = daylight ? 1 : smoothstepRange(6, -2, sunElevationDeg);
+  layer.starFade += (targetFade - layer.starFade) * Math.min(1, Math.max(0.02, dt * 1.6));
+  // a bright moon still washes the faint end out, as it does in life
+  // in daylight mode the sun is not allowed to veto the layer, or the switch
+  // would do nothing at noon, when it is the whole point
+  const skyVeto = daylight ? 1 : Math.max(0, Math.min(1, uNightF.value * 1.15 - moonBrightness * 0.35));
+  const visible = grade * layer.starFade * skyVeto;
+  layer.starsOpacity += (visible - layer.starsOpacity) * 0.08;
   uStarGlow.value = layer.starsOpacity * 0.9;
+  uStarFade.value = layer.starFade;
+  // a fully faded dome must not cost a single vertex: drop it from the draw list
+  const shown = layer.starsOpacity > 0.004;
+  layer.stars.visible = shown;
+  layer.lines.visible = shown;
+  // the band is weakest when the galactic centre is under the horizon, and the
+  // bright core only exists when the centre itself is up
+  uMilkyVisible.value = shown ? 0.35 + 0.65 * smoothstepRange(-10, 10, galacticCentreAlt) : 0;
 
   // 15 deg/hour: a 5 s refresh is a 0.02 deg step, i.e. invisible
   // A hidden sky costs nothing: skip the rebuild while the layer is faded out.
@@ -2551,6 +2695,7 @@ function updateStarDome(now, dt) {
     const lat = sunLat;
     // the galactic pole rides the same sky, so the Milky Way band turns with it
     const gal = equatorialToHorizontal(192.85948, 27.12825, lat, lst);
+    galacticCentreAlt = equatorialToHorizontal(266.405, -28.936, lat, lst).altDeg;
     const galAlt = gal.altDeg * DEG_TO_RAD;
     const galAz = gal.azDeg * DEG_TO_RAD;
     uGalNormal.value.set(

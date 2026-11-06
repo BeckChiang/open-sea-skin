@@ -380,3 +380,27 @@ test('the stars are billboards with a real disc, not square point sprites', () =
   assert.ok(source.includes('const radius = aSize.mul(0.5);'), 'the bright core is a disc, sized in pixels')
   assert.ok(!source.includes('crossColorAttr'), 'no leftover attribute references in the star layer')
 })
+
+test('the sky follows the sun instead of a switch', () => {
+  // Dusk used to pop: the layer went from full to nothing on one frame. The fade
+  // is now a function of solar altitude, and a fully faded dome is dropped from
+  // the draw list so the courtesy costs nothing.
+  assert.ok(source.includes('const targetFade = daylight ? 1 : smoothstepRange(6, -2, sunElevationDeg);'), 'the fade is a smoothstep of the sun height')
+  assert.ok(source.includes('layer.stars.visible = shown;'), 'a faded dome is skipped, not drawn at zero alpha')
+  assert.ok(source.includes('const skyVeto = daylight ? 1 :'), 'daylight mode is not vetoed by the night factor')
+  assert.ok(source.includes('uMilkyVisible.value = shown ? 0.35 + 0.65 * smoothstepRange(-10, 10, galacticCentreAlt) : 0;'), 'the band follows the galactic centre')
+})
+
+test('the constellation lines breathe one constellation at a time', () => {
+  // A global pulse reads as a flicker; per-edge phases read as air moving.
+  assert.ok(source.includes("lineGeometry.setAttribute('aLinePhase', new THREE.BufferAttribute(linePhaseAttr, 1));"), 'each edge carries its own phase')
+  assert.ok(source.includes('const lineWobble = sin(uTime.mul(0.9).add(linePhase)).mul(0.62)'), 'two incommensurate rates')
+  assert.ok(source.includes('function hashName(text) {'), 'the phase is deterministic per constellation name')
+})
+
+test('the glass pane has six looks and one dial', () => {
+  assert.ok(source.includes("const uGlassStyle = uniform(0);"), 'the style is a uniform, not a rebuild')
+  assert.ok(source.includes("const index = ['gaussian', 'box', 'double', 'radial', 'frost', 'tile'].indexOf(d.style);"), 'the six names are the contract')
+  assert.ok(clientSource.includes("const GLASS_STYLES = ['gaussian', 'box', 'double', 'radial', 'frost', 'tile'];"), 'the panel offers the same six')
+  assert.ok(clientSource.includes('style: state.glassStyle,'), 'the chosen look is posted with the rects')
+})

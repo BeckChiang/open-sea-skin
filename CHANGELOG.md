@@ -2,494 +2,95 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.31 — 2026-11-07
+
+### Added
+- 星空随太阳淡入淡出：`starFade = smoothstep(+6° → −2°)`，日落不再一刀切；淡到 0.004 以下整层从绘制列表里摘掉，省下的 fill 是实打实的。
+- 「白天也显示星空」开关：默认关，打开后不受太阳高度否决（代价是白天照付星层 fill）。
+- 银河按真实可见性渲染：宽盘 + 亮核 + 尘埃暗带，强度跟随银心高度；面板新增读数说明「可见 / 偏弱 / 只剩外臂」及银心角度。
+- 星座连线呼吸：每条边带 `aLinePhase`，双频正弦（0.9 / 2.3 rad·s⁻¹），星座之间各自成拍；面板可调幅度 0–60%。
+- 星色进设置：色温偏置 ±0.3、色彩模式（真实 / 单色 / 夸张）、星等截止 1.5–6.0（超出者的尺寸与亮度归零，不动几何）。
+- 毛玻璃六种形状：高斯 / 盒式 / 双层 / 径向 / 磨砂 / 玻璃砖，均走同一张半分辨率模糊链。
+- 超限表现：`overflow = log(需求/上限)/log4`，超过上限后浪冠更白、峰值起喷雾；面板「超限敏感度」0.5–3×。
+
+### Changed
+- 恢复默认保留已授权的经纬度，不再把定位打回固定城市。
+- 星点在白天模式下不再被夜间系数清零（原先开关在这个路径上无效）。
+
+### Fixed
+- `uStarFade` / `uMilkyVisible` / `uGlassStyle` / `uOverflow` 全部走 uniform，切换不重建几何或材质。
+
+## 1.5.30 — 2026-11-07
+
+### Changed
+- 版本号基线版本，内容与 1.5.29 相同，用于回退对照。
+
 ## 1.5.29 — 2026-11-06
 
 ### Changed
-- 星点改成每颗星一个朝向相机的四边形，着色器里画出「圆点 + 柔光 + 四道星芒」。
-  之前用的是 GPU 点精灵，它在 WebGPU 里只能是方块，节点材质也没有贴图槽可以贴圆形蒙版。
+- 星点改成每颗星一个朝向相机的四边形，片元里画「圆点 + 柔光 + 四道星芒」。之前用的 GPU 点精灵在 WebGPU 里只能是方块，节点材质也没有贴图槽可以贴圆形蒙版。
 - 星芒只给亮星（默认阈值 1.6 等，长度约 2.4 倍直径），暗星保持干净圆点，不再整片天空长十字。
 - 星点尺寸按渲染缓冲高度换算，自适应分辨率降低时星点不会跟着变小。
 - 星等颜色更饱和：B−V 查表的橙红端压深，饱和度上限从 1.6 放到 2.2，默认 1.5。
 - 默认值：星点 8.5 px、最暗星 3.0 px、饱和度 1.5。
 
 ### Fixed
-- 星层里残留的 `crossColorAttr` 引用（旧十字层删除后留下的字段）会在创建时抛
-  `ReferenceError`，被动画循环的 catch 吞掉变成 `star dome disabled`：天空只剩着色器自带的稀疏底噪星，星座连线全部消失。
+- 删掉星层里遗留的 `crossColorAttr` 引用。它会让 `createStarLayer` 抛错，而错误被 animate 的 try/catch 吞成一条 `star dome disabled` 警告：天空只剩程序化底噪星，星座连线整层消失。
 
 ## 1.5.28 — 2026-11-06
 
 ### Changed
-
-- **夜空改成近似中性黑**。此前夜间色板的蓝红比是 5–6，加上气辉与月夜提亮两项着色器加项，整片天空读起来是深蓝而不是黑。现在天顶 [0.0055,0.0066,0.0092]、深暮光 [0.0026,0.0030,0.0038]，三项加项也压到同量级（气辉 0.0034/0.0048/0.0074，月夜 0.012/0.014/0.019）。新增测试守住「夜角色比 < 1.9」。
-- **星空与海面接上了**。压缩用的折轴原来取相机朝向（带 +8° 仰角），于是越靠视线方向星越往上抬，海平线上永远空一条。现在折轴取「地平方向」（y 归零），压缩只把更多天空卷进来，不改地平线的位置。
-- 星点默认更大（基准直径 5.4 → 7.4 px、最暗星 1.4 → 2.0 px），色温饱和度 1.0 → 1.35，亮星基准亮度 1 → 0.82（高光不再被 tone mapping 压成白色，蓝色与橙色才看得出来）。
-- 毛玻璃默认半径 14 → 20 px、三栏强度 40/60/40 → 28/46/28：半径够大之后水面的高频被抹平，不再出现斑驳的块；中心栏仍最清。
-- 画质档位的像素比上限下调（平衡 1.2 → 1.0、省电 1.0 → 0.85），自适应下限 0.5 / 0.42；海面反射改用只含天顶/地平混色与太阳反光的 `skyReflect()`，不再整套 `skyColor`。
-- 天空设置组默认折叠，与其他组一致。
-
-### Added
-
-- 背景程序化星场不再是规则网格：每颗星有独立半径（0.42–1.28×）与亮度（0.55–1.45×），并叠一层更粗、偏移的星场把格子打散。
+- 夜空从中性偏蓝压到接近黑：`NIGHT` 与 `DEEP_NIGHT` 两级都降饱和，气辉与月光散射的加项减到原来的三分之一。
+- 星空折叠轴改成地平方位（把视轴 y 归零），折向视轴会把整片天抬离海面。
+- 星点放大到 7.4 px、最暗 2.0 px、色温饱和 1.35、基准亮度 0.82（高光被 tone mapping 压成白色正是色差消失的原因）。
+- 背景程序化星场加每星半径/亮度抖动与一层粗网格，打散原先的蜂窝感。
+- 毛玻璃半径默认 20 px、三栏强度 28 / 46 / 28，斑驳明显减少。
+- 「平衡」画质像素比 1.2 → 1.0，海面反射改用轻量 `skyReflect`（不再跑整套 `skyColor`）。
 
 ### Fixed
-
-- TSL 节点与 JS 数字直接做乘法会生成 `NaN` 常量，整个着色器编译失败、天空与星点全黑。现在抖动一律走 `hs.mul(0.86).add(0.42)` 这种节点图写法。
+- TSL 图里用 JS 运算符做数值混合会得到 `NaN` 常量，编译期报 `'NaN' : undeclared identifier`，整片天空变黑。所有混合改走节点方法。
 
 ## 1.5.27 — 2026-11-06
 
-### Changed
-
-- **皮肤默认 30 fps**（独立演示页仍是 60）。这个画面每一帧都是一次全屏填充，帧率减半就是 GPU 时间减半；波浪的周期以秒计，30 fps 看不出差别。自适应分辨率的目标帧率也随之压到 28，否则调速器会一路把分辨率推高、把省下的钱又花回去。
-- 星场的单元哈希也去掉了 `sin`（原先每个天空像素三次 `sin`），与 1.5.26 的梯度噪声哈希统一。
-- 银河带按 `astro` 参数门控：海面反射不再计算银河（反射本来就把它糊没了），这是水面像素里最后一项没必要的计算。
-
 ### Added
+- 帧率上限 24 / 30 / 45 / 60，皮肤默认 30；同时把自适应分辨率的 `TARGET_FPS` 压到上限以下，避免调速器把省下的钱又花回分辨率。
 
-- 高级组新增**帧率上限**：24 / 30 / 45 / 60 fps，可单独于画质档位调整；档位切换不会把用户选的帧率改回去。
+### Changed
+- 程序化星场的单元哈希去掉 `sin`，改用多项式哈希；银河带只在海面以上参与反射。
 
 ## 1.5.26 — 2026-11-06
 
 ### Changed
-
-- **同样的画面，GPU 开销降了约 44%**（同一台机器、1600×900 窗口、无头 Edge 采样：平均每帧 126 ms → 70 ms）。这一版只动开销，不动作画与配色。
-- 泛光：用 1/4 分辨率的自写 `SoftGlowNode` 替掉 three 的 mip 链 bloom。后者在整帧上跑约 10 个 pass，实测占 42 ms / 126 ms；新实现只做「亮部提取（阈值 0.62）+ 可分离 9-tap 高斯」两次 pass，眼睛看到的日晕与亮星光晕保留。
-- 噪声哈希去掉 `sin`：`hash2` 与星场哈希换成多项式哈希。海洋像素原先约 120 次 `sin`，硬件的 transcendental 单元是这里的瓶颈。
-- 海洋细节：两个 FBM（6 次梯度噪声）降到两次梯度噪声；sparkle 与泡沫改用单阶噪声。
-- 云：fbm 由 3 阶降为 2 阶（第三阶在 0.58 的混合透明度下不改变任何云边界）。
-- 海面反射不再计算云噪声：掩码参数是节点，云 fbm 原本对整片水面都要算，而波浪法线本来就会把它糊掉。
-- 星座连线的像素下限改为按**绘制缓冲高度**计算。自适应分辨率下降采样后，用 CSS 高度算出的下限仍不足一像素，连线会碎成虚线。
-
-### Added
-
-- 高级组两项：**画质档位**（高 / 平衡 / 省电 = 像素比上限 1.5 / 1.2 / 1.0、目标帧率 60 / 45 / 30、自适应下限 0.7 / 0.6 / 0.5）与 **泛光强度**（0–100%，默认 55%；0 时两个 pass 完全跳过）。
+- 泛光从 TSL `bloom` 的 mip 链换成自写 `SoftGlowNode`：1/4 分辨率、阈值 0.62、9 taps 可分离高斯，关闭时整段跳过（单这一项 126 → 85 ms/帧）。
+- `hash2` 去掉每像素两次 `sin`（海洋约 120 个/像素），改多项式哈希；细节法线从两个 FBM 降到两次梯度噪声；云 FBM 三阶降到两阶。
+- 海面反射不再对整片水面计算云的 FBM。
+- 星座连线的像素下限按绘制缓冲高度计算，自适应缩放后不再碎成虚线。
+- 高级组新增「画质档位」（高 / 平衡 / 省电）与「泛光」滑杆。
 
 ## 1.5.25 — 2026-11-06
 
 ### Added
-
-- **真实星等与色温**。星空不再只画星座顶点，而是 2851 颗真实亮星（目视星等 ≤ 5.5，来自 d3-celestial 的 HYG 派生表，CC BY-SA 4.0，见 `THIRD_PARTY_NOTICES.md`）：星点大小按星等衰减、亮度按星等压缩、颜色按 B−V 色指数从蓝白到橙红。天空第一次出现「一等亮星旁边趴着一颗五等暗星」的层次。
-- 星空组新增 4 个旋钮：最暗星大小（1.4 px 下限）、星等衰减（0.16，越大暗星越细）、色温饱和度（0 = 单色天空）、星芒阈值（1.6 等，只有比它亮的星才带十字星芒，约 20 颗）。
-- 星芒不再给每颗星都画：只给亮星，短而随亮度变长，暗星是干净的点。
+- 真实星表：`scripts/gen-stars-catalog.mjs` 从 d3-celestial 的 `stars.6.json` 生成 `shared/stars-catalog.js`（2851 颗，mag ≤ 5.5，含 B−V），CC BY-SA 4.0，署名见 `THIRD_PARTY_NOTICES.md`。
+- 星等 → 尺寸、B−V → 色温；星芒只给亮星；新增星点大小、最暗星、色温饱和、星芒阈值四个旋钮。
 
 ### Changed
-
-- 星星的亮度曲线由「按星座顶点被几段共用」改为真实星等，`shared/stars-catalog.js` 为新增的生成产物（79.7 KB），由 `scripts/build-runtime.mjs` 复制进 `native-dist/`。
+- 星座连线的像素下限改成按星壳处「每像素多少世界单位」换算，窗口很矮时也不会断成虚线。
 
 ## 1.5.24 — 2026-11-06
 
 ### Fixed
-
-- **整片天空发灰（1.5.23 的回归）**。1.5.23 把三个档位表从 0..1 改成百分比（mid = 100），但 `uConstellation` 与 `uCrossGlow` 两个 uniform 仍按老表播种，值是 100 而不是 1：757 颗星的十字星臂长从 15 涨到 574，加法混合铺满天空；星座连线也被放大 100 倍，形成一层白色格栅。两处改为 `…_GRADES.mid / 100`。
-- 顺带给「星空亮度/十字星」的 uniform 加了回归断言，避免百分比与 0..1 再次混用。
-- `window.__ossDebug` 调试出口改为只在 URL 带 `?ossdebug=1` 时挂载（1.5.23 是无条件挂的）。
+- 灰屏：`STAR_GRADES` / `CONSTELLATION_GRADES` / `CROSS_GRADES` 改成百分比后，`uConstellation` / `uCrossGlow` 的初值仍按 0..1 播种，值变成 100，星芒臂长 574 单位铺满天空。
 
 ## 1.5.23 — 2026-11-06
 
 ### Added
-
-- 设置面板从 5 组改成 **11 组可折叠 + 搜索框**：皮肤与界面 / 波浪 / 天空与日照 / 星空 / 星座 / 流星 / 云 / 船与舰队 / 毛玻璃 / 高级。所有旧的四档枚举都换成了连续滑杆。
-- 天空与日照组新增读数区：本机时刻、该地时刻、太阳高度方位、日出日落、民用/航海/天文三条暮光线、月亮高度相位。
-- 时区三档（本机 / 按经度推算 / 手动 UTC±），与经纬度一起决定读数的「该地时刻」。默认经纬度改为「未定位」，首屏静默请求一次浏览器定位。
-- 星空组 11 个旋钮：星空距离（默认 2.0）、穹顶比例、星星亮度、星点大小、亮星增益、光晕、底噪星场、闪烁速度/幅度、银河、夜色三档。
-- 星座组 4 个旋钮：连线亮度、十字星、连线粗细、地平淡出高度。
-- 流星组：频率与亮度；新增流星**头部亮点**，12% 概率是带长尾的火流星。
-- 云组：云量、漂移速度、不透明度。
-- 毛玻璃：全局模糊半径 0–24 px（真实半径，不再是四档硬跳），三栏强度改为 0–100%。
-
-### Changed
-
-- 天色改为**全天连续**：白昼混合区间从 0…12° 拉到 0…90°，深夜不再冻结，加入了月光散射、气辉、银河底色。1 分钟内最大色板跳变 0.024（只发生在真实日出那一刻），夜间每小时都有可见变化。
-- 暮光独立成轴：暮光强度随太阳高度平滑升降，新增**金星带**（背日侧粉带）与**地影**（地平线下暗蓝楔），朝霞偏冷白粉、晚霞偏深橙红。
-- 星空距离从「整体缩小星座」改为**立体投影**（`r = 2tan(θ/2)`，保角），并按「穹顶比例」与旧方式混合；程序化星场跟着同一套投影展开，两层不再错位。
-- 星星的闪烁速度/幅度、星点大小、光晕、连线粗细都变成实时 uniform，不再重建几何。
-- 测试 79 条全绿（structure 30 / fleet 5 / sky 13 / solar 14 / stars 5 / sky-astro 12）。
-
-### Known
-
-- 还没有真实星等/色温：星表（约 640 KB）需要联网机器生成，本次未内置；「亮星增益」是按星座顶点连线数的近似。
+- 天色 24 小时连续：白昼混合区间从 0…12° 扩到 0…90°，深夜不再冻结；`skyLight` 单条 `smoothstep01(−18, 12, el)`。
+- 暮光独立成轴：强度随太阳高度平滑升降，加金星带、地影、朝/晚不对称；`shared/solar.js` 新增 `twilightTimes()` 给出民用/航海/天文三条暮光线。
+- 立体投影星空：`θ' = 2·atan(tan(θ/2)/fold)`，保角，程序化星场反向展开，两层不再互相滑动。
+- 面板重排成 11 组可折叠分区 + 搜索框，原有四档枚举全部换成连续滑杆；时区三档、暮光读数、定位按钮、恢复默认。
+- 流星头部亮点与 12% 火流星；云量/漂移/不透明度可调；毛玻璃真实半径 0–24 px 与三栏强度百分比。
 
 ## 1.5.22 — 2026-11-06
 
 ### Added
-
-- 天空控制新增「星空距离」0.6–3.0 ×（默认 1）：把天球角度按视轴压缩，同一窗口能看到更多星座。1 = 原来的 60° 视锥。
-
-### Changed
-
-- 船的默认值改为用户指定：横向范围 2 ×、体积 2.5 ×。
-- 横向摆幅按该深度能容纳的画面半宽 92% 截断，避免 2 × 时近处港口甩出画面。
-
-## 1.5.21 — 2026-11-06
-
-### Changed
-
-- 回退 1.5.20 的「画面半宽比例」摆幅，恢复 1.5.3 的固定航道（`radiusRight` 6–20 世界单位）。
-- 面板「船」组新增三个设置：**横向范围**（0.2–3.0 ×，默认 1 = 1.5.3 原样）、**航速**（0.3–2.5 ×，默认 1）、**船的大小**（1.4–4.6 ×，默认 2.8）。三者经 `oss-boats` 消息下发。
-
-## 1.5.20 — 2026-11-06
-
-### Changed
-
-- 船的横向摆幅改为「画面半宽的比例（0.62–0.92）」而不是固定的 6–20 世界单位：泊位从 15–25 移到 26–44 之后，固定幅度会让三条船都只在画面中段兜圈。
-
-## 1.5.19 — 2026-11-06
-
-### Fixed
-
-- 星座连线把「每条边存两次」的点表当作折线逐点连接，于是每个星座末尾与下一个星座开头之间被画出一条不存在的连线（共 149 条），星座形状因此明显不对；改为两两成对步进，按真实边绘制。
-- 连线粗细从约 4 px 收到约 3 px。
-
-## 1.5.18 — 2026-11-06
-
-### Changed
-
-- 星座连线改由两片软边四边形绘制（每段 8 顶点、中心线最亮、两缘归零），斜线不再锯齿。
-- 星穹重算周期 5 秒 → 20 秒；星空已淡出时整段跳过，减少周期性长帧。
-- 自适应分辨率：skin 模式最低比例 0.5 → 0.7，步长 0.97 / 1.015，改动后保持 8 秒，死区 ±6 FPS。
-- 船位投影从每帧改为面板状态上报时按需计算（`boatSpotList()`）。
-
-## 1.5.17 — 2026-11-06
-
-### Changed
-
-- **船的摆放与巡航整段回退到 1.5.3 的实现**（用户："重新阅读 1.5.3 的代码，那个时候船是正常的"）。
-  1.5.4–1.5.16 期间为了"让三艘都看得见"做了三次改造（横向折叠、世界坐标泊位、屏幕空间反投影 + 可见水域导航道），
-  每次都引入了新的副作用（画面外泊位、船舱被玻璃盖住、进出场凭空出现）。1.5.3 的版本是：
-
-  - 世界坐标椭圆航道：`base = 26 + (index % 4) * 9 + Math.floor(index / 4) * 3`、`radiusRight = 6 + ((index * 3.7) % 14)`、`radiusBack = 2 + ((index * 2.3) % 6)`，每条船在自己的椭圆上绕圈，船头永远朝切线方向；
-  - 进出场靠 `away` 横向位移 + `boatApproachOffset(ahead)` 按相机视锥算出的画面外距离，不用缩放做淡入淡出；
-  - 避碰用世界单位 `BOAT_MIN_SEP = 7` 的两轮松弛，推挤写回各自航道；
-  - 速度仍由浪决定（`cruise` + `surge` 读船头前方 `BOAT_PROBE = 2.4` 的坡度），缩放 2.8。
-
-  保留 1.5.13/1.5.15 补上的两件事：`boatError` 会把船层崩溃写进面板读数（不再静默关层），以及
-  `__ossState().boatSpots` 仍上报逐船屏幕坐标（1.5.3 的实现里用 `project()` 补回）。
-  随之移除：`oss-water` 消息、`waterTop/waterLeft`、可见水域导航道、屏幕空间反投影与屏幕单位避碰。
-
-## 1.5.16 — 2026-11-06
-
-### Fixed
-
-- **三艘都"画了"却只看得见一艘**：面板读数 `海面 3/3 · 0.87,0.86 0.16,0.91 0.8,0.94`。
-  三艘确实都在画面里，但对话栏与输入框那块半透明玻璃盖住了 x>0.3 的部分，两艘只剩 28% 对比度，
-  读不出来。现在客户端把"没被盖住的水域"整个量出来（左边界 = 对话栏左边，上边界 = 侧栏底边），
-  `oss-water` 同时带 `top` 与 `left`；三条航道排在侧栏下方、对话栏左侧的那片可见水里，
-  进出场也改成贴着这片水的左右边缘，不再钻到玻璃底下。
-
-## 1.5.15 — 2026-11-06
-
-### Fixed
-
-- **船还是一艘都没有**：1.5.14 只补了常量，真正的第一处崩溃是
-  `const boatSpots = []` 又被 `boatSpots = []` 重新赋值 —— 给常量赋值会抛
-  `TypeError: Assignment to constant variable`，同样被 `animate()` 的 try 吞掉并把 `boats` 置空。
-  改成 `boatSpots.length = 0`。
-- 船层出错时把消息留给面板：`__ossState().boatError` 会带上异常文本，面板「船」那行直接显示
-  「船层报错 …」，不用再开 DevTools 找那行被吞掉的警告。
-- 新增结构测试「module-scope collections are mutated, never reassigned」：拿它跑 1.5.14 的代码会
-  正好报出 `boatSpots`。
-
-## 1.5.14 — 2026-11-06
-
-### Fixed
-
-- **一艘船都没有了**：1.5.13 重写 SECTION 10 时，`BOAT_ENTER_RATE`、`BOAT_EXIT_RATE`、
-  `BOAT_PROBE` 三个常量的声明被连带删掉，函数体还在用它们。`animate()` 里
-  `try { updateBoats(dt) } catch { boats = null }` 把 ReferenceError 吞了，于是把整个船层关掉、
-  控制台只留一行警告——看起来就是"船全没了"。三个常量已补回。
-- 新增结构测试「no constant is used before it is declared」：去掉注释和字符串后，源码里每个
-  全大写常量都必须有声明或来自 import。拿它跑 1.5.13 的代码会正好报出这三个名字。
-
-## 1.5.13 — 2026-11-06
-
-### Fixed
-
-- 船改成**屏幕空间摆放**：先在画面里定好每艘船的 (x, y)，再把这条视线反投影到海面。
-  之前按"深度 + 横向"推算，面板一长、相机一倾，最远那艘就落到下沿外面（读数里 y=1.06），
-  看上去永远只有一艘。现在越界在构造上就不可能发生。
-- 客户端每次测量聊天栏底边（`oss-water`）报给海面，窗口大小、会话长短变了船就跟着挪。
-- 船道不再集中在左下角：三条航道横跨可见宽度（amp 0.33–0.37，中轴 0.51/0.56/0.56）。
-
-## 1.5.12 — 2026-11-06
-
-### Changed
-- 船恢复横向巡航：不再固定在左/中/右三个泊位，而是各自以 0.62–0.72 倍可见半宽为振幅、±0.06 为常驻偏移，左右扫过整个画面。
-- 活动范围硬框在画面内：横向 ±0.78 半宽（折合屏幕 x 约 0.11–0.89），纵向深度夹在 17.5–24（折合屏幕 y 约 0.83–0.91），任何一侧都不会被画到画外。
-- 深度改成三条带（19.5 / 21.1 / 22.7），三条航道不再挤在同一条线上。
-
-## 1.5.11 — 2026-11-06
-
-### Fixed
-- 「十字星」档位点了没反应：cross 从 1.5.9 起只写在 DEFAULTS 里，没进 normalize() 的白名单，每次保存都被丢掉并回位到默认；现在补进白名单，档位既能存住也能立刻生效。
-- 三艘船只有一艘在画面内：泊位深度 base + cos(angle) * radiusBack 会下探到 13 单位左右，投影后 y > 1（画面下沿以外）；现在把深度夹在 17.5–24，全部落在 83%–91% 画面高度。
-- 流星一直看不到：原来在整片天球上随机生成，而画面只覆盖约 80° 方位、38° 高度，四分之三的流星落在身后；现在只在可见扇区生成（方位 ±30°、高度 13–33°），尾迹从 0.35 收到 0.18 更利落，亮度 1.4 → 2.6，间隔 4–13s → 3–9s。
-
-## 1.5.10 — 2026-11-06
-
-### Changed
-- 船的帆与船体各提亮 1.75 / 1.5 倍、船体缩放 2.1 → 2.7：对话栏是 72% 不透明的玻璃膜，船落在它后面时对比度被吃掉大半，三艘看起来像一艘。
-
-## 1.5.9 — 2026-11-06
-
-### Added
-- 天空控制新增「十字星」档位（关 / 弱 / 中 / 强）：每个星座顶点上那颗星画成闪烁的十字，档位同时决定亮度与臂长。默认「中」。
-
-### Changed
-- 十字星整体提亮：亮度系数 1.35 → 2.2，闪烁幅度 0.4 → 0.55，臂长按档位从 0.72 倍长到 1.14 倍。
-
-## 1.5.8 — 2026-11-06
-
-### Added
-- 星座顶点画成闪烁的十字星：每个端点由两条短线段组成，按相机平面取向，避免透视压扁；每条臂按各自相位呼吸，读数才像星星而不是短线。
-
-### Changed
-- 船的泊位固定成左 / 中 / 右三处（±0.6 与 0，按可见半宽的比例），每艘只做小幅摆动，三艘不会再挤成一条线或叠成一艘。
-- 泊位深度 18（±1.2），三艘都落在对话栏底边以下的开阔水面。
-
-## 1.5.7 — 2026-11-06
-
-### Changed
-- 星座的端点星有了自己的光晕层：原来连线的顶点只是一颗和背景同亮度的 1 px 点，整片天空看起来像没星星的直线网格。
-- 星座连线加亮并换成偏蓝白，星点从 3.6 提到 5.4。
-- 船重新回到画面里可见的那片水：泊位从 26–44 单位拉近到 18–27（对话栏底边以下），缩放 2.8 → 2.1，三艘同时可见。
-
-### Fixed
-- 「只看到一艘船」：泊位落在对话栏背后，现在落在卡片下方的开阔水面上。
-
-## 1.5.6 — 2026-11-06
-
-### Changed
-- 海面不再按页面空隙分配航道：整幅画面都是可航行的水域，船可能驶过对话栏背后，这是真实海面的样子。设置面板「船」那行仍会印出每艘船的屏幕坐标，便于核对。
-
-## 1.5.5 — 2026-11-06
-
-### 修复 / Fixed
-
-- **面板显示 3 艘、画面上只有 1 艘**：三艘船都确实在渲染，但中间那条航道正好落在对话栏后面——船画在被面板遮住的地方，看上去就是数量不对。页面现在把自己的布局空隙（侧边栏与对话栏之间、对话栏右侧）通过 `oss-bands` 报给海面，航道按空隙分配，船一律走在能看见的那几列海面上。
-
-## 1.5.4 — 2026-11-06
-
-### 修复 / Fixed
-
-- **快速切会话时船会突然出现或消失**：每停在一个会话上就立刻按那个会话的名册重排，来回扫过侧边栏时船被反复召回/丢弃。现在切换要停留 600 ms（`FLEET_SETTLE_MS`）才认，只有最后停留的窗口决定船数。
-- **被召回时换边**：船已驶出并被丢弃后，同一序号再被需要时原来固定从自己那一侧重新入场，若刚才是从另一侧出去的，看起来就是从另一头凭空出现。现在记住离开的那一侧（`lane.exitFrom`），从原路回来。
-
-## 1.5.3 — 2026-11-06
-
-### 修复 / Fixed
-
-- **天空组一个字都不显示**：面板用 `readOceanState()` 去读海面帧的 `__ossState()`，但那个 `frame` 变量是控制器创建时取的一次快照，iframe 还没挂上，永远是 `null`（另外帧与面板是不同 origin，直接读也会被拦）。现在每 400 ms 由帧主动 `postMessage({ type: 'oss-state' })` 上报自己的状态，面板优先直读、读不到就用最近一次上报 —— 太阳高度/方位、日出日落、月相、船的实际数量都走这条路。
-
-## 1.5.2 — 2026-11-06
-
-### 修复 / Fixed
-
-- **面板读数全是空的、浪也不动**：`pid()` 被写在 `mountUi` 里面，而几个读数函数在它外面，于是每 250 ms 的波浪 tick 都在 `refreshSunReadout` 抛 `ReferenceError: pid is not defined`，整个 tick 就此中断——波浪引擎既没发值，读数也没更新。`pid` 提到模块作用域，并加一条结构测试守住（`structure.test.mjs` 第 18 条）。
-
-- **船贴着画面底边**：相机上扬 8° 后海面只占画面下三分之一，原来的 15–25 单位泊位落在 84%–97% 高度。泊位外推到 36–52 单位、船体缩放 2.2→3.2，船回到地平线下方一带。
-- **没有子智能体的会话连保底一艘都没有**：`count === 0` 被当成「关船」发出去（`off: true`），与面板文案「保留 1 艘」自相矛盾。现在 `off` 只由「船」开关决定，`count` 至少 1。
-- **悬停预览仍然透底**：真正的病因是把 `--dsw-alias-bg-*` 覆写在 `body` 上，`body` 下的 portal（「已编辑 N 个文件」卡片、tooltip、dialog）继承了玻璃底色。现在 token 只覆写在 `#root` 上，portal 保留主题原本的不透明色；上一轮针对 `data-hovercard-bridge` 的单点补丁已回退。
-
-### 变更 / Changed
-
-- 面板「船」那行在数量后追加诊断读数 `（会话 xxxxxx · 海面 实际/目标）`，用来分辨「名册不对」还是「消息没送到」。
-
-## 1.5.1 — 2026-11-06
-
-### 修复 / Fixed
-
-- **太阳月亮不再自己漂**：skin 模式关掉 `OrbitControls.autoRotate`（相机自转会让天体横向漂移）；相机上扬改为写进 `controls.target`（原来的 `camera.rotation.x` 每次 `update()` 都被重算覆盖，8° 上扬实际没生效，`maxPolarAngle` 也把仰角钳回 0°）。
-- **画面更像真实天象**：fov 55→60、上扬 10°，可见天区 −20°..40°，地平线下移到画面下三分之一；真实高度 0..30° 原样透传，30°..90° 压进 30°..39°。今天 15:50 武汉实测太阳 18.8° / 方位 237°，落在画面 65% 高度处。
-- **白天天空不再灰**：`DAY` 地平线色从接近灰的 `[0.52,0.68,0.82]` 改成饱和蓝 `[0.36,0.60,0.90]`；云色不再用写死的亮灰，改取地平线色（白天偏蓝、黄昏自动变暖），云层不透明度略降。
-- **黄昏晚霞**：天空着色器新增按「太阳方位 + 低太阳 + 近地平线」加权的暖色带，并用 `smoothstep(-0.16,0.03,uSunDir.y)` 门控，深夜地平线不会挂假晚霞。
-
-### 新增 / Added
-
-- **设置面板适配深浅色**：浅色 shell 下面板改成浅色玻璃、深色文字，滑杆/分段控件/输入框同步换色（原先只有深色一套，浅色下白字压白底）。
-- **悬停预览可读**：已改动文件的悬停预览卡与 tooltip 是 body portal，用同一套半透明 token 时能透出下面的正文；现在把 token 叠在不透明底上（深色 `#0c1118` / 浅色 `#fbfcfe`），保留主题色但不再透字。
-- 日照组改名为「天空控制」（英文 `Sky`）。
-
-## 1.5.0 — 2026-11-06
-
-### 新增 / Added
-
-- 日照改为「真实高度 + 相机上扬」：相机上扬 8° 后可见天区约 −20°..34°，太阳/月亮在 0..16° 时**原样使用真实高度**，只有 16°..90° 才压进 16°..32°，不再整天钉在画面同一条线上，也不会飘出画面；方位仍然折进画面（正东→左缘、正西→右缘）。
-- 月亮：同一套映射，月盘放大到 1.0°、亮面倍数提高，相位明暗界线按真实朔望计算；面板新增月亮读数（月相名称 / 亮面百分比 / 高度角，地平线下会明说）。
-- 星座：显示真实的 88 个星座连线与顶点恒星（d3-celestial 数据，BSD-3-Clause），星点加大并带闪烁与冷暖色差；连线亮度受新设置项「星座连线」控制（关 / 少 / 中 / 多）。
-- 流星：新增「流星」开关，关闭后不再生成。
-
-### 修复 / Fixed
-
-- `__ossState()` 里 `stars` 键被星级不透明度覆盖，改为 `stars`（档位名）+ `starOpacity`（实际不透明度）。
-
-## 1.4.1 — 2026-11-06
-
-### 修复 / Fixed
-
-- 切会话后船的数量要刷新界面才变：船数轮询改为由 250 ms 的波浪 tick 驱动（每 4 s 一次，会话 id 一变立刻重取），不再挂在单独容易失联的定时器上；`postFleet` 改成每次轮询都发，iframe 帧重载后能自愈；指标桥改为在渲染期写入，切会话第一拍即带新 `sessionId`。
-
-## 1.4.0 — 2026-11-06
-
-本地 fork（`plugins/open-sea-skin-lab`），在 1.2.7 基础上加功能，未改动上游 npm 包。
-
-### 新增 / Added
-
-- 真实日照：`shared/solar.js` 用 NOAA 公式按经纬度算太阳高度与方位；`shared/sky.js` 提供夜/晨昏/昼三段色板（0° 恰好等于原版黄昏，≤ −18° 全夜）；月亮按真实相位与地平高度出现，天顶有 88 个真实星座（含连线与闪烁）与流星。设置里可填经纬度，或按「使用我的位置」自动定位。
-- 船：每个子智能体一艘（`/open-sea-skin/fleet` 由宿主半查询），至少保留一艘；从画面左右两侧驶入驶出，随 Gerstner 波面起伏，船头顺航向，多船自动避碰。
-- 波浪随负载：按当前会话的 token 吞吐（输入+输出）或累计金额改变浪高，带波谷下限、参考值、平滑时间与曲线开关。
-- 毛玻璃：渲染器内半分辨率 9-tap 模糊（比 CSS `backdrop-filter` 省性能），左/中/右三栏可分别开关与选档；另有 CSS 模式与「高性能模式」。
-- 设置面板四组（皮肤 / 波浪 / 日照 / 毛玻璃），子智能体数量在「船」一行可读。
-
-### 已修 / Fixed
-
-- 夜天色板原来是「最暗只到黄昏」，凌晨仍是橙灰；现在按真实太阳高度过渡到深蓝夜色。
-- 刷新后海面只剩一艘船（`postFleet` 会跳过未变化的数字，而 iframe 每次加载从一艘起步）。
-- 船进出场原来靠缩放，看起来是凭空出现/消失；改成从画面两侧横着驶入驶出。
-
-## 1.2.7 — 2026-11-01
-
-### 修复 / Fixed
-
-- 皮肤控制面板不再被宿主的浅色 dialog 样式染成白底白字；提高左下角按钮与说明文字对比度。感谢 #16 中的精确复现。
-- 清除官方 Windows 侧栏内层重复背景，保留单层工作区玻璃；底部区域不再叠加填色。
-- 按 Harness 0.2.1-rc.5 的真实 `main.conversation` 插槽适配输入卡片、消息气泡与代码卡片的专属颜色变量，保留圆角和代码高亮；不对其它插件做全局卡片覆盖。
-- Keep Open Sea controls readable in either theme and restore translucent conversation surfaces on current Harness layouts.
-
-### 优化 / Performance
-
-- 合并波浪法线/浪峰计算，缓存重复的余弦与视线计算。部分采纳 @zdjmrq 的 #21 建议；原 PR 已由作者关闭，并未整体合并。
-- WebGPU / WebGL2 均无渲染错误，固定场景最大色值差为 1/255；800 个时空/浪高样本与原公式一致。未进行 FPS 基准，不宣称固定提速比例。原海洋效果、Logo 与动态展示图保留。
-
-### 兼容与发布 / Compatibility and delivery
-
-- 核对官方最新发布通道 **0.2.1-rc.5**，新增可复跑的隔离运行时安装/加载/卸载检查；[测试边界与已知问题](docs/compatibility.md)。Windows 原生完整安装仍未实测。
-- 新增中文优先的问题模板，更新官网与安装文档；GitHub 包和 npm 包分阶段发布时，明确哪个版本已可安装。
-- npm 发布复用 GitHub 的同一份校验包，再比对 registry integrity 和 SHA-256，避免二次打包漂移。
-- 远景高光闪烁（#19）与独立波浪速度（#22）仍在跟进，不计入本次已修复项。
-
-## 1.2.6 — 2026-10-20
-
-### 修复 / Fixed
-
-- 将浮层背景与工作区玻璃值分离：插件广场使用的 overlay token 保持 97% 不透明度。
-- 语义 dialog / alertdialog 与设置弹窗使用独立可读底色，覆盖 body portal 中的二级插件配置弹窗；不改遮罩、层级和海洋效果。感谢 #16 的复现信息。
-- Keep overlay tokens and semantic modal cards legible independently of workspace glass opacity, including sibling-portalled plugin configuration dialogs.
-
-### 验证范围 / Verification scope
-
-- macOS / Windows 页面结构、浅深色、40% / 90% 工作区玻璃组合回归；确认工作区透明度与 shell overlay 不变，停用后样式清除。
-- 核对官方 Harness 0.2.1-rc.2 安装文档及 Modal 结构。不是 Windows 原生安装或该新版完整实机兼容认证。
-- 中文安装指引明确 npm 插件优先、社区市场可选、浏览器扩展不适用于桌面客户端。Logo 未修改。
-
-## 1.2.5 — 2026-10-10
-
-### Fixed
-
-- Official DeepSeek Harness Desktop `0.2.0-rc.2` now paints one glass layer
-  across the sidebar, conversation, and rightbar. The conversation's nested
-  background no longer compounds opacity, while the composer remains readable.
-- Official Desktop Settings stays opaque enough to read when workspace glass
-  is set to its minimum 40%.
-
-### Tested
-
-- Installed the release package into an isolated official macOS Desktop
-  `0.2.0-rc.2` profile with its bundled CLI and visually verified the shell.
-- Added a 0.2.x shell regression fixture for macOS/Windows structure in light
-  and dark modes. Windows is fixture-tested, not native Windows E2E-tested.
-
-### Documentation
-
-- Clarified the Desktop install path and distinguished the GitHub release from
-  the older npm package currently available through registries.
-
-## 1.2.4 — 2026-09-09
-
-### Fixed
-
-- Quick controls follow asynchronous Harness document-language changes in both
-  Chinese and English, including accessibility labels, without losing focus or
-  control state. The observer is removed on disposal. Thanks to @Max-Null for
-  reporting the issue in #6; the fix lives in the shared source and all generated
-  install targets.
-
-### Documentation
-
-- Recommend the prebuilt npm package to avoid Git transport failures during
-  installation; explain why a `git ls-remote` error is not proof of a blocked
-  build script (#8).
-
-## 1.2.3 — 2026-09-07
-
-### Fixed
-
-- DSH Desktop advanced and extended layouts now paint a single shared glass
-  background. The sidebar, conversation and details panes no longer differ
-  in opacity due to transparent sidebar overrides and stacked conversation fills.
-- Composer cards and dialogs retain their own backgrounds. Disabling or
-  unloading Open Sea restores the desktop's original styles.
-
-### Tested
-
-- Desktop shell regression based on DSH Desktop Beta `2.0.5-beta.1`: 24
-  combinations of layout, native material, light/dark mode and glass opacity,
-  plus settings, text input, disable/re-enable and disposal in Chromium.
-- The old `1.2.2` bundle fails this regression: at 40% glass the sidebar's
-  effective opacity is 0%, while nested conversation fills reach 64%.
-
-## 1.2.2 — 2026-09-01
-
-### Added
-
-- Quick-controls panel gains an enable toggle, an automatic day-cycle toggle,
-  and a reset-to-defaults button. Disabling the skin now only tears down the
-  ocean surface while keeping the button and panel, so the skin can always be
-  re-enabled from the same page.
-- Public npm publishing metadata and guarded release automation for DSH
-  Desktop managed installation.
-
-### Fixed
-
-- Dragging the daylight slider now unchecks the automatic day-cycle toggle to
-  match the persisted state.
-- Native source integration now supports Harness `0.1.2-alpha.3` and its split
-  client store, renderer, and session services.
-- Browsers without WebGPU can use a capped low-end WebGL2 fallback instead of
-  stopping at an unavailable screen.
-
-## 1.2.1 — 2026-08-18
-
-### Changed
-
-- The Chrome/Edge extension is now Harness-only and no longer replaces the
-  browser new-tab page.
-- Loopback pages must match the DeepSeek Harness title, root element, and
-  server-injected boot marker before the extension changes their DOM.
-- Browser acceptance now proves that real Harness pages are skinned while a
-  generic localhost app and an existing third-party new-tab homepage remain
-  untouched.
-
-## 1.2.0 — 2026-08-17
-
-### Added
-
-- A root `dsh.bundle` package that installs directly into DeepSeek Harness.
-- Lower-left quick controls for wave size, daylight, glass opacity, and the
-  automatic day/night cycle in the one-line DSH installation.
-- A DeepSeek Harness-specific marketplace cover and four 40%-glass gallery
-  animations covering dark mode, light mode, waves, and sunset.
-- Host-route boundary tests for local renderer assets.
-
-### Fixed
-
-- Kept the native Settings dialog above the conversation composer at wide
-  aspect ratios.
-- Restored the lower-left Skin settings launcher and persisted every control.
-
-## 1.1.0 — 2026-08-17
-
-- Added the native Harness source integration, static installer, browser
-  acceptance coverage, and bilingual 40%-glass gallery.
-
-## 1.0.0 — 2026-08-14
-
-- Initial Open Sea WebGPU showcase and Chrome/Edge extension.
+- Lab 分支基线：波浪跟会话负载、天色用真实天文、星空用真实星座、船数跟子智能体数一致、三栏毛玻璃。

@@ -41,6 +41,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     r0: 25,
     amountFull: 10,
     smooth: 4,
+    overflowGain: 1,
     sunMode: 'real',
     lat: null,
     lon: null,
@@ -61,6 +62,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     starBase: 0.82,
     starHalo: 0.28,
     starCount: 1,
+    starBias: 0,
+    starMode: 'real',
+    starCut: 5.5,
+    starsDaylight: false,
     twinkleSpeed: 1.5,
     twinkleAmp: 0.3,
     milky: 0.35,
@@ -69,6 +74,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     cross: 100,
     lineWidth: 1,
     lineFadeDeg: 14,
+    lineTwinkle: 0.18,
     // meteors
     meteor: true,
     meteorRate: 1,
@@ -82,6 +88,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     quality: 'balanced',
   fps: 30,
     glow: 55,
+    glassStyle: 'gaussian',
     glassMode: 'render',
     glassRadius: 20,
     colLeft: Object.freeze({ on: true, strength: 28 }),
@@ -198,6 +205,22 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       twinkleSpeed: '闪烁速度',
       twinkleAmp: '闪烁幅度',
       milky: '银河带',
+  milkyPending: '银河：等待海面上报',
+  milkyStarsOff: '银河：星空已关闭',
+  milkyHidden: '银河：被天光或地平线挡住',
+  milkyStrong: '银河：可见，银心高度 {alt}°',
+  milkyWeak: '银河：偏弱，银心贴地平 {alt}°',
+  milkyOuter: '银河：只剩外臂，银心在地平下 {alt}°',
+  starBias: '色温偏置',
+  starCut: '星等截止',
+  starMode: '色彩模式',
+  starModes: { real: '真实', mono: '单色', vivid: '夸张' },
+  starsDaylight: '白天也显示星空',
+  lineTwinkle: '连线闪烁',
+  overflowGain: '超限敏感度',
+  glassStyle: '模糊形状',
+  magSuffix: ' 等',
+  glassStyles: { gaussian: '高斯', box: '盒式', double: '双层', radial: '径向', frost: '磨砂', tile: '玻璃砖' },
       lineWidth: '连线粗细',
       lineFadeDeg: '地平淡出',
       meteorRate: '出现频率',
@@ -324,6 +347,22 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       twinkleSpeed: 'Twinkle speed',
       twinkleAmp: 'Twinkle depth',
       milky: 'Milky Way',
+  milkyPending: 'Milky Way: waiting for the surface',
+  milkyStarsOff: 'Milky Way: stars are off',
+  milkyHidden: 'Milky Way: washed out or below the horizon',
+  milkyStrong: 'Milky Way: visible, core at {alt}°',
+  milkyWeak: 'Milky Way: faint, core near the horizon at {alt}°',
+  milkyOuter: 'Milky Way: outer arm only, core is {alt}° below',
+  starBias: 'Colour bias',
+  starCut: 'Magnitude cut',
+  starMode: 'Colour mode',
+  starModes: { real: 'Real', mono: 'Mono', vivid: 'Vivid' },
+  starsDaylight: 'Stars in daylight',
+  lineTwinkle: 'Line twinkle',
+  overflowGain: 'Overflow gain',
+  glassStyle: 'Blur shape',
+  magSuffix: ' mag',
+  glassStyles: { gaussian: 'Gaussian', box: 'Box', double: 'Double', radial: 'Radial', frost: 'Frost', tile: 'Tile' },
       lineWidth: 'Line weight',
       lineFadeDeg: 'Horizon fade',
       meteorRate: 'Rate',
@@ -383,6 +422,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   }
 
   const WAVE_MODES = ['manual', 'throughput', 'amount'];
+  const STAR_MODES = ['real', 'mono', 'vivid'];
+  const GLASS_STYLES = ['gaussian', 'box', 'double', 'radial', 'frost', 'tile'];
   const SKY_TONES = ['real', 'blue', 'warm'];
   const TZ_MODES = ['system', 'longitude', 'manual'];
 const QUALITY_LEVELS = ['high', 'balanced', 'low'];
@@ -444,6 +485,13 @@ const FPS_LEVELS = [24, 30, 45, 60];
       cross: clamp(dialFrom(source.cross, { off: 0, low: 55, mid: 100, high: 175 }), 0, 200, DEFAULTS.cross),
       lineWidth: clamp(source.lineWidth, 0.2, 4, DEFAULTS.lineWidth),
       lineFadeDeg: clamp(source.lineFadeDeg, 3, 45, DEFAULTS.lineFadeDeg),
+      lineTwinkle: clamp(source.lineTwinkle, 0, 0.6, DEFAULTS.lineTwinkle),
+      starBias: clamp(source.starBias, -0.3, 0.3, DEFAULTS.starBias),
+      starMode: STAR_MODES.includes(source.starMode) ? source.starMode : DEFAULTS.starMode,
+      starCut: clamp(source.starCut, 1.5, 6, DEFAULTS.starCut),
+      starsDaylight: source.starsDaylight === true,
+      overflowGain: clamp(source.overflowGain, 0.5, 3, DEFAULTS.overflowGain),
+      glassStyle: GLASS_STYLES.includes(source.glassStyle) ? source.glassStyle : DEFAULTS.glassStyle,
       // meteors
       meteor: source.meteor !== false,
       meteorRate: clamp(source.meteorRate, 0.1, 6, DEFAULTS.meteorRate),
@@ -798,11 +846,17 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       frame.contentWindow.postMessage(message, targetOrigin);
     };
 
+    // how far past the wave ceiling the session is, 0..1; refreshed by the sea
+    // tick and piggybacked on both messages so either one can carry it
+    let overflowValue = 0;
+    const seaOverflow = () => overflowValue;
+
     const postToOcean = (sea) => {
       // Daylight is always driven by `oss-sun` now; the legacy `auto` flag must
       // stay false or the iframe would resume its own 12-minute sine cycle.
       post({
         type: 'oss-set', sea: sea === undefined ? state.sea : sea, t: state.time, auto: false,
+        overflow: seaOverflow(),
       });
     };
 
@@ -832,6 +886,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         starMin: state.starMin,
         starFalloff: state.starFalloff,
         starColor: state.starColor,
+        starBias: state.starBias,
+        starMode: STAR_MODES.indexOf(state.starMode),
+        starCut: state.starCut,
+        starsDaylight: state.starsDaylight,
         starSpikes: state.starSpikes,
         starBase: state.starBase,
         starHalo: state.starHalo,
@@ -841,6 +899,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         milky: state.milky,
         lineWidth: state.lineWidth,
         lineFadeDeg: state.lineFadeDeg,
+        lineTwinkle: state.lineTwinkle,
+        overflow: seaOverflow(),
         quality: state.quality,
     fps: state.fps,
         glow: state.glow,
@@ -890,6 +950,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         mode: state.glassMode,
         perf: state.perf,
         radius: state.glassRadius,
+        style: state.glassStyle,
         rects: active ? measureColumns() : [],
       });
     };
@@ -1042,6 +1103,22 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         .replace('{nautical}', pair('nautical'))
         .replace('{astro}', pair('astronomical'));
     };
+    // The band is either the bright core, the faint outer arm, or gone — and the
+    // panel says which, because "no Milky Way tonight" without a reason reads as a
+    // bug. Numbers come from the ocean frame (galactic centre altitude, opacity).
+    const milkyText = () => {
+      const ocean = readOceanState();
+      if (!ocean) return copy.milkyPending;
+      if (state.stars <= 0) return copy.milkyStarsOff;
+      const alt = Number(ocean.galacticCentreAlt);
+      const visible = Number(ocean.milkyVisible) || 0;
+      if (visible < 0.02) return copy.milkyHidden;
+      if (!Number.isFinite(alt)) return copy.milkyPending;
+      if (alt >= 10) return copy.milkyStrong.replace('{alt}', alt.toFixed(0));
+      if (alt >= -8) return copy.milkyWeak.replace('{alt}', alt.toFixed(0));
+      return copy.milkyOuter.replace('{alt}', alt.toFixed(0));
+    };
+
     const refreshSunReadout = () => {
       const clockEl = document.getElementById(pid('clock-out'));
       if (clockEl) {
@@ -1221,6 +1298,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       }
       refreshSunReadout();
       refreshMoonReadout();
+      if (milkyOut) milkyOut.textContent = milkyText();
 
       if (state.waveMode === 'manual') {
         rate = 0;
@@ -1247,6 +1325,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           if (state.waveMode === 'amount') target = byAmount;
           else target = running ? byThroughput : byAmount;
         }
+      }
+
+      if (state.waveMode === 'manual') {
+        overflowValue = 0;
+      } else {
+        const ceiling = state.waveMode === 'amount'
+          ? Math.max(1, state.amountFull)
+          : Math.max(1, state.r0);
+        const demand = state.waveMode === 'amount'
+          ? Math.max(0, (snapshot && snapshot.costYuan) || 0)
+          : Math.max(0, rate);
+        overflowValue = Math.min(1, Math.log1p(demand / ceiling) / Math.log(4) * state.overflowGain);
       }
 
       // The cost curve is `log1p(yuan)/log1p(amountFull)`, which goes past 1 as soon
@@ -1402,6 +1492,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('r0'), 'r0', 1, 200, 1)}
           ${rangeRow(pid('amount-full'), 'amountFull', 1, 100, 1)}
           ${rangeRow(pid('smooth'), 'smooth', 2, 8, 0.5)}
+          ${rangeRow(pid('overflow-gain'), 'overflowGain', 0.5, 3, 0.1)}
           <p class="oss-sub" id="${pid('wave-out')}"></p>
           <p class="oss-sub" data-copy="waveNote"></p>`)}
         ${group('secSky', `
@@ -1426,19 +1517,25 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('star-min'), 'starMin', 0.5, 4, 0.05)}
           ${rangeRow(pid('star-falloff'), 'starFalloff', 0.04, 0.5, 0.01)}
           ${rangeRow(pid('star-color'), 'starColor', 0, 2.2, 0.05)}
+          ${rangeRow(pid('star-bias'), 'starBias', -0.3, 0.3, 0.01)}
+          ${segRow(pid('star-mode'), 'starMode', [['real', 'starModes.real'], ['mono', 'starModes.mono'], ['vivid', 'starModes.vivid']])}
           ${rangeRow(pid('star-base'), 'starBase', 0, 2, 0.01)}
           ${rangeRow(pid('star-halo'), 'starHalo', 0, 2, 0.01)}
           ${rangeRow(pid('star-count'), 'starCount', 0, 2, 0.01)}
+          ${rangeRow(pid('star-cut'), 'starCut', 1.5, 6, 0.1)}
           ${rangeRow(pid('twinkle-speed'), 'twinkleSpeed', 0.1, 4, 0.05)}
           ${rangeRow(pid('twinkle-amp'), 'twinkleAmp', 0, 0.9, 0.01)}
-          ${rangeRow(pid('milky'), 'milky', 0, 2, 0.01)}
+          ${rangeRow(pid('milky'), 'milky', 0, 3, 0.01)}
+          <p class="oss-sub" id="${pid('milky-out')}"></p>
+          ${switchRow(pid('stars-daylight'), 'starsDaylight')}
           ${segRow(pid('sky-tone'), 'skyTone', [['real', 'skyTones.real'], ['blue', 'skyTones.blue'], ['warm', 'skyTones.warm']])}`)}
         ${group('secConst', `
           ${rangeRow(pid('constellation'), 'constellation', 0, 200, 1)}
           ${rangeRow(pid('cross'), 'crossStars', 0, 200, 1)}
           ${rangeRow(pid('star-spikes'), 'starSpikes', 0, 6, 0.1)}
           ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
-          ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}`)}
+          ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}
+          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 0.6, 0.01)}`)}
         ${group('secMeteor', `
           ${switchRow(pid('meteor'), 'meteor')}
           ${rangeRow(pid('meteor-rate'), 'meteorRate', 0.1, 6, 0.1)}
@@ -1456,6 +1553,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           <p class="oss-sub" data-copy="boatNote"></p>`)}
         ${group('secGlass', `
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
+          ${segRow(pid('glass-style'), 'glassStyle', [['gaussian', 'glassStyles.gaussian'], ['box', 'glassStyles.box'], ['double', 'glassStyles.double'], ['radial', 'glassStyles.radial'], ['frost', 'glassStyles.frost'], ['tile', 'glassStyles.tile']])}
           ${rangeRow(pid('glass-range'), 'glass', 40, 90, 1)}
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
           ${colRow(pid('col-left'), 'cols.left')}
@@ -1480,6 +1578,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const enabledBox = el('enabled');
       const moonBox = el('moon');
       const perfBox = el('perf');
+      const milkyOut = el('milky-out');
       const boatsBox = el('boats');
       const meteorBox = el('meteor');
       const latInput = el('lat');
@@ -1519,6 +1618,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['r0', 'r0', 0, 'tps'],
         ['amount-full', 'amountFull', 0, 'yuan'],
         ['smooth', 'smooth', 1, 'sec'],
+        ['overflow-gain', 'overflowGain', 1, 'mul'],
         ['time-range', 'time', 0, 'clock'],
         ['tz-offset', 'tzOffset', 1, 'tz'],
         ['sky-dist', 'skyDist', 2, 'x'],
@@ -1531,6 +1631,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   ['star-spikes', 'starSpikes', 1, 'f2'],
         ['star-base', 'starBase', 2, 'f2'],
         ['star-halo', 'starHalo', 2, 'f2'],
+        ['star-bias', 'starBias', 2, 'offset'],
+        ['star-cut', 'starCut', 1, 'mag'],
         ['star-count', 'starCount', 2, 'f2'],
         ['twinkle-speed', 'twinkleSpeed', 2, 'f2'],
         ['twinkle-amp', 'twinkleAmp', 2, 'f2'],
@@ -1539,6 +1641,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['cross', 'cross', 0, 'pct'],
         ['line-width', 'lineWidth', 2, 'f2'],
         ['line-fade', 'lineFadeDeg', 1, 'deg'],
+        ['line-twinkle', 'lineTwinkle', 2, 'pct'],
         ['meteor-rate', 'meteorRate', 1, 'f1'],
         ['meteor-bright', 'meteorBright', 2, 'f2'],
         ['clouds', 'clouds', 0, 'pct'],
@@ -1566,6 +1669,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           case 'sec': return `${Number(value).toFixed(1).replace(/\.0$/, '')}s`;
           case 'clock': return state.sunMode === 'real' ? copy.realTime : timeLabel(copy, value);
           case 'tz': return `UTC${value >= 0 ? '+' : '−'}${Math.abs(value)}`;
+        case 'mag': return `${value.toFixed(1)}${copy.magSuffix}`;
+        case 'offset': return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`;
           case 'deg': return `${Number(value).toFixed(1).replace(/\.0$/, '')}°`;
           case 'mul': return `${Number(value).toFixed(1)}×`;
           default: return Number(value).toFixed(2);
@@ -1585,6 +1690,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         setSeg(segTz, state.tzMode);
         setSeg(segTone, state.skyTone);
         setSeg(segGlassMode, state.glassMode);
+      setSeg(el('star-mode'), state.starMode);
+      setSeg(el('glass-style'), state.glassStyle);
+      if (milkyOut) milkyOut.textContent = milkyText();
         for (const [key, entry] of Object.entries(columns)) {
           const entryState = state[key];
           entry.on.checked = entryState.on;
@@ -1744,6 +1852,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
             case pid('tz-mode'): return { tzMode: value };
             case pid('sky-tone'): return { skyTone: value };
             case pid('glass-mode'): return { glassMode: value };
+      case pid('star-mode'): return { starMode: value };
+      case pid('glass-style'): return { glassStyle: value };
             case pid('quality'): return { quality: value };
       case pid('fps'): return { fps: Number(value) };
             default: return null;
@@ -1799,7 +1909,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         postGlass();
       });
       on(resetBtn, 'click', () => {
-        void save({ ...DEFAULTS }).then(() => {
+        // Resetting should put the look back, not revoke the location the browser
+        // already granted: wiping lat/lon sent the sky back to the fallback city
+        // and asked for permission again on the next launch.
+        void save({ ...DEFAULTS, lat: state.lat, lon: state.lon }).then(() => {
           seaValue = state.sea;
           refresh();
           applyEnabled();
@@ -1996,6 +2109,13 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     milky: 'ossMilky',
     lineWidth: 'ossLineWidth',
     lineFadeDeg: 'ossLineFadeDeg',
+    lineTwinkle: 'ossLineTwinkle',
+    starBias: 'ossStarBias',
+    starMode: 'ossStarMode',
+    starCut: 'ossStarCut',
+    starsDaylight: 'ossStarsDaylight',
+    overflowGain: 'ossOverflowGain',
+    glassStyle: 'ossGlassStyle',
     meteorRate: 'ossMeteorRate',
     meteorBright: 'ossMeteorBright',
     cloudSpeed: 'ossCloudSpeed',
@@ -2087,7 +2207,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.30';
+  const SKIN_BUILD = 'lab-1.5.31';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
