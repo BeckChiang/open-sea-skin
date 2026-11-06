@@ -182,3 +182,11 @@ test('a spend above the full-wave threshold still moves the sea', () => {
   )
   assert.ok(!source.includes('sea >= 0 && sea <= 100'), 'a hard range check must not reject the update')
 })
+
+test('a missing metrics bridge is reported instead of silently flat', () => {
+  // A dead bridge and a session that never spent look identical from the water:
+  // both leave the wave engine reading nothing. The panel must be able to say so.
+  assert.ok(clientSource.includes('waveBridgeNone'), 'the panel needs a bridge-not-mounted label')
+  assert.ok(clientSource.includes('this.count += 1'), 'the store must count pushes so the panel can report them')
+  assert.ok(clientSource.includes('if (React && ctx && ctx.slots'), 'a host without the slot service must still get the skin')
+})

@@ -88,6 +88,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveNote: '吞吐模式：会话运行时按当前 token 速率起伏，停下来回落到本会话累计消费对应的浪高；金额模式：始终按累计消费。',
       waveOutNone: '指标未连接（等一帧，或刷新页面）',
       waveOut: '来源{src} · 消费 ¥{cost}（满浪 ¥{full}）· 吞吐 {rate} tok/s · 浪 {sea}',
+      waveBridgeNone: '指标桥未挂载',
+      waveBridge: '指标桥 {n} 次 · {s}s 前',
       waveSrcManual: '手动',
       waveSrcThroughput: '吞吐',
       waveSrcAmount: '金额',
@@ -159,6 +161,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveNote: 'Throughput: swells with the current token rate and settles to this session\u2019s spend when idle. Cost: always follows spend.',
       waveOutNone: 'No metrics yet (wait a tick, or reload)',
       waveOut: '{src} · spend ¥{cost} (full wave ¥{full}) · {rate} tok/s · sea {sea}',
+      waveBridgeNone: 'metrics bridge not mounted',
+      waveBridge: 'bridge {n} pushes · {s}s ago',
       waveSrcManual: 'manual',
       waveSrcThroughput: 'throughput',
       waveSrcAmount: 'spend',
@@ -508,6 +512,11 @@ body:not([data-ds-dark-theme]) #${IDS.panel} input[type='range']::-moz-range-thu
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-switch input[type='checkbox'],
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-col-head input[type='checkbox'] { accent-color:#0d7a76; }
 body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { background:rgba(12,22,32,.20); }
+body:not([data-ds-dark-theme]) #${IDS.button} {
+  color:rgba(13,22,32,.82); border:1px solid rgba(12,22,32,.16); background:rgba(247,249,252,.92);
+}
+body:not([data-ds-dark-theme]) #${IDS.button}:hover { color:#0d7a76; border-color:rgba(13,122,118,.42); background:rgba(255,255,255,.97); }
+body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-color:rgba(13,122,118,.55); background:rgba(230,246,244,.96); box-shadow:0 0 14px rgba(13,122,118,.20); }
 @media (prefers-reduced-motion: reduce) {
   #${IDS.button}, #${IDS.panel}, #${IDS.panel} * { transition:none !important; }
 }`;
@@ -721,9 +730,15 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
     const refreshWaveReadout = () => {
       const el = document.getElementById(pid('wave-out'));
       if (!el) return;
+      const store = globalThis.__openSeaSkinMetrics;
+      const seen = store && typeof store.count === 'number' ? store.count : 0;
+      const age = store && store.at ? Math.max(0, Math.round((performance.now() - store.at) / 1000)) : -1;
+      const tag = seen === 0
+        ? copy.waveBridgeNone
+        : copy.waveBridge.replace('{n}', String(seen)).replace('{s}', String(age));
       const snapshot = readMetrics();
       if (!snapshot) {
-        el.textContent = copy.waveOutNone;
+        el.textContent = copy.waveOutNone + ' · ' + tag;
         return;
       }
       const src = state.waveMode === 'manual'
@@ -735,7 +750,7 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
         .replace('{cost}', cost.toFixed(2))
         .replace('{full}', String(state.amountFull))
         .replace('{rate}', String(Math.round(rate)))
-        .replace('{sea}', String(Math.round(seaValue)));
+        .replace('{sea}', String(Math.round(seaValue))) + ' · ' + tag;
     };
 
     const pollFleet = async () => {
@@ -1532,14 +1547,51 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
   // Written by the hidden React bridge, read by the controller's wave engine.
   const metricsStore = {
     value: null,
+    count: 0,
+    at: 0,
     read() { return this.value; },
-    push(next) { this.value = next; },
+    // `count`/`at` let the panel say out loud whether the hidden bridge ever
+    // rendered. Without them a dead bridge and a flat session look identical:
+    // both leave the wave engine reading nothing and easing to the floor.
+    push(next) { this.value = next; this.count += 1; this.at = performance.now(); },
   };
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
   exports.apply = function apply(ctx) {
     globalThis.__openSeaSkinMetrics = metricsStore;
+
+    // Renders nothing: it only mirrors the session's cumulative token usage and
+    // the active model into the store the wave engine polls.
+    let React = null;
+    try { React = require('react'); } catch { React = null; }
+    // The bridge is registered before the controller and guarded instead of
+    // bailing out: if a host ever lacks the slot service, the skin still draws,
+    // and the panel says so instead of quietly reading nothing.
+    if (React && ctx && ctx.slots && typeof ctx.slots.inject === 'function') {
+    const Bridge = function OpenSeaSkinMetrics(props) {
+      const usage = props.useProjection ? props.useProjection('tokenUsage') : null;
+      const selection = props.useProjection ? props.useProjection('modelSelection') : null;
+      const model = selection ? selection.next || selection.lastUsed : null;
+      // Pushed while rendering instead of from an effect: the store has to carry
+      // the open conversation on the first tick after a switch, and an effect
+      // only fires after paint (and only when its dependency list agrees).
+      metricsStore.push({
+        sessionId: props.sessionId || null,
+        cachedTokens: (usage && usage.cacheReadTokens) || 0,
+        uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
+        outputTokens: (usage && usage.outputTokens) || 0,
+        costYuan: costOf(usage, model),
+      });
+      return null;
+    };
+    Bridge.displayName = 'OpenSeaSkinMetrics';
+
+    ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register(
+      { name: 'conversation.composer.dock', id: 'open-sea-skin-metrics', order: 900 },
+      (props) => React.createElement(Bridge, props),
+    )), 'open-sea-skin: metrics bridge');
+    }
 
     const controller = globalThis.OpenSeaSkinCore.createController({
       assetUrl: (path) => '/open-sea-skin/' + path,
@@ -1575,34 +1627,6 @@ body:not([data-ds-dark-theme]) #${IDS.panel}::-webkit-scrollbar-thumb { backgrou
       controller.stop();
     }, 'open-sea-skin: browser surface');
 
-    // Renders nothing: it only mirrors the session's cumulative token usage and
-    // the active model into the store the wave engine polls.
-    let React = null;
-    try { React = require('react'); } catch { React = null; }
-    if (!React || !ctx.slots || typeof ctx.slots.inject !== 'function') return;
-
-    const Bridge = function OpenSeaSkinMetrics(props) {
-      const usage = props.useProjection ? props.useProjection('tokenUsage') : null;
-      const selection = props.useProjection ? props.useProjection('modelSelection') : null;
-      const model = selection ? selection.next || selection.lastUsed : null;
-      // Pushed while rendering instead of from an effect: the store has to carry
-      // the open conversation on the first tick after a switch, and an effect
-      // only fires after paint (and only when its dependency list agrees).
-      metricsStore.push({
-        sessionId: props.sessionId || null,
-        cachedTokens: (usage && usage.cacheReadTokens) || 0,
-        uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
-        outputTokens: (usage && usage.outputTokens) || 0,
-        costYuan: costOf(usage, model),
-      });
-      return null;
-    };
-    Bridge.displayName = 'OpenSeaSkinMetrics';
-
-    ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register(
-      { name: 'conversation.composer.dock', id: 'open-sea-skin-metrics', order: 900 },
-      (props) => React.createElement(Bridge, props),
-    )), 'open-sea-skin: metrics bridge');
   };
 
   return module.exports;
