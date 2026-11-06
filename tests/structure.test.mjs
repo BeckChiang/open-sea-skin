@@ -287,3 +287,18 @@ test('the adaptive scale steps rarely and keeps a sharp floor', () => {
   assert.ok(source.includes('adaptHold = 4;'), 'a scale change must hold for 8 s')
   assert.ok(source.includes('renderScale * 0.97'), 'the step must be gentle')
 })
+
+test('the ribbon draws the legs the data actually has', () => {
+  // The point list stores each leg twice ([A,B][B,C][C,D]...). Walking every
+  // consecutive entry silently joined the end of one polyline to the start of
+  // the next, which drew 149 links that are not in the catalogue at all.
+  assert.ok(source.includes('for (let e = 0; e + 1 < layer.segmentCount; e += 2) {'), 'the ribbon must step two entries at a time')
+  assert.ok(source.includes('const base = (e >> 1) * 8;'), 'one quad block per real leg')
+  assert.ok(source.includes('const edgeCount = Math.floor(segmentCount / 2);'), 'half as many legs as entries')
+})
+
+test('the geometry is sized like last time, not larger', () => {
+  // The ribbons are the same picture as the hairlines, only softened: if the
+  // stroke gets much fatter the sky turns into a mesh.
+  assert.ok(source.includes('const half = STAR_RADIUS * 0.0012;'), 'keep the stroke close to its former weight')
+})

@@ -1116,7 +1116,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.18';
+const OCEAN_BUILD = 'lab-1.5.19';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1821,14 +1821,15 @@ function createStarLayer(scene) {
   // across the sky. Each leg is therefore drawn as two thin quads that fade from
   // the centreline out to nothing, which the rasteriser blends into a smooth
   // stroke at any angle. 8 vertices per leg is cheap next to the draw itself.
-  const lineGlowAttr = new Float32Array(segmentCount * 8);
-  const lineSideAttr = new Float32Array(segmentCount * 8);
+  const edgeCount = Math.floor(segmentCount / 2);
+  const lineGlowAttr = new Float32Array(edgeCount * 8);
+  const lineSideAttr = new Float32Array(edgeCount * 8);
   const lineGeometry = new THREE.BufferGeometry();
-  lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 8 * 3), 3));
+  lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgeCount * 8 * 3), 3));
   lineGeometry.setAttribute('aLineGlow', new THREE.BufferAttribute(lineGlowAttr, 1));
   lineGeometry.setAttribute('aSide', new THREE.BufferAttribute(lineSideAttr, 1));
-  const lineIndex = new Uint32Array(segmentCount * 12);
-  for (let i = 0; i < segmentCount; i += 1) {
+  const lineIndex = new Uint32Array(edgeCount * 12);
+  for (let i = 0; i < edgeCount; i += 1) {
     const at = i * 8;
     const side = i * 8;
     // left quad, then right quad
@@ -1986,8 +1987,8 @@ function updateStarDome(now, dt) {
       // dissolve into the horizon haze instead of stopping mid-air
       pg[i] = Math.max(0, Math.min(1, lastAltDeg / 14));
     }
-    const half = STAR_RADIUS * 0.0016;
-    for (let e = 0; e + 1 < layer.segmentCount; e += 1) {
+    const half = STAR_RADIUS * 0.0012;
+    for (let e = 0; e + 1 < layer.segmentCount; e += 2) {
       const ax = px[e], ay = py[e], az = pz[e];
       const bx = px[e + 1], by = py[e + 1], bz = pz[e + 1];
       const glow = Math.min(pg[e], pg[e + 1]);
@@ -1999,7 +2000,7 @@ function updateStarDome(now, dt) {
       nx = (nx / nlen) * half;
       ny = (ny / nlen) * half;
       nz = (nz / nlen) * half;
-      const base = e * 8;
+      const base = (e >> 1) * 8;
       const push = (slot, x, y, z) => {
         linePositions.setXYZ(base + slot, x, y, z);
         lineGlow.setX(base + slot, glow);
