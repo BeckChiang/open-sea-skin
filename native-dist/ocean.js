@@ -22,6 +22,7 @@ import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
 import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
 import { skyFromElevation, manualElevationDeg, manualAzimuthDeg } from './sky.js';
 import { CONSTELLATION_LINES } from './stars-data.js';
+import { STAR_CATALOG } from './stars-catalog.js';
 import {
   constellationVertices, equatorialToHorizontal, localSiderealTime,
   starBrightnessFromDegree
@@ -173,6 +174,13 @@ const uLineWidth = uniform(1);
 const uLineFadeDeg = uniform(14);
 const uTwinkleSpeed = uniform(1);
 const uTwinkleAmp = uniform(0.3);
+// Real magnitudes (1.5.25): the size floor, how fast size falls off with
+// magnitude, the colour saturation, and the magnitude below which a star gets
+// diffraction spikes instead of a plain point.
+const uStarMin = uniform(1.4);
+const uStarFalloff = uniform(0.16);
+const uStarColor = uniform(1);
+const uStarSpikes = uniform(1.6);
 // Milky Way band: normal of the galactic plane in world space, plus its dial.
 const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
 const uMilky = uniform(0.35);
@@ -720,6 +728,11 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.twinkleSpeed))) uTwinkleSpeed.value = Math.max(0.1, Math.min(4, Number(d.twinkleSpeed)));
   if (Number.isFinite(Number(d.twinkleAmp))) uTwinkleAmp.value = Math.max(0, Math.min(0.9, Number(d.twinkleAmp)));
   if (Number.isFinite(Number(d.milky))) uMilky.value = Math.max(0, Math.min(2, Number(d.milky)));
+  // 1.5.25 real magnitudes: the floor, the falloff, the colour and the spike gate
+  if (Number.isFinite(Number(d.starMin))) uStarMin.value = Math.max(0.5, Math.min(4, Number(d.starMin)));
+  if (Number.isFinite(Number(d.starFalloff))) uStarFalloff.value = Math.max(0.04, Math.min(0.5, Number(d.starFalloff)));
+  if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(1.6, Number(d.starColor)));
+  if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
   if (typeof d.skyTone === 'string' && SKY_TONES[d.skyTone]) uSkyTone.value.copy(SKY_TONES[d.skyTone]);
   applyStarDials();
   const skyDist = Number(d.skyDist);
@@ -1276,7 +1289,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.24';
+const OCEAN_BUILD = 'lab-1.5.25';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1910,14 +1923,57 @@ const uMeteorGlow = uniform(0);
 const uConstellation = uniform(CONSTELLATION_GRADES.mid / 100);
 const uCrossGlow = uniform(CROSS_GRADES.mid / 100);
 
+// A star is now a catalogue entry, not a stick-figure junction: 2851 naked-eye
+// stars with a real magnitude and colour index, so the sky can show a first
+// magnitude beacon next to a barely-there fifth magnitude smudge.
+const BV_RAMP = [
+  [-0.3, 0.72, 0.82, 1.00],
+  [0.0, 0.90, 0.94, 1.00],
+  [0.4, 1.00, 0.97, 0.92],
+  [0.8, 1.00, 0.90, 0.78],
+  [1.4, 1.00, 0.78, 0.55],
+  [2.0, 1.00, 0.65, 0.42],
+];
+
+function writeStarColor(bv, saturation, out, at) {
+  let i = 0;
+  while (i + 2 < BV_RAMP.length && bv > BV_RAMP[i + 1][0]) i += 1;
+  const a = BV_RAMP[i];
+  const b = BV_RAMP[Math.min(BV_RAMP.length - 1, i + 1)];
+  const span = b[0] - a[0] || 1;
+  const t = Math.max(0, Math.min(1, (bv - a[0]) / span));
+  for (let c = 0; c < 3; c += 1) {
+    const tint = a[c + 1] + (b[c + 1] - a[c + 1]) * t;
+    // 0 is a monochrome sky, 1 the catalogue colour, above 1 an exaggeration
+    out[at + c] = Math.max(0, Math.min(1.3, 0.94 + (tint - 0.94) * saturation));
+  }
+}
+
+// Pixel size falls off with magnitude: a 0 mag star gets the full dial, a 5 mag
+// one is a hairline. The floor keeps the faintest stars from disappearing.
+function starPixelsFor(mag) {
+  const size = uStarSize.value * Math.pow(10, -uStarFalloff.value * Math.max(0, mag));
+  return Math.max(uStarMin.value, Math.min(uStarSize.value, size));
+}
+
+// Brightness is compressed on purpose: a linear magnitude ratio would make
+// everything past 2 mag invisible next to Vega.
+function starGlowFor(mag) {
+  return Math.max(0.16, Math.min(1, Math.pow(10, -0.5 * Math.max(0, mag))));
+}
+
 function createStarLayer(scene) {
-  const vertices = constellationVertices(CONSTELLATION_LINES);
-  const starCount = vertices.length;
+  const starCount = STAR_CATALOG.length;
   const starRA = new Float32Array(starCount);
   const starDec = new Float32Array(starCount);
+  const starMag = new Float32Array(starCount);
+  const starBV = new Float32Array(starCount);
   for (let i = 0; i < starCount; i += 1) {
-    starRA[i] = vertices[i].raDeg;
-    starDec[i] = vertices[i].decDeg;
+    const row = STAR_CATALOG[i];
+    starRA[i] = row[0];
+    starDec[i] = row[1];
+    starMag[i] = row[2];
+    starBV[i] = row[3];
   }
 
   // One segment per polyline edge; raw points are fine here because the extra
@@ -1931,28 +1987,25 @@ function createStarLayer(scene) {
   }
   const segmentCount = segments.length;
 
-  // Per-star attributes carry what the eye reads as a real sky: brightness that
-  // follows the stick-figure junctions, a slow twinkle per star, and a colour
-  // that drifts between warm white and blue-white.
   const starGlowAttr = new Float32Array(starCount);
+  const starSizeAttr = new Float32Array(starCount);
   const starPhaseAttr = new Float32Array(starCount);
-  const starHueAttr = new Float32Array(starCount);
+  const starColorAttr = new Float32Array(starCount * 3);
   for (let i = 0; i < starCount; i += 1) {
-    const degree = Number(vertices[i].degree) || 1;
-    starGlowAttr[i] = Math.min(1, 0.3 + 0.85 * starBrightnessFromDegree(degree));
     starPhaseAttr[i] = Math.random() * Math.PI * 2;
-    starHueAttr[i] = Math.random();
   }
 
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starCount * 3), 3));
   starGeometry.setAttribute('aGlow', new THREE.BufferAttribute(starGlowAttr, 1));
+  starGeometry.setAttribute('aSize', new THREE.BufferAttribute(starSizeAttr, 1));
   starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhaseAttr, 1));
-  starGeometry.setAttribute('aHue', new THREE.BufferAttribute(starHueAttr, 1));
+  starGeometry.setAttribute('aColor', new THREE.BufferAttribute(starColorAttr, 3));
 
   const aGlow = attribute('aGlow', 'float');
+  const aSize = attribute('aSize', 'float');
   const aPhase = attribute('aPhase', 'float');
-  const aHue = attribute('aHue', 'float');
+  const aColor = attribute('aColor', 'vec3');
   // 1.5 rad/s reads as scintillation; anything faster looks like blinking.
   // 1.5.23: both the rate and the depth are dials now.
   const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(1.5).add(aPhase))
@@ -1964,9 +2017,8 @@ function createStarLayer(scene) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  starMaterial.colorNode = mix(vec3(1.0, 0.93, 0.84), vec3(0.72, 0.83, 1.0), aHue)
-    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase);
-  starMaterial.sizeNode = uStarSize;
+  starMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase);
+  starMaterial.sizeNode = aSize;
   const stars = new THREE.Points(starGeometry, starMaterial);
   stars.frustumCulled = false;
   stars.renderOrder = 2;
@@ -1982,13 +2034,13 @@ function createStarLayer(scene) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  haloMaterial.colorNode = mix(vec3(0.85, 0.9, 1.0), vec3(0.6, 0.78, 1.0), aHue)
-    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uHaloStrength);
-  haloMaterial.sizeNode = uStarSize.mul(1.67);
+  haloMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uHaloStrength);
+  haloMaterial.sizeNode = aSize.mul(1.67);
   const halos = new THREE.Points(starGeometry, haloMaterial);
   halos.frustumCulled = false;
   halos.renderOrder = 2;
   scene.add(halos);
+
 
   // A cross on every constellation vertex: two short segments centred on the
   // star, built in the camera plane so they never foreshorten. The arms twinkle
@@ -2089,10 +2141,10 @@ function createStarLayer(scene) {
   meteorHead.renderOrder = 3;
   scene.add(meteorHead);
 
-  return {
+  const layer = {
     // NOTE: `meteor` is the state machine below, so the Line needs its own key
     stars, halos, crosses, lines, meteorLine: meteor, meteorHead,
-    starRA, starDec,
+    starRA, starDec, starMag, starBV,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
     segmentX: new Float32Array(segmentCount),
@@ -2111,6 +2163,25 @@ function createStarLayer(scene) {
       tail: 0.18, power: 1,
     },
   };
+  refreshStarArt(layer);
+  return layer;
+}
+
+// Size, brightness and colour are catalogue facts, so they are recomputed
+// whenever a dial moves; the geometry itself only moves once every 20 s.
+function refreshStarArt(layer) {
+  const glow = layer.stars.geometry.getAttribute('aGlow');
+  const size = layer.stars.geometry.getAttribute('aSize');
+  const color = layer.stars.geometry.getAttribute('aColor');
+  const saturation = Math.max(0, Math.min(1.6, uStarColor.value));
+  for (let i = 0; i < layer.starCount; i += 1) {
+    glow.setX(i, starGlowFor(layer.starMag[i]));
+    size.setX(i, starPixelsFor(layer.starMag[i]));
+    writeStarColor(layer.starBV[i], saturation, color.array, i * 3);
+  }
+  glow.needsUpdate = true;
+  size.needsUpdate = true;
+  color.needsUpdate = true;
 }
 
 let lastAltDeg = 0;
@@ -2187,7 +2258,11 @@ function skyPoint(azDeg, altDeg, out) {
 // rebuild (it re-grades which vertices are bright). Forcing lastSky makes the
 // next updateStarDome pass redo the dome even if 20 s have not gone by.
 function applyStarDials() {
-  if (starLayer) starLayer.lastSky = -1e9;
+  if (!starLayer) return;
+  // size, brightness and colour are per-star attributes, so repaint them now
+  // instead of waiting for the next georeference pass
+  refreshStarArt(starLayer);
+  starLayer.lastSky = -1e9;
 }
 
 function updateStarDome(now, dt) {
@@ -2218,6 +2293,7 @@ function updateStarDome(now, dt) {
       -Math.cos(galAlt) * Math.cos(galAz),
     );
     const starPositions = layer.stars.geometry.getAttribute('position');
+    refreshStarArt(layer);
     for (let i = 0; i < layer.starCount; i += 1) {
       starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
       starPositions.setXYZ(i, starDirA.x, starDirA.y, starDirA.z);
@@ -2227,7 +2303,8 @@ function updateStarDome(now, dt) {
     // arms: +-right and +-up around the star, sized to read as ~4 px on screen
     // graded arms: a bigger cross for a bolder sky, still built per-star so the
     // four vertices stay square to the camera
-    const armLength = STAR_RADIUS * 0.0042 * (0.72 + 0.42 * uCrossGlow.value);
+    const armBase = STAR_RADIUS * 0.0042 * (0.72 + 0.42 * uCrossGlow.value);
+    const spikeLimit = uStarSpikes.value;
     if (boatCamera) {
       cameraRight.setFromMatrixColumn(boatCamera.matrixWorld, 0);
       cameraUp.setFromMatrixColumn(boatCamera.matrixWorld, 1);
@@ -2235,6 +2312,12 @@ function updateStarDome(now, dt) {
     const crossPositions = layer.crosses.geometry.getAttribute('position');
     for (let i = 0; i < layer.starCount; i += 1) {
       starDirection(layer.starRA[i], layer.starDec[i], lat, lst, starDirA);
+      // diffraction spikes belong to the bright stars; a 5 mag smudge with a
+      // cross on it is what made the old sky look like a chart instead of a sky
+      const mag = layer.starMag[i];
+      const armLength = mag <= spikeLimit
+        ? armBase * Math.max(0.35, 1.2 - 0.14 * Math.max(0, mag))
+        : 0;
       const base = i * 4;
       crossPositions.setXYZ(base + 0, starDirA.x - cameraRight.x * armLength,
         starDirA.y - cameraRight.y * armLength, starDirA.z - cameraRight.z * armLength);
@@ -2265,7 +2348,13 @@ function updateStarDome(now, dt) {
       // dissolve into the horizon haze instead of stopping mid-air
       pg[i] = Math.max(0, Math.min(1, lastAltDeg / uLineFadeDeg.value));
     }
-    const half = STAR_RADIUS * 0.0012 * uLineWidth.value;
+    // World units per pixel at the star shell. A 3.8-unit ribbon is less than a
+    // pixel tall on a short window, and a sub-pixel quad rasterises as a dashed
+    // line; the floor keeps the figures continuous at any window height.
+    const fovDeg = boatCamera ? boatCamera.fov : 60;
+    const viewPx = typeof innerHeight === 'number' ? Math.max(240, innerHeight) : 800;
+    const pxWorld = (2 * STAR_RADIUS * Math.tan(fovDeg * DEG_TO_RAD * 0.5)) / viewPx;
+    const half = Math.max(STAR_RADIUS * 0.0012, pxWorld * 0.9) * uLineWidth.value;
     for (let e = 0; e + 1 < layer.segmentCount; e += 2) {
       const ax = px[e], ay = py[e], az = pz[e];
       const bx = px[e + 1], by = py[e + 1], bz = pz[e + 1];

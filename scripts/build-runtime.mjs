@@ -27,6 +27,7 @@ const COPIES = [
   ['shared/sky.js', 'native-dist/sky.js'],
   ['shared/sky-astro.js', 'native-dist/sky-astro.js'],
   ['shared/stars-data.js', 'native-dist/stars-data.js'],
+  ['shared/stars-catalog.js', 'native-dist/stars-catalog.js'],
 ]
 
 let drifted = false
@@ -35,7 +36,7 @@ for (const [from, to] of COPIES) {
   try {
     source = await readFile(join(root, from))
   } catch (error) {
-    const optional = ['shared/solar.js', 'shared/sky.js', 'shared/sky-astro.js', 'shared/stars-data.js'].includes(from)
+    const optional = ['shared/solar.js', 'shared/sky.js', 'shared/sky-astro.js', 'shared/stars-data.js', 'shared/stars-catalog.js'].includes(from)
     if (error?.code === 'ENOENT' && optional) continue
     throw error
   }

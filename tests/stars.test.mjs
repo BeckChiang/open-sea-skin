@@ -4,6 +4,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { CONSTELLATION_LINES } from '../shared/stars-data.js'
+import { STAR_CATALOG } from '../shared/stars-catalog.js'
 import { constellationVertices } from '../shared/sky-astro.js'
 
 const DEG = Math.PI / 180
@@ -74,4 +75,33 @@ test('line figures cover both hemispheres and the whole RA range', () => {
   const decs = points.map(p => p[1])
   assert.ok(Math.min(...ras) < 10 && Math.max(...ras) > 350)
   assert.ok(Math.min(...decs) < -70 && Math.max(...decs) > 85)
+})
+
+test('the catalogue carries real magnitudes and a usable colour index', () => {
+  assert.ok(STAR_CATALOG.length > 2500, `catalogue ${STAR_CATALOG.length}`)
+  let prev = -Infinity
+  let cool = 0
+  let warm = 0
+  for (const row of STAR_CATALOG) {
+    assert.equal(row.length, 4, `row ${row}`)
+    const [ra, dec, mag, bv] = row
+    assert.ok(ra >= 0 && ra < 360, `ra ${ra}`)
+    assert.ok(dec >= -90 && dec <= 90, `dec ${dec}`)
+    assert.ok(mag >= -1.5 && mag <= 5.5, `mag ${mag}`)
+    assert.ok(bv >= -0.4 && bv <= 2.4, `bv ${bv}`)
+    assert.ok(mag >= prev - 1e-9, 'the catalogue is sorted brightest first')
+    prev = mag
+    if (bv < 0.2) cool += 1
+    if (bv > 1.2) warm += 1
+  }
+  // a real sky has both ends of the spectral range, not one grey colour
+  assert.ok(cool > 200, `blue stars ${cool}`)
+  assert.ok(warm > 100, `orange stars ${warm}`)
+  // Sirius is the brightest entry, Vega is in there, and both sit where the
+  // ephemeris expects them
+  const sirius = STAR_CATALOG[0]
+  assert.ok(sirius[2] < -1.3, `brightest ${sirius[2]}`)
+  assert.ok(separation(sirius[0], sirius[1], 101.29, -16.72) < 0.1)
+  const vega = STAR_CATALOG.find((r) => separation(r[0], r[1], 279.23, 38.78) < 0.1)
+  assert.ok(vega && vega[2] < 0.2, `Vega ${vega && vega[2]}`)
 })

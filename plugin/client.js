@@ -54,6 +54,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     // stars: brightness, art, haze
     stars: 100,
     starSize: 5.4,
+    starMin: 1.4,
+    starFalloff: 0.16,
+    starColor: 1,
+    starSpikes: 1.6,
     starBase: 1,
     starHalo: 0.28,
     starCount: 1,
@@ -179,6 +183,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       skyTone: '夜色倾向',
       domeAmount: '穹顶弧度',
       starSize: '星点大小',
+      starMin: '最暗星大小',
+      starFalloff: '星等衰减',
+      starColor: '色温饱和度',
+      starSpikes: '星芒阈值',
       starBase: '星星亮度',
       starHalo: '光晕',
       starCount: '底噪星场',
@@ -291,6 +299,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       skyTone: 'Night tint',
       domeAmount: 'Dome curve',
       starSize: 'Star size',
+      starMin: 'Faint floor',
+      starFalloff: 'Magnitude falloff',
+      starColor: 'Colour saturation',
+      starSpikes: 'Spike gate',
       starBase: 'Star brightness',
       starHalo: 'Halo',
       starCount: 'Faint field',
@@ -390,6 +402,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       // stars: a letter from 1.5.22 becomes its percentage
       stars: clamp(dialFrom(source.stars, { off: 0, low: 60, mid: 100, high: 150 }), 0, 200, DEFAULTS.stars),
       starSize: clamp(source.starSize, 1, 14, DEFAULTS.starSize),
+      starMin: clamp(source.starMin, 0.5, 4, DEFAULTS.starMin),
+      starFalloff: clamp(source.starFalloff, 0.04, 0.5, DEFAULTS.starFalloff),
+      starColor: clamp(source.starColor, 0, 1.6, DEFAULTS.starColor),
+      starSpikes: clamp(source.starSpikes, 0, 6, DEFAULTS.starSpikes),
       starBase: clamp(source.starBase, 0, 2, DEFAULTS.starBase),
       starHalo: clamp(source.starHalo, 0, 2, DEFAULTS.starHalo),
       starCount: clamp(source.starCount, 0, 2, DEFAULTS.starCount),
@@ -783,6 +799,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         domeAmount: state.domeAmount,
         skyTone: state.skyTone,
         starSize: state.starSize,
+        starMin: state.starMin,
+        starFalloff: state.starFalloff,
+        starColor: state.starColor,
+        starSpikes: state.starSpikes,
         starBase: state.starBase,
         starHalo: state.starHalo,
         starCount: state.starCount,
@@ -1370,6 +1390,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('dome-amount'), 'domeAmount', 0, 1, 0.01)}
           ${rangeRow(pid('stars'), 'stars', 0, 200, 1)}
           ${rangeRow(pid('star-size'), 'starSize', 1, 14, 0.1)}
+          ${rangeRow(pid('star-min'), 'starMin', 0.5, 4, 0.05)}
+          ${rangeRow(pid('star-falloff'), 'starFalloff', 0.04, 0.5, 0.01)}
+          ${rangeRow(pid('star-color'), 'starColor', 0, 1.6, 0.05)}
           ${rangeRow(pid('star-base'), 'starBase', 0, 2, 0.01)}
           ${rangeRow(pid('star-halo'), 'starHalo', 0, 2, 0.01)}
           ${rangeRow(pid('star-count'), 'starCount', 0, 2, 0.01)}
@@ -1380,6 +1403,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ${group('secConst', `
           ${rangeRow(pid('constellation'), 'constellation', 0, 200, 1)}
           ${rangeRow(pid('cross'), 'crossStars', 0, 200, 1)}
+          ${rangeRow(pid('star-spikes'), 'starSpikes', 0, 6, 0.1)}
           ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
           ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}`)}
         ${group('secMeteor', `
@@ -1464,6 +1488,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['dome-amount', 'domeAmount', 2, 'factor'],
         ['stars', 'stars', 0, 'pct'],
         ['star-size', 'starSize', 1, 'px'],
+  ['star-min', 'starMin', 2, 'px'],
+  ['star-falloff', 'starFalloff', 2, 'f2'],
+  ['star-color', 'starColor', 2, 'f2'],
+  ['star-spikes', 'starSpikes', 1, 'f2'],
         ['star-base', 'starBase', 2, 'f2'],
         ['star-halo', 'starHalo', 2, 'f2'],
         ['star-count', 'starCount', 2, 'f2'],
@@ -1579,7 +1607,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
       // Which message a slider belongs to; everything not listed is local-only.
       const SKY_KEYS = new Set([
-        'skyDist', 'domeAmount', 'stars', 'starSize', 'starBase', 'starHalo', 'starCount',
+        'skyDist', 'domeAmount', 'stars', 'starSize', 'starMin', 'starFalloff', 'starColor',
+        'starSpikes', 'starBase', 'starHalo', 'starCount',
         'twinkleSpeed', 'twinkleAmp', 'milky', 'skyTone', 'constellation', 'cross', 'lineWidth',
         'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
         'tzOffset', 'moon', 'lat', 'lon',
@@ -1915,6 +1944,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     domeAmount: 'ossDomeAmount',
     skyTone: 'ossSkyTone',
     starSize: 'ossStarSize',
+    starMin: 'ossStarMin',
+    starFalloff: 'ossStarFalloff',
+    starColor: 'ossStarColor',
+    starSpikes: 'ossStarSpikes',
     starBase: 'ossStarBase',
     starHalo: 'ossStarHalo',
     starCount: 'ossStarCount',
@@ -2011,7 +2044,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.24';
+  const SKIN_BUILD = 'lab-1.5.25';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

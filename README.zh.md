@@ -1,10 +1,10 @@
-# Open Sea Skin · Lab 分支说明（1.5.24）
+# Open Sea Skin · Lab 分支说明（1.5.25）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 上游只提供「海洋 + 夕阳 + 玻璃界面」；本分支在它的地基上加了三块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**，并把所有能调的参数搬进了设置面板。
 
 - 上游版本：1.2.7（`plugin/client.js` 与 `native-dist/*` 原样起步）
-- 本分支版本：**1.5.24**
+- 本分支版本：**1.5.25**
 - 许可证：MIT（见 `LICENSE`；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`）
 - 只在这台机器的 `C:\Users\recko\DSH\plugins\open-sea-skin-lab` 开发，profile 用 `link:` 安装
 
@@ -30,7 +30,7 @@
 
 ```powershell
 # 1. 解压到任意位置（不要放进同步盘的 DSH 工作区根目录以外也可以，但路径不要含中文空格）
-Expand-Archive .\open-sea-skin-lab-1.5.24.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+Expand-Archive .\open-sea-skin-lab-1.5.25.zip -DestinationPath C:\Users\<你>\DSH\plugins\
 
 # 2. 如果装过官方版，先卸掉（同一个包名，只能存在一个）
 #    在 DSH 里让它执行 plugin_manager remove_bundle open-sea-skin
@@ -46,7 +46,7 @@ Expand-Archive .\open-sea-skin-lab-1.5.24.zip -DestinationPath C:\Users\<你>\DS
 
 1. 左下角出现海洋图标按钮，点开有十一组折叠面板（顶部还有搜索框）；
 2. 面板「天空控制」里能看到「今日 日出 …· 日落 …」；
-3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.24` 与 `[open-sea-skin] ocean lab-1.5.24`。
+3. 控制台（`Ctrl+Shift+I`）第一行有 `[open-sea-skin] client lab-1.5.25` 与 `[open-sea-skin] ocean lab-1.5.25`。
 
 > 只改渲染半边（`shared/ocean.js` 等）时，F5 就够；改了宿主半边（`plugin/index.js`）必须**完全退出重开**，或者在装了 `dsh-unlag` 的情况下点它的刷新按钮。
 
@@ -68,7 +68,7 @@ open-sea-skin-lab/
 │  └─ styles.css       皮肤在非 skin 页面用的样式
 ├─ native-dist/        构建产物（由 scripts/build-runtime.mjs 生成，不要手改）
 ├─ scripts/build-runtime.mjs   把 shared/ 里 6 个文件复制进 native-dist/
-├─ tests/              node:test 单文件测试（6 个文件，79 条）
+├─ tests/              node:test 单文件测试（6 个文件，80 条）
 ├─ docs/
 │  ├─ CONTRACT.md      面板 ↔ 渲染端 ↔ 宿主的接口契约（改消息先读它）
 │  └─ FORK.md          为什么这样分叉、怎么构建、怎么回退
@@ -123,8 +123,12 @@ open-sea-skin-lab/
 | 星空距离 | 0.6–3.0× | **2.0×** | 2.0 时画面里能装下 18–22 个星座 |
 | 穹顶比例 | 0–100% | 55% | 距离怎么生效：0=旧式「整体缩小」，100=完全立体投影（保角，星座不走形） |
 | 星星亮度 | 0–200% | 100% | 100% 等于 1.5.22 的「中」档，可作为亮度总闸 |
-| 星点大小 | 1–14 px | 5.4 | 主星点直径 |
-| 亮星增益 | 0–2 | 1.0 | 只放大亮星（按顶点级数），让亮暗层次更明显 |
+| 星点大小 | 1–14 px | 5.4 | 0 等星的直径；更暗的星按星等衰减 |
+| 最暗星大小 | 0.5–4 px | 1.4 | 星等下限处的最小直径，调小会让银河般的暗星更细 |
+| 星等衰减 | 0.04–0.5 | 0.16 | 每差一等，直径乘 `10^(−衰减)`；0.16 ≈ 每等缩小到 69% |
+| 色温饱和度 | 0–1.6 | 1.0 | 0 = 单色天空，1 = 按 B−V 的真实蓝白到橙红，>1 夸张 |
+| 亮星增益 | 0–2 | 1.0 | 星点整体亮度倍数（真实星等已决定层次，这里是总闸） |
+| 星芒阈值 | 0–6 等 | 1.6 | 只有比它亮的星才画十字星芒（约 20 颗）；调到 6 就人人有 |
 | 光晕 | 0–2 | 0.28 | 主星点外面那层柔光 |
 | 底噪星场 | 0–2 | 1.0 | 程序化撒的背景星（不是星座顶点）；2.0 时接近真实银河密度 |
 | 闪烁速度 | 0.1–4 | 1.5 | 每秒闪烁相位 |
@@ -199,7 +203,7 @@ node tests\stars.test.mjs
 node tests\sky-astro.test.mjs
 ```
 
-当前：**79 条全绿**（structure 30 / fleet 5 / sky 13 / solar 14 / stars 5 / sky-astro 12）。
+当前：**80 条全绿**（structure 30 / fleet 5 / stars 6 / sky 13 / solar 14 / sky-astro 12）。
 
 `tests/structure.test.mjs` 是本项目的防线，里面有几次真实事故的回归断言：
 
@@ -239,7 +243,7 @@ GET /open-sea-skin/fleet?session=<sessionId>
 
 - **方位折进 ±40°**：太阳/月亮方位被压进视轴 ±40°，否则 55–60° 视场装不下一天 131° 的横扫。高度是真实的（0–28° 原样，28–90° 压到 28–38°）。要完全真实只能上鱼眼，海面会畸变，暂未做。
 - **星空距离是穹顶投影，不是把相机拉远**：拉远不改变角位置，压不了视野。1.5.23 起改成绕视轴的立体投影 `r = 2tan(θ/2)` 再按「穹顶比例」与旧的缩小方式混合，星座形状保角（只在画面最外圈有约 10% 的径向拉伸），星点仍是原生像素。
-- **星星还没有真实星等**：`shared/stars-data.js` 只有星座连线，没有每颗星的星等与色温。要加得先拿到 HYG/BSC5 星表（`d3-celestial` 的 `stars.6.json` 约 640 KB），而本机沙箱不通外网、只能走 `web_fetch` 整包拉进上下文，代价过大。所以 1.5.23 的「亮星增益/星点大小/光晕」是按**星座顶点的连线数**分级的近似，不是真实星等；面板也没有放会空转的星等旋钮。
+- **星表是静态的**：`shared/stars-catalog.js` 收录目视星等 ≤ 5.5 的 2851 颗星（d3-celestial 的 `stars.6.json`，HYG 派生，CC BY-SA 4.0），只含位置、星等与 B−V 色指数，没有自行/视差/距离，也不会随岁差更新（几百年尺度才看得出来）。要换更暗的星表，用 `scripts/gen-stars-catalog.mjs` 重新生成。
 - **船走的是世界坐标航道**：极端窗口高度下仍可能被对话栏挡住一部分；曾试过「屏幕空间摆放」，因为依赖面板测量而反复出错，已回退（见 `docs/FORK.md`）。
 - **只做 skin 模式**：非 skin 页面仍按上游那套舞台渲染。
 

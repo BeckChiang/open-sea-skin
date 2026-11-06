@@ -300,7 +300,9 @@ test('the ribbon draws the legs the data actually has', () => {
 test('the geometry is sized like last time, not larger', () => {
   // The ribbons are the same picture as the hairlines, only softened: if the
   // stroke gets much fatter the sky turns into a mesh.
-  assert.ok(source.includes('const half = STAR_RADIUS * 0.0012 * uLineWidth.value;'), 'keep the stroke close to its former weight, as a dial')
+  // 1.5.25: the stroke keeps its weight, but never falls below one pixel at the
+  // star shell — a sub-pixel quad rasterises as a dashed constellation.
+  assert.ok(source.includes('Math.max(STAR_RADIUS * 0.0012, pxWorld * 0.9) * uLineWidth.value'), 'keep the stroke close to its former weight, as a dial')
 })
 
 test('the hulls keep the 1.5.3 lanes, widened only by the panel setting', () => {
