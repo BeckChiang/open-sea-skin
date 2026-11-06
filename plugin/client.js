@@ -18,6 +18,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     panel: '__open-sea-skin-panel__',
   });
 
+  // Panel element ids are derived in one place: the readouts above and the
+  // panel builder below must agree. A helper local to mountUi is invisible to
+  // the readouts, which then throw ReferenceError on every tick.
+  const pid = (suffix) => `${IDS.panel}-${suffix}`;
+
   // Host half of the skin: live roster of running subagents (one boat each).
   const FLEET_PATH = '/open-sea-skin/fleet';
 
@@ -1041,7 +1046,6 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       panel.setAttribute('aria-modal', 'false');
       panel.setAttribute('aria-label', copy.button);
 
-      const pid = (suffix) => `${IDS.panel}-${suffix}`;
       const rangeRow = (id, key, min, max, step) => `<div class="oss-row"><div class="oss-head"><label for="${id}" data-copy="${key}"></label><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" /></div>`;
       const segRow = (id, key, options) => `<div class="oss-row"><div class="oss-head"><span data-copy="${key}"></span></div><div class="oss-seg" id="${id}">${options.map(([value, copyKey]) => `<button type="button" data-value="${value}" data-copy="${copyKey}"></button>`).join('')}</div></div>`;
       const switchRow = (id, key) => `<div class="oss-row oss-switch"><label for="${id}" data-copy="${key}"></label><input type="checkbox" id="${id}" /></div>`;

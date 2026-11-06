@@ -196,3 +196,16 @@ test('a missing metrics bridge is reported instead of silently flat', () => {
   assert.ok(clientSource.includes('describeSlots'), 'the reason a bridge is missing must be named')
   assert.ok(!clientSource.includes("require('react')"), 'the bridge must not depend on the loader resolving react')
 })
+
+test('the panel readouts can see the id helper', () => {
+  // 2026-11-06: pid() lived inside mountUi, so every readout thrown from the
+  // wave tick died with "pid is not defined" and the panel silently stayed
+  // blank - the wave never moved either, because the throw aborted the tick.
+  const at = clientSource.indexOf('const pid = (suffix)')
+  assert.ok(at > 0, 'the id helper must exist')
+  assert.equal(clientSource.indexOf('const pid = (suffix)', at + 1), -1, 'declare it exactly once')
+  const controller = clientSource.indexOf('function createController')
+  assert.ok(controller > 0 && at < controller, 'the helper must sit outside createController')
+  const mount = clientSource.indexOf('const mountUi')
+  assert.ok(mount > at, 'the helper must be declared before the panel builder uses it')
+})

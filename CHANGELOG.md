@@ -6,6 +6,8 @@ All notable changes to Open Sea Skin are documented here.
 
 ### 修复 / Fixed
 
+- **面板读数全是空的、浪也不动**：`pid()` 被写在 `mountUi` 里面，而几个读数函数在它外面，于是每 250 ms 的波浪 tick 都在 `refreshSunReadout` 抛 `ReferenceError: pid is not defined`，整个 tick 就此中断——波浪引擎既没发值，读数也没更新。`pid` 提到模块作用域，并加一条结构测试守住（`structure.test.mjs` 第 18 条）。
+
 - **船贴着画面底边**：相机上扬 8° 后海面只占画面下三分之一，原来的 15–25 单位泊位落在 84%–97% 高度。泊位外推到 36–52 单位、船体缩放 2.2→3.2，船回到地平线下方一带。
 - **没有子智能体的会话连保底一艘都没有**：`count === 0` 被当成「关船」发出去（`off: true`），与面板文案「保留 1 艘」自相矛盾。现在 `off` 只由「船」开关决定，`count` 至少 1。
 - **悬停预览仍然透底**：真正的病因是把 `--dsw-alias-bg-*` 覆写在 `body` 上，`body` 下的 portal（「已编辑 N 个文件」卡片、tooltip、dialog）继承了玻璃底色。现在 token 只覆写在 `#root` 上，portal 保留主题原本的不透明色；上一轮针对 `data-hovercard-bridge` 的单点补丁已回退。
