@@ -656,14 +656,29 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       post({ type: 'oss-fleet', count: shown, off: !enabled });
     };
 
+    // The panel and the surface are two documents, and the surface is served from
+    // its own origin, so its window cannot be read from here. It posts back the
+    // state it ended up with; keep the latest one and prefer it when the direct
+    // read is unavailable.
+    let lastOceanState = null;
     const readOceanState = () => {
       try {
-        const win = frame instanceof HTMLIFrameElement ? frame.contentWindow : null;
-        return win && typeof win.__ossState === 'function' ? win.__ossState() : null;
+        const el = document.getElementById(IDS.frame);
+        const win = el instanceof HTMLIFrameElement ? el.contentWindow : null;
+        if (win && typeof win.__ossState === 'function') return win.__ossState();
       } catch {
-        return null;
+        // cross-origin: the posted copy is the only way in
       }
+      return lastOceanState;
     };
+
+    on(window, 'message', (event) => {
+      const data = event && event.data;
+      if (!data || data.type !== 'oss-state' || !data.state || typeof data.state !== 'object') return;
+      const el = document.getElementById(IDS.frame);
+      if (el instanceof HTMLIFrameElement && event.source && event.source !== el.contentWindow) return;
+      lastOceanState = data.state;
+    });
 
     // What the ocean frame says it ended up with. Read back rather than assumed:
     // "the note says three, the sea shows one" is a message-path question, and
@@ -1587,7 +1602,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.2/98bbfd2';
+  const SKIN_BUILD = 'lab-1.5.3';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

@@ -2,6 +2,12 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.3 — 2026-11-06
+
+### 修复 / Fixed
+
+- **天空组一个字都不显示**：面板用 `readOceanState()` 去读海面帧的 `__ossState()`，但那个 `frame` 变量是控制器创建时取的一次快照，iframe 还没挂上，永远是 `null`（另外帧与面板是不同 origin，直接读也会被拦）。现在每 400 ms 由帧主动 `postMessage({ type: 'oss-state' })` 上报自己的状态，面板优先直读、读不到就用最近一次上报 —— 太阳高度/方位、日出日落、月相、船的实际数量都走这条路。
+
 ## 1.5.2 — 2026-11-06
 
 ### 修复 / Fixed

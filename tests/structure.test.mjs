@@ -209,3 +209,14 @@ test('the panel readouts can see the id helper', () => {
   const mount = clientSource.indexOf('const mountUi')
   assert.ok(mount > at, 'the helper must be declared before the panel builder uses it')
 })
+
+test('the surface reports its state back to the panel', () => {
+  // 2026-11-06: readOceanState() used a frame snapshot captured before the iframe
+  // existed, so every readout stayed blank. The frame now posts its state, and the
+  // panel re-queries the element and accepts the posted copy.
+  assert.ok(clientSource.includes("event.data") || clientSource.includes("data.type !== 'oss-state'"), 'the panel must listen for the posted state')
+  assert.ok(clientSource.includes("document.getElementById(IDS.frame)"), 'the panel must re-query the frame, not a stale snapshot')
+  assert.ok(clientSource.includes('return lastOceanState'), 'the posted copy must be the fallback')
+  assert.ok(source.includes("type: 'oss-state'"), 'the frame must post its state')
+  assert.ok(source.includes('STATE_POST_MS'), 'the report must be throttled')
+})

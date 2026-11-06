@@ -1034,6 +1034,18 @@ function animate(now) {
 
   postProcessing.render();
 
+  // The panel lives on another origin and cannot read this window, so push what
+  // it needs to describe the sky: the real altitude it computed, where that
+  // altitude landed in the frame, and the sunrise/sunset it used.
+  if (SKIN && now - lastStatePostAt >= STATE_POST_MS && window.parent && window.parent !== window) {
+    lastStatePostAt = now;
+    try {
+      window.parent.postMessage({ type: 'oss-state', state: window.__ossState() }, SKIN_PARENT_ORIGIN || '*');
+    } catch (error) {
+      // posting is best effort: a blocked parent must not stop the sea
+    }
+  }
+
   // rolling FPS + adaptive resolution (rechecked every 2 s)
   // wall-clock windows: skipped frames must not shrink the meter's time base
   fpsFrames += 1;
@@ -1090,7 +1102,11 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.2/98bbfd2';
+const OCEAN_BUILD = 'lab-1.5.3';
+
+// How often the frame reports its own state to the host page.
+const STATE_POST_MS = 400;
+let lastStatePostAt = 0;
 
 async function boot() {
   console.info('[open-sea-skin] ocean', OCEAN_BUILD);
