@@ -606,6 +606,7 @@ ${blurCss(state)}`;
     let lastAt = 0;
     let lastActiveAt = 0;
     let lastSession = null;
+    let lastStepAt = 0;
 
     const readMetrics = () => {
       const store = globalThis.__openSeaSkinMetrics;
@@ -665,7 +666,12 @@ ${blurCss(state)}`;
         }
       }
 
-      const alphaSea = 1 - Math.exp(-0.25 / Math.max(0.4, state.smooth / 2));
+      // Ease with the real elapsed time, not a fixed 0.25 s: a late tick (busy
+      // frame, throttled timer) would otherwise let the surface catch up in one
+      // visible jump instead of a steady slide.
+      const elapsed = lastStepAt ? Math.max(0.001, (now - lastStepAt) / 1000) : 0.25;
+      lastStepAt = now;
+      const alphaSea = 1 - Math.exp(-elapsed / Math.max(0.4, state.smooth / 2));
       seaValue += (target - seaValue) * alphaSea;
       postToOcean(seaValue);
     };

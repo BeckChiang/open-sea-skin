@@ -75,3 +75,11 @@ test('boat speed is driven by the swell, not by the clock', () => {
   assert.ok(source.includes('BOAT_PROBE'), 'the slope probe distance must exist')
   assert.ok(source.includes('surge: 1'), 'each lane needs its own surge state')
 })
+
+test('the sea level is followed over time, not snapped on every message', () => {
+  // The parent posts the level a few times a second; assigning uSea straight from
+  // the message turns a slow swell into a staircase, so the surface chases a goal.
+  assert.ok(source.includes('uSea.value += (seaGoal - uSea.value) * (1 - Math.exp(-dt / SEA_FOLLOW_TAU))'))
+  assert.equal(source.includes('uSea.value = 0.25 + (sea / 100) * 1.5'), false, 'the message handler must set the goal only')
+  assert.ok(source.includes('let seaGoal = uSea.value;'), 'the goal needs module-level state')
+})

@@ -90,6 +90,11 @@ const GLASS_MAX_RECTS = 3;
 
 const uTime = uniform(0);
 const uSea = uniform(0.25 + (45 / 100) * 1.5);
+// The parent posts a sea level a few times per second, so jumping `uSea` straight
+// to it turns a slow swell into four visible steps. The surface chases a goal per
+// frame instead, which keeps any message cadence looking continuous.
+let seaGoal = uSea.value;
+const SEA_FOLLOW_TAU = 0.3;
 const uSunDir = uniform(new THREE.Vector3(0, 0.5, -0.87));
 const uSunColor = uniform(new THREE.Vector3(1, 1, 1));
 // ambient term that dims clouds, and anything else that must not glow at night
@@ -804,7 +809,7 @@ if (SKIN) {
       const sea = Number(d.sea);
       const t = Number(d.t);
       if (Number.isFinite(sea) && sea >= 0 && sea <= 100) {
-        uSea.value = 0.25 + (sea / 100) * 1.5;
+        seaGoal = 0.25 + (sea / 100) * 1.5;
       }
       // In `real` mode the sky is driven by solar.js; a host that keeps
       // posting t (sea updates arrive at 4 Hz) must not overwrite it.
@@ -824,6 +829,7 @@ if (SKIN) {
   // tiny debug hook for automated checks (contract §3.6)
   window.__ossState = () => ({
     sea: uSea.value,
+    seaGoal,
     daylight: currentDaylight,
     sunElevationDeg,
     sunAzimuthDeg,
@@ -879,6 +885,7 @@ let FRAME_RATE_CAP = REDUCED_MOTION ? 20 : LOW_END_DEVICE ? 30 : 60;
 let FRAME_MS = 1000 / FRAME_RATE_CAP;
 let TARGET_FPS = REDUCED_MOTION ? 18 : LOW_END_DEVICE ? 28 : SKIN ? 40 : 55;
 const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.5 : 0.55;
+let adaptHold = 0;
 let renderScale = 1;
 // contract §3.4: the frosted glass caps the adaptive scale, it never raises it
 let SCALE_CAP = 1;
@@ -894,6 +901,8 @@ function animate(now) {
   lastFrameTime = now;
 
   uTime.value += dt * (REDUCED_MOTION ? 0.12 : 1);
+  // frame-rate independent follow of the requested sea level (see seaGoal)
+  uSea.value += (seaGoal - uSea.value) * (1 - Math.exp(-dt / SEA_FOLLOW_TAU));
   controls.update();
   // a throw here would kill the animation loop and leave an unpresented (white)
   // canvas, so each optional layer degrades on its own instead
@@ -935,13 +944,19 @@ function animate(now) {
   }
   if (adaptWindow >= 2) {
     adaptWindow = 0;
-    if (fpsNow > 0) {
+    // After a change, wait two more windows before touching the scale again.
+    // Without the hold the loop pumps 0.92/1.06 every 2 s around the target,
+    // and that periodic sharpness pulse reads as stutter on the water.
+    if (adaptHold > 0) adaptHold -= 1;
+    if (fpsNow > 0 && adaptHold === 0) {
       if (fpsNow < TARGET_FPS - 8 && renderScale > MIN_SCALE) {
-        renderScale = Math.max(MIN_SCALE, +(renderScale * 0.92).toFixed(3));
+        renderScale = Math.max(MIN_SCALE, +(renderScale * 0.96).toFixed(3));
         applyResolutionScale(renderScale);
+        adaptHold = 2;
       } else if (fpsNow > TARGET_FPS + 8 && renderScale < SCALE_CAP) {
-        renderScale = Math.min(SCALE_CAP, +(renderScale * 1.06).toFixed(3));
+        renderScale = Math.min(SCALE_CAP, +(renderScale * 1.02).toFixed(3));
         applyResolutionScale(renderScale);
+        adaptHold = 2;
       }
     }
   }
@@ -1077,7 +1092,7 @@ async function boot() {
       const onSeaInput = () => {
         const v = Number(seaSlider.value);
         seaValue.textContent = String(v).padStart(2, '0');
-        uSea.value = 0.25 + (v / 100) * 1.5;
+        seaGoal = 0.25 + (v / 100) * 1.5;
       };
       const onTimeInput = () => {
         applyTimeOfDay(Number(timeSlider.value) / 100);
@@ -1095,7 +1110,8 @@ async function boot() {
     } else {
       // skin mode: saved 波浪大小/日光 from the host content script
       if (SKIN_SEA !== null) {
-        uSea.value = 0.25 + (SKIN_SEA / 100) * 1.5;
+        seaGoal = 0.25 + (SKIN_SEA / 100) * 1.5;
+        uSea.value = seaGoal;
       }
       applyTimeOfDay(SKIN_TIME !== null ? SKIN_TIME / 100 : 0.55);
       if (SKIN_TIME !== null) {
