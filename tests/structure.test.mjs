@@ -245,3 +245,18 @@ test('hulls roam the whole frame and report where they land', () => {
   assert.ok(source.includes('offset: [-0.6, 0, 0.6][index % 3]'), 'three berths must be far apart')
   assert.ok(clientSource.includes('.map((spot) =>'), 'the panel must print the positions')
 })
+
+test('the cross on every constellation vertex is a real setting', () => {
+  // 2026-11-06: the constellation lines looked like a bare grid because the
+  // endpoints were one-pixel dots. Each vertex now carries a twinkling cross,
+  // and the panel decides how loud it is.
+  assert.ok(clientSource.includes("cross: 'mid',"), 'the setting must have a default')
+  assert.ok(clientSource.includes("segRow(pid('cross'), 'crossStars', gradeOptions)"), 'the panel must offer the grades')
+  assert.ok(clientSource.includes("case pid('cross'): return { cross: value };"), 'the grade must reach the state')
+  assert.ok(clientSource.includes('cross: state.cross,'), 'the grade must travel to the sky')
+  assert.ok(source.includes('const CROSS_GRADES = Object.freeze({ off: 0, low: 0.55, mid: 1, high: 1.75 });'), 'the sky must hold four grades')
+  assert.ok(source.includes("if (SKY_LEVELS.indexOf(d.cross) >= 0) crossSetting = d.cross;"), 'the message must set the grade')
+  assert.ok(source.includes('.mul(uStarGlow).mul(uCrossGlow)'), 'the cross must obey the grade')
+  assert.ok(source.includes('const armLength = STAR_RADIUS * 0.0042'), 'the grade must also grow the arms')
+  assert.ok(source.includes('cross: crossSetting,'), 'the grade must be readable from the state')
+})

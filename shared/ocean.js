@@ -71,6 +71,7 @@ let sunLon = NUMBER_QUERY('lon', -180, 180, 121.47);
 let moonEnabled = true;
 let starsSetting = 'mid';
 let constellationSetting = 'mid';
+let crossSetting = 'mid';
 let meteorEnabled = true;
 let cloudsSetting = 'mid';
 // reported back through window.__ossState()
@@ -89,6 +90,8 @@ let sunClock = 0;
 
 const SKY_LEVELS = ['off', 'low', 'mid', 'high'];
 const CONSTELLATION_GRADES = Object.freeze({ off: 0, low: 0.5, mid: 1, high: 1.7 });
+// the cross on every constellation vertex: how bright and how long the arms are
+const CROSS_GRADES = Object.freeze({ off: 0, low: 0.55, mid: 1, high: 1.75 });
 
 const GLASS_MAX_RECTS = 3;
 
@@ -576,6 +579,8 @@ function applySunMessage(d) {
   if (SKY_LEVELS.indexOf(d.stars) >= 0) starsSetting = d.stars;
   if (SKY_LEVELS.indexOf(d.constellation) >= 0) constellationSetting = d.constellation;
   uConstellation.value = CONSTELLATION_GRADES[constellationSetting] ?? CONSTELLATION_GRADES.mid;
+  if (SKY_LEVELS.indexOf(d.cross) >= 0) crossSetting = d.cross;
+  uCrossGlow.value = CROSS_GRADES[crossSetting] ?? CROSS_GRADES.mid;
   if (typeof d.meteor === 'boolean') meteorEnabled = d.meteor;
   if (SKY_LEVELS.indexOf(d.clouds) >= 0) cloudsSetting = d.clouds;
   uCloudCover.value = cloudCoverOf(cloudsSetting);
@@ -939,6 +944,7 @@ if (SKIN) {
     moonIllum: moonBrightness,
     moonBrightness,
     constellation: constellationSetting,
+    cross: crossSetting,
     meteorEnabled,
     starsIntensity,
     cloudCover,
@@ -1103,7 +1109,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.8';
+const OCEAN_BUILD = 'lab-1.5.9';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1696,6 +1702,7 @@ const uStarGlow = uniform(0);
 const uMeteorGlow = uniform(0);
 // how strongly the real constellations are drawn: a settings dial, not a compile flag
 const uConstellation = uniform(CONSTELLATION_GRADES.mid);
+const uCrossGlow = uniform(CROSS_GRADES.mid);
 
 function createStarLayer(scene) {
   const vertices = constellationVertices(CONSTELLATION_LINES);
@@ -1789,9 +1796,9 @@ function createStarLayer(scene) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  crossMaterial.colorNode = vec3(0.94, 0.97, 1.0)
-    .mul(sin(uTime.mul(2.1).add(attribute('aPhase', 'float'))).mul(0.4).add(0.6))
-    .mul(uStarGlow).mul(1.35);
+  crossMaterial.colorNode = vec3(0.96, 0.98, 1.0)
+    .mul(sin(uTime.mul(2.4).add(attribute('aPhase', 'float'))).mul(0.55).add(0.75))
+    .mul(uStarGlow).mul(uCrossGlow).mul(2.2);
   const crosses = new THREE.LineSegments(crossGeometry, crossMaterial);
   crosses.frustumCulled = false;
   crosses.renderOrder = 3;
@@ -1888,7 +1895,9 @@ function updateStarDome(now, dt) {
     starPositions.needsUpdate = true;
 
     // arms: +-right and +-up around the star, sized to read as ~4 px on screen
-    const armLength = STAR_RADIUS * 0.0026;
+    // graded arms: a bigger cross for a bolder sky, still built per-star so the
+    // four vertices stay square to the camera
+    const armLength = STAR_RADIUS * 0.0042 * (0.72 + 0.42 * uCrossGlow.value);
     if (boatCamera) {
       cameraRight.setFromMatrixColumn(boatCamera.matrixWorld, 0);
       cameraUp.setFromMatrixColumn(boatCamera.matrixWorld, 1);

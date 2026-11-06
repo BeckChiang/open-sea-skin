@@ -43,6 +43,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     moon: true,
     stars: 'mid',
     constellation: 'mid',
+    cross: 'mid',
     meteor: true,
     clouds: 'mid',
     glassMode: 'render',
@@ -110,6 +111,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       moon: '显示月亮',
       stars: '星空',
       constellation: '星座连线',
+      crossStars: '十字星',
       meteor: '流星',
       moonOut: '月亮：—',
     sunOut: '太阳：—',
@@ -186,6 +188,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       moon: 'Show moon',
       stars: 'Stars',
       constellation: 'Constellations',
+      crossStars: 'Cross stars',
       meteor: 'Meteors',
       moonOut: 'Moon: \u2014',
     sunOut: 'Sun: \u2014',
@@ -591,6 +594,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         moon: state.moon,
         stars: state.stars,
         constellation: state.constellation,
+        cross: state.cross,
         meteor: state.meteor,
         clouds: state.clouds,
       });
@@ -1108,6 +1112,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${switchRow(pid('moon'), 'moon')}
           ${segRow(pid('stars'), 'stars', gradeOptions)}
           ${segRow(pid('constellation'), 'constellation', gradeOptions)}
+          ${segRow(pid('cross'), 'crossStars', gradeOptions)}
           ${switchRow(pid('meteor'), 'meteor')}
           ${segRow(pid('clouds'), 'clouds', gradeOptions)}
           <p class="oss-sub" id="${pid('sun-out')}" data-copy="sunOut"></p>
@@ -1163,6 +1168,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const segSun = seg('sun-mode');
       const segStars = seg('stars');
       const segConstellation = seg('constellation');
+      const segCross = seg('cross');
       const segClouds = seg('clouds');
       const segGlassMode = seg('glass-mode');
       const columns = {
@@ -1195,6 +1201,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         setSeg(segSun, state.sunMode);
         setSeg(segStars, state.stars);
         setSeg(segConstellation, state.constellation);
+        setSeg(segCross, state.cross);
         setSeg(segClouds, state.clouds);
         setSeg(segGlassMode, state.glassMode);
         for (const [key, entry] of Object.entries(columns)) {
@@ -1346,6 +1353,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
             case pid('sun-mode'): return { sunMode: value };
             case pid('stars'): return { stars: value };
             case pid('constellation'): return { constellation: value };
+            case pid('cross'): return { cross: value };
             case pid('clouds'): return { clouds: value };
             case pid('glass-mode'): return { glassMode: value };
             case pid('col-left-level'): return { colLeft: { ...state.colLeft, level: value } };
@@ -1534,6 +1542,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     moon: 'ossMoon',
     stars: 'ossStars',
     constellation: 'ossConstellation',
+    cross: 'ossCross',
     meteor: 'ossMeteor',
     clouds: 'ossClouds',
     glassMode: 'ossGlassMode',
@@ -1546,7 +1555,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
-  const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'constellation', 'clouds', 'glassMode']);
+  const TEXT_KEYS = new Set(['waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode']);
 
   function readSetting(key, fallback) {
     try {
@@ -1616,7 +1625,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.8';
+  const SKIN_BUILD = 'lab-1.5.9';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
