@@ -146,8 +146,8 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // With the 8 degree pitch the sea only fills the lower third of the frame, so
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
-  assert.ok(source.includes('const base = 26 + (index % 4) * 9 + Math.floor(index / 4) * 3'), 'berths must step 9 units apart so hulls do not stack')
-  assert.ok(source.includes('boatDummy.scale.setScalar(2.8)'), 'the hull must grow with the berth')
+  assert.ok(source.includes('const base = 18 + (index % 4) * 2.4 + Math.floor(index / 4) * 1.2'), 'berths must stay inside the open water below the chat column')
+  assert.ok(source.includes('boatDummy.scale.setScalar(2.1)'), 'the hull must grow with the berth')
 })
 
 test('boats off is the switch, not a zero count', () => {

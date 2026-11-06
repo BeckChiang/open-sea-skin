@@ -1103,7 +1103,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.6';
+const OCEAN_BUILD = 'lab-1.5.7';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1355,7 +1355,7 @@ const boatCruise = Array.from({ length: BOAT_MAX }, (_, index) => {
   // lower third of the frame and anything nearer than ~30 units sits on the very
   // bottom edge. 3–7 units of lateral swing still leaves room for the approach
   // offset to stay off screen instead of parking a hull at the edge.
-  const base = 26 + (index % 4) * 9 + Math.floor(index / 4) * 3;
+  const base = 18 + (index % 4) * 2.4 + Math.floor(index / 4) * 1.2;
   const phase = spread * Math.PI * 2 + index * 0.7;
   return {
     // Each boat sails its own ellipse in front of the camera. A lane that only
@@ -1650,7 +1650,7 @@ function updateBoats(dt) {
     // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
     // size as before, at a berth that reads as further out to sea instead of
     // hugging the bottom edge.
-    boatDummy.scale.setScalar(2.8);
+    boatDummy.scale.setScalar(2.1);
     boatDummy.updateMatrix();
     if (boatCamera) {
       const spot = boatDummy.position.clone().project(boatCamera);
@@ -1737,7 +1737,7 @@ function createStarLayer(scene) {
   // 1.5 rad/s reads as scintillation; anything faster looks like blinking
   const twinkle = sin(uTime.mul(1.5).add(aPhase)).mul(0.3).add(0.7);
   const starMaterial = new THREE.PointsNodeMaterial({
-    size: 3.6,
+    size: 5.4,
     sizeAttenuation: false,
     transparent: true,
     depthWrite: false,
@@ -1749,6 +1749,23 @@ function createStarLayer(scene) {
   stars.frustumCulled = false;
   stars.renderOrder = 2;
   scene.add(stars);
+
+  // A second, larger and much fainter copy: one extra additive draw that reads
+  // as the glow around a star. Without it an additive point is a 1 px dot and
+  // the figure it belongs to never looks like a sky.
+  const haloMaterial = new THREE.PointsNodeMaterial({
+    size: 9,
+    sizeAttenuation: false,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  haloMaterial.colorNode = mix(vec3(0.85, 0.9, 1.0), vec3(0.6, 0.78, 1.0), aHue)
+    .mul(aGlow).mul(twinkle).mul(uStarGlow).mul(0.28);
+  const halos = new THREE.Points(starGeometry, haloMaterial);
+  halos.frustumCulled = false;
+  halos.renderOrder = 2;
+  scene.add(halos);
 
   const lineGlowAttr = new Float32Array(segmentCount);
   const lineGeometry = new THREE.BufferGeometry();
@@ -1762,8 +1779,8 @@ function createStarLayer(scene) {
   // Connections must not turn the sky into a wireframe, but they are the only
   // way to read a constellation, so they carry the setting dial (`uConstellation`)
   // and still fade out near the horizon where they would fight the sea glow.
-  lineMaterial.colorNode = vec3(0.44, 0.58, 0.86)
-    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(0.55);
+  lineMaterial.colorNode = vec3(0.55, 0.70, 1.0)
+    .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.15);
   const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -1785,7 +1802,7 @@ function createStarLayer(scene) {
 
   return {
     // NOTE: `meteor` is the state machine below, so the Line needs its own key
-    stars, lines, meteorLine: meteor,
+    stars, halos, lines, meteorLine: meteor,
     starRA, starDec,
     segmentRA: Float32Array.from(segments, (p) => p[0]),
     segmentDec: Float32Array.from(segments, (p) => p[1]),
