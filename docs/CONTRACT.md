@@ -108,7 +108,9 @@
 - 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base = 15 + ((i*7.3) % 11)` 即 15–25、`radiusRight = 3 + ((i*1.3) % 4)`、`radiusBack = 1.5 + ((i*1.1) % 2)`、角速度 0.10–0.19 rad/s 即静水下一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
 - **进出场不能用缩放做**（那样会「凭空冒出/凭空消失」）：`boatFade` 0..1 同时驱动「离航道多远」——`across = sin(angle)*radiusRight + side*(1-fade)*BOAT_APPROACH(26)`，各船 `side` 左右交替，所以船是**从画面左/右侧横着开进来、又横着开出去**；朝向把这段横向速度算进航向（`lateralSpeed`），来船船头朝你、离船船头朝外。缩放只做最后收尾（`tail = min(1, fade*2.5)`），保证消失时已经是小点而不是满尺寸突然不见。各船到达速率不同（0.9–1.35）且离场略快（1.3–1.7），一起增加/切换会话时是多艘各自驶入而不是整体瞬变。
 - **速度来自浪，不来自秒表**：轨道角是逐帧积分 `lane.angle += dt * lane.speed * cruise * lane.surge`，不是 `phase + time * speed`。`cruise = 0.65 + 0.95 * seaNorm`（`seaNorm = (uSea-0.25)/1.5`，静水慢、大浪快）；`surge` 由船头前方 2.4 单位处的水面高差（`BOAT_PROBE`）算出——下坡加速、上坡减速，钳在 0.7–1.5 并按 3/s 平滑（避免小碎浪抖速度）。所以浪高变化时船速真会跟着变，而不是恒速绕圈。
-- **刷新后必须重发船数**：`postFleet` 会跳过没变的数字，而 iframe 每次加载都从 `BOAT_BASE`（1 艘）起步，所以 `frame` 的 `load` 回调里把 `fleetCount` 重置为 -1 并主动 `pollFleet()`；否则 F5 之后海面会一直只有 1 艘，直到名册恰好变化。
+- **每次轮询都发，不做去重**：iframe 帧每次加载都从 `BOAT_BASE`（1 艘）起步，也可能被重载，所以数字没变也必须发；只发变化量会让海面一直停在它出生时的数量上。
+- **轮询挂在波浪 tick 上**：`stepWave`（250 ms）里每 4 s `void pollFleet()`，会话 id 一变立刻重取一次。船数不靠独立 `setInterval`——切会话时界面重挂载容易把单独的定时器留在旧会话上，而波浪 tick 是页面唯一常驻的循环。
+- **指标桥在渲染期写入**：`Bridge` 组件不做 `useEffect` 延迟，直接在下发时 `metricsStore.push(...)`，保证切会话后的第一拍就拿得到新 `sessionId`。
 
 ## 5 · 星空与流星
 

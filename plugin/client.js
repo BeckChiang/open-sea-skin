@@ -530,17 +530,17 @@ ${blurCss(state)}`;
       post({ type: 'oss-glass', mode: state.glassMode, perf: state.perf, rects: active ? measureColumns() : [] });
     };
 
-    // ---- fleet: one boat per running subagent -------------------------------
-    let fleetTimer = 0;
+    // ---- fleet: one boat per subagent in the open conversation --------------
     let fleetInFlight = false;
-    let fleetCount = -1;
+    let fleetAt = 0;
 
     const boatOutEl = () => document.getElementById(`${IDS.panel}-${'boat-out'}`);
 
     const postFleet = (count) => {
       const shown = state.boats && state.enabled ? count : 0;
-      if (shown === fleetCount) return;
-      fleetCount = shown;
+      // Posted on every poll, not only on change: the ocean frame starts at one
+      // boat and can be reloaded under us, so an unchanged number still has to
+      // reach it or the surface keeps the count it was born with.
       post({ type: 'oss-fleet', count: shown });
     };
 
@@ -587,13 +587,15 @@ ${blurCss(state)}`;
 
     const startFleetEngine = () => {
       stopFleetEngine();
+      fleetAt = 0;
       void pollFleet();
-      fleetTimer = window.setInterval(() => { void pollFleet(); }, 4000);
     };
 
+    // The poll itself is driven from the wave tick (see stepWave): one loop owns
+    // the page, so a session switch cannot leave a second timer orphaned.
     const stopFleetEngine = () => {
-      if (fleetTimer) window.clearInterval(fleetTimer);
-      fleetTimer = 0;
+      fleetInFlight = false;
+      fleetAt = 0;
     };
 
     let waveTimer = 0;
@@ -616,22 +618,34 @@ ${blurCss(state)}`;
       const span = Math.max(0, 100 - floor);
       let target = state.sea;
 
+      const snapshot = readMetrics();
+      const sessionId = snapshot ? snapshot.sessionId : null;
+      // The open conversation is what decides the fleet, so watch it here rather
+      // than in a timer that a session switch can strand: one tick loop owns the
+      // page, and switching sessions re-reads the roster immediately.
+      if (sessionId && sessionId !== lastSession) {
+        lastSession = sessionId;
+        lastTotal = snapshot
+          ? (snapshot.cachedTokens || 0) + (snapshot.uncachedTokens || 0) + (snapshot.outputTokens || 0)
+          : null;
+        lastAt = now;
+        rate = 0;
+        fleetAt = 0;
+        void pollFleet();
+      }
+      if (now - fleetAt > 4000) {
+        fleetAt = now;
+        void pollFleet();
+      }
+
       if (state.waveMode === 'manual') {
         rate = 0;
         target = state.sea;
       } else {
-        const snapshot = readMetrics();
         if (!snapshot) {
           target = floor;
         } else {
           const total = (snapshot.cachedTokens || 0) + (snapshot.uncachedTokens || 0) + (snapshot.outputTokens || 0);
-          if (snapshot.sessionId !== lastSession) {
-            lastSession = snapshot.sessionId;
-            lastTotal = total;
-            lastAt = now;
-            rate = 0;
-            void pollFleet();
-          }
           const seconds = Math.max(0.05, (now - lastAt) / 1000);
           const delta = Math.max(0, total - (lastTotal === null ? total : lastTotal));
           lastTotal = total;
@@ -740,13 +754,10 @@ ${blurCss(state)}`;
         postSun();
         postGlass();
         postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
-        // The frame boots with one boat on the water. `postFleet` skips an
-        // unchanged count, so without this reset a refreshed frame would keep
-        // that single boat until the roster happens to change.
-        fleetCount = -1;
+        // The frame boots with one boat on the water; the poll below reposts the
+        // real count on the first tick after load.
         startWaveEngine();
         startFleetEngine();
-        void pollFleet();
         if (glassTimer) window.clearInterval(glassTimer);
         glassTimer = window.setInterval(postGlass, 1500);
       }, { once: true });
@@ -1326,16 +1337,17 @@ ${blurCss(state)}`;
     const Bridge = function OpenSeaSkinMetrics(props) {
       const usage = props.useProjection ? props.useProjection('tokenUsage') : null;
       const selection = props.useProjection ? props.useProjection('modelSelection') : null;
-      React.useEffect(() => {
-        const model = selection ? selection.next || selection.lastUsed : null;
-        metricsStore.push({
-          sessionId: props.sessionId || null,
-          cachedTokens: (usage && usage.cacheReadTokens) || 0,
-          uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
-          outputTokens: (usage && usage.outputTokens) || 0,
-          costYuan: costOf(usage, model),
-        });
-      }, [usage, selection, props.sessionId]);
+      const model = selection ? selection.next || selection.lastUsed : null;
+      // Pushed while rendering instead of from an effect: the store has to carry
+      // the open conversation on the first tick after a switch, and an effect
+      // only fires after paint (and only when its dependency list agrees).
+      metricsStore.push({
+        sessionId: props.sessionId || null,
+        cachedTokens: (usage && usage.cacheReadTokens) || 0,
+        uncachedTokens: (usage && usage.uncachedInputTokens) || 0,
+        outputTokens: (usage && usage.outputTokens) || 0,
+        costYuan: costOf(usage, model),
+      });
       return null;
     };
     Bridge.displayName = 'OpenSeaSkinMetrics';
