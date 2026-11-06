@@ -106,6 +106,7 @@
 - 宿主服务全部按需读取（`ctx.get` / `ctx.reflect.get`），未组装 subagents/teams 的 profile 只会返回 `running: 0`，不影响皮肤其它部分。
 - 客户端 4 s 轮询一次，转成 `{ type: 'oss-fleet', count }` 投进 iframe，`count` = `children.length`（clamp 0..12，渲染端再按 `BOAT_BASE`/`BOAT_MAX` 收边）；`sessionId` 一变立即重拉，不用等下一轮。宿主返回的是旧形状（没有 `children`）时，面板显示「宿主半是旧版本，需要重启」提示。
 - 渲染端在 `SECTION 10 · FLEET`：`InstancedMesh` × 4（船体 / 桅杆 / 帆 / 船灯），每帧用 `seaStateAt()` 采样 CPU 版 Gerstner 波面决定高度与倾斜。船在相机前方走**椭圆环**（`boatCruise`：`base` 14–27、`radiusRight` 5–8.4、`radiusBack` 2–4.2、角速度 0.10–0.19 rad/s 即一圈 33–63 s，各船相位错开），一圈船头始终顺着切线转向，所以不会「飞到边缘再掉头」；船头是局部 +X，`boatYaw.setFromAxisAngle(BOAT_UP, atan2(-vz, vx))`。两轮 `BOAT_MIN_SEP = 3.4` 的 O(n²) 分离把相邻船推开，推力记在 `pushX/pushZ` 里按 0.92 衰减，是稳定避碰而不是抖动。
+- **进出场不能用缩放做**（那样会「凭空冒出/凭空消失」）：`boatFade` 0..1 同时驱动「离相机的远近」——`away = (1 - fade) * BOAT_APPROACH(16)`，船是**从海天线驶进来、又驶回海天线**消失的；朝向把这段径向速度算进航向（`radialSpeed`），所以来船是船头朝你，离船是船头朝外。缩放只做最后 1/4 的收尾（`tail = min(1, fade*4)`），保证消失时已经是小点而不是满尺寸突然不见。各船到达速率不同（0.9–1.35）且离场略快（1.3–1.7），一起增加/切换会话时是多艘各自驶入而不是整体瞬变。
 
 ## 5 · 星空与流星
 

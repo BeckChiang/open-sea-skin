@@ -1149,15 +1149,19 @@ async function boot() {
 }
 
 // ---------------------------------------------------------------------------
-// SECTION 10 · FLEET · one boat per running subagent (host roster -> message)
+// SECTION 10 · FLEET · one boat per subagent in this session (host roster -> message)
 // ---------------------------------------------------------------------------
 
 const BOAT_MAX = 12;
-// One hull always stays on the water: with no subagent running an empty sea
-// reads as "the fleet feature is broken", not as "no work in progress".
+// One hull always stays on the water: with no subagent in the session an empty
+// sea reads as "the fleet feature is broken", not as "no work in progress".
 const BOAT_BASE = 1;
 // Boats close enough to overlap get pushed apart by this much, in world units.
 const BOAT_MIN_SEP = 3.4;
+// How far out towards the horizon a boat is while it arrives or leaves. distance
+// rather than scale is what carries the transition: shrinking a hull in place
+// reads as a pop, sailing it in and out of the open sea does not.
+const BOAT_APPROACH = 16;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
 // camera the fleet is anchored to; set when the boats are created
@@ -1284,7 +1288,13 @@ function updateBoats(dt) {
 
   for (let index = 0; index < BOAT_MAX; index += 1) {
     const want = index < boatTarget ? 1 : 0;
-    boatFade[index] += (want - boatFade[index]) * Math.min(1, dt * 2.6);
+    // Arrivals ease in slowly and departures a bit faster, and every lane picks a
+    // slightly different rate: a session that gains three subagents at once still
+    // gets three separate arrivals instead of a fleet snapping into place.
+    const rate = want > boatFade[index]
+      ? 0.9 + (index % 4) * 0.15
+      : 1.3 + (index % 3) * 0.2;
+    boatFade[index] += (want - boatFade[index]) * Math.min(1, dt * rate);
     if (want === 0 && boatFade[index] < 0.01) {
       boatFade[index] = 0;
       boatCruise[index].pushX = 0;
@@ -1300,13 +1310,21 @@ function updateBoats(dt) {
     lane.pushZ *= 0.92;
 
     const across = Math.sin(angle) * lane.radiusRight;
-    const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
+    // fade 0..1 doubles as "how far out on the approach": a boat joins the lane by
+    // sailing in from the horizon and leaves by sailing back out to it
+    const away = (1 - fade) * BOAT_APPROACH;
+    const ahead = lane.base + Math.cos(angle) * lane.radiusBack + away;
     // Tangent of the ellipse in the camera's flat frame: the boat has to point
     // where it is actually going, otherwise it sails sideways or stern first.
+    // While the approach offset is moving, that radial motion is part of the
+    // course too, so an arriving boat comes bow-on instead of crabbing in.
+    const radialSpeed = -BOAT_APPROACH * (want - fade) * rate;
     const vx = boatRight.x * Math.cos(angle) * lane.radiusRight
-      - boatForward.x * Math.sin(angle) * lane.radiusBack;
+      - boatForward.x * Math.sin(angle) * lane.radiusBack
+      + boatForward.x * radialSpeed;
     const vz = boatRight.z * Math.cos(angle) * lane.radiusRight
-      - boatForward.z * Math.sin(angle) * lane.radiusBack;
+      - boatForward.z * Math.sin(angle) * lane.radiusBack
+      + boatForward.z * radialSpeed;
     const placed = boatPlaced[placedCount];
     placed.x = originX + boatForward.x * ahead + boatRight.x * across + lane.pushX;
     placed.z = originZ + boatForward.z * ahead + boatRight.z * across + lane.pushZ;
@@ -1362,7 +1380,11 @@ function updateBoats(dt) {
     boatYaw.setFromAxisAngle(BOAT_UP, placed.heading);
     boatDummy.quaternion.copy(boatTilt).multiply(boatYaw);
     boatDummy.position.set(placed.x, surface.y - 0.08, placed.z);
-    boatDummy.scale.setScalar((0.5 + 0.5 * placed.fade) * 2.2);
+    // perspective already shrinks a boat that is out on the approach, so the
+    // scale stays near 1 and the pop that came from scaling in place is gone;
+    // the tail only trims the last frame or two so nothing vanishes at full size
+    const tail = Math.min(1, placed.fade * 4);
+    boatDummy.scale.setScalar((0.72 + 0.28 * placed.fade) * tail * 2.2);
     boatDummy.updateMatrix();
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);
