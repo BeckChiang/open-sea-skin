@@ -1580,10 +1580,16 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     push(next) { this.value = next; this.count += 1; this.at = performance.now(); },
   };
 
+  // Stamped into both halves so a report can name which copy the browser is
+  // actually running: the panel and the frame are loaded by different paths and
+  // a stale one looks exactly like a bug.
+  const SKIN_BUILD = 'lab-1.5.2/98bbfd2';
+
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
   exports.apply = function apply(ctx) {
     globalThis.__openSeaSkinMetrics = metricsStore;
+    console.info('[open-sea-skin] client', SKIN_BUILD);
 
     // Renders nothing: it only mirrors the session's cumulative token usage and
     // the active model into the store the wave engine polls.

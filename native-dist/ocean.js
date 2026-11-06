@@ -1090,7 +1090,10 @@ function animate(now) {
   }
 }
 
+const OCEAN_BUILD = 'lab-1.5.2/98bbfd2';
+
 async function boot() {
+  console.info('[open-sea-skin] ocean', OCEAN_BUILD);
   // 不再预检 navigator.gpu：无 WebGPU API（低配/无显卡环境）时 three 自动
   // 回退 WebGL2 backend（2026-08-23 冒烟测试：预检导致黑底白字异常画面，
   // 实际 WebGL2 渲染完全可用）；两个 backend 都失败由 init() 抛出走
