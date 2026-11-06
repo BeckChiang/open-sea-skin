@@ -1356,8 +1356,19 @@ ${blurCss(state)}`;
         },
       },
     });
+    // One controller per page. A second mount (hot reload, a re-applied plugin)
+    // would otherwise keep a second frame alive and post its own, older roster
+    // numbers into the same ocean, so whichever posted last won.
+    const previous = globalThis.__openSeaSkinController;
+    if (previous && typeof previous.stop === 'function') {
+      try { previous.stop(); } catch { /* already gone */ }
+    }
+    globalThis.__openSeaSkinController = controller;
     void controller.start();
-    ctx.effect(() => () => controller.stop(), 'open-sea-skin: browser surface');
+    ctx.effect(() => () => {
+      if (globalThis.__openSeaSkinController === controller) globalThis.__openSeaSkinController = null;
+      controller.stop();
+    }, 'open-sea-skin: browser surface');
 
     // Renders nothing: it only mirrors the session's cumulative token usage and
     // the active model into the store the wave engine polls.
