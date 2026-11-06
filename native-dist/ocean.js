@@ -585,6 +585,8 @@ function applySunMessage(d) {
   if (SKY_LEVELS.indexOf(d.clouds) >= 0) cloudsSetting = d.clouds;
   uCloudCover.value = cloudCoverOf(cloudsSetting);
   cloudCover = uCloudCover.value;
+  const skyDist = Number(d.skyDist);
+  if (Number.isFinite(skyDist)) skyZoom = Math.max(0.6, Math.min(3, skyDist));
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
     const t = Number(d.t);
@@ -966,6 +968,7 @@ if (SKIN) {
     boatSpread,
     boatPace,
     boatScale,
+    skyDist: skyZoom,
     boatSpots: boatSpotList(),
     boatTarget,
     boatError,
@@ -1120,7 +1123,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.21';
+const OCEAN_BUILD = 'lab-1.5.22';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1523,10 +1526,10 @@ function boatSpotList() {
 }
 
 // The panel drives these three: how wide a lap is, how fast it runs and how big
-// the hulls read. Defaults reproduce the 1.5.19 look exactly.
-let boatSpread = 1;
+// the hulls read. The user tuned the defaults: twice the 1.5.3 sweep, 2.5x hull.
+let boatSpread = 2;
 let boatPace = 1;
-let boatScale = 2.8;
+let boatScale = 2.5;
 
 function applyBoatsMessage(data) {
   const spread = Number(data.spread);
@@ -1569,7 +1572,10 @@ function updateBoats(dt) {
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
     // 1.5.3's fixed amplitude, scaled by the "range" setting (1 = untouched).
-    const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;
+    // Twice the 1.5.3 amplitude overflows the frame at the near berths, so the
+    // sweep is capped to 92% of the half-width that depth can show.
+    const reach = Math.max(1, (offStage - BOAT_MARGIN) * 0.92);
+    const laneAcross = Math.max(-reach, Math.min(reach, Math.sin(angle) * lane.radiusRight * boatSpread));
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
@@ -1916,6 +1922,28 @@ function createStarLayer(scene) {
 
 let lastAltDeg = 0;
 
+// "Sky distance": 1 keeps the plain 60 degree cone, so the frame holds the same
+// stars as before. Raising it shrinks the angles toward the view axis, which
+// folds a wider swathe of sky into the same window (more constellations).
+let skyZoom = 1;
+const skyAxis = new THREE.Vector3(0, 0, -1);
+const skyFull = new THREE.Quaternion();
+const skyPart = new THREE.Quaternion();
+const skyUnit = new THREE.Vector3();
+
+function compressSky(dir) {
+  if (skyZoom <= 1.0001) return dir;
+  if (boatCamera) boatCamera.getWorldDirection(skyAxis);
+  else skyAxis.set(0, 0, -1);
+  const length = dir.length();
+  if (length < 1e-6) return dir;
+  skyUnit.copy(dir).divideScalar(length);
+  skyFull.setFromUnitVectors(skyAxis, skyUnit);
+  skyPart.identity().slerp(skyFull, 1 / skyZoom);
+  skyUnit.copy(skyAxis).applyQuaternion(skyPart);
+  return dir.copy(skyUnit).multiplyScalar(length);
+}
+
 function starDirection(raDeg, decDeg, latDeg, lstDeg, out) {
   const horiz = equatorialToHorizontal(raDeg, decDeg, latDeg, lstDeg);
   lastAltDeg = horiz.altDeg;
@@ -1926,7 +1954,9 @@ function starDirection(raDeg, decDeg, latDeg, lstDeg, out) {
   const alt = horiz.altDeg * DEG_TO_RAD;
   const az = horiz.azDeg * DEG_TO_RAD;
   const ce = Math.cos(alt);
-  return out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az)).multiplyScalar(STAR_RADIUS);
+  const dir = out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az));
+  compressSky(dir);
+  return dir.multiplyScalar(STAR_RADIUS);
 }
 
 const starDirA = new THREE.Vector3();
@@ -1938,7 +1968,9 @@ function skyPoint(azDeg, altDeg, out) {
   const az = azDeg * DEG_TO_RAD;
   const alt = altDeg * DEG_TO_RAD;
   const ce = Math.cos(alt);
-  return out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az)).multiplyScalar(STAR_RADIUS);
+  const dir = out.set(ce * Math.sin(az), Math.sin(alt), -ce * Math.cos(az));
+  compressSky(dir);
+  return dir.multiplyScalar(STAR_RADIUS);
 }
 
 function updateStarDome(now, dt) {

@@ -52,9 +52,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     colRight: Object.freeze({ on: true, level: 'weak' }),
     perf: false,
     boats: true,
-    boatSpread: 1,
+    boatSpread: 2,
     boatPace: 1,
-    boatScale: 2.8,
+    boatScale: 2.5,
+    skyDist: 1,
   });
 
   // Blur strength per column, sent to the ocean as a 0..1 weight.
@@ -67,6 +68,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatSpread: '横向范围',
       boatPace: '航速',
       boatScale: '船的大小',
+      skyDist: '星空距离',
       button: '海洋皮肤设置',
       close: '关闭',
       sea: '波浪大小',
@@ -147,6 +149,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatSpread: 'Sweep',
       boatPace: 'Pace',
       boatScale: 'Hull size',
+      skyDist: 'Sky distance',
       button: 'Open Sea skin settings',
       close: 'Close',
       sea: 'Sea state',
@@ -289,6 +292,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatSpread: clamp(source.boatSpread, 0.2, 3, DEFAULTS.boatSpread),
       boatPace: clamp(source.boatPace, 0.3, 2.5, DEFAULTS.boatPace),
       boatScale: clamp(source.boatScale, 1.4, 4.6, DEFAULTS.boatScale),
+      skyDist: clamp(source.skyDist, 0.6, 3, DEFAULTS.skyDist),
     };
   }
 
@@ -610,6 +614,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         cross: state.cross,
         meteor: state.meteor,
         clouds: state.clouds,
+        skyDist: state.skyDist,
       });
     };
 
@@ -1139,6 +1144,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${segRow(pid('constellation'), 'constellation', gradeOptions)}
           ${segRow(pid('cross'), 'crossStars', gradeOptions)}
           ${switchRow(pid('meteor'), 'meteor')}
+          ${rangeRow(pid('sky-dist'), 'skyDist', 0.6, 3, 0.1)}
           ${segRow(pid('clouds'), 'clouds', gradeOptions)}
           <p class="oss-sub" id="${pid('sun-out')}" data-copy="sunOut"></p>
           <p class="oss-sub" id="${pid('moon-out')}" data-copy="moonOut"></p>
@@ -1218,6 +1224,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         if (row instanceof HTMLElement) row.style.display = visible ? '' : 'none';
       };
 
+      const skyDistEl = panel.querySelector(`#${pid('sky-dist')}`);
+      const skyDistOut = panel.querySelector(`#${pid('sky-dist')}-out`);
+
       const boatRangeRows = [
         ['boat-spread', 'boatSpread', '×'],
         ['boat-pace', 'boatPace', '×'],
@@ -1257,6 +1266,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         smoothOut.textContent = `${state.smooth}s`;
         glassOut.textContent = `${state.glass}%`;
         timeOut.textContent = state.sunMode === 'real' ? copy.realTime : timeLabel(copy, state.time);
+        if (skyDistEl) skyDistEl.value = String(state.skyDist);
+        if (skyDistOut) skyDistOut.textContent = `${state.skyDist}\u00d7`;
         for (const [id, key, suffix] of boatRangeRows) {
           const el = panel.querySelector(`#${pid(id)}`);
           const out = panel.querySelector(`#${pid(id)}-out`);
@@ -1340,6 +1351,13 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           postBoats();
         });
       }
+
+      on(skyDistEl, 'input', () => {
+        state.skyDist = clamp(skyDistEl.value, 0.6, 3, DEFAULTS.skyDist);
+        if (skyDistOut) skyDistOut.textContent = `${state.skyDist}\u00d7`;
+        void save({ skyDist: state.skyDist });
+        postSun();
+      });
 
       on(timeRange, 'input', () => {
         state.time = clamp(timeRange.value, 0, 100, DEFAULTS.time);
@@ -1607,6 +1625,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     boatSpread: 'ossBoatSpread',
     boatPace: 'ossBoatPace',
     boatScale: 'ossBoatScale',
+    skyDist: 'ossSkyDist',
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
@@ -1681,7 +1700,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.21';
+  const SKIN_BUILD = 'lab-1.5.22';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

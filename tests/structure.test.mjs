@@ -147,7 +147,7 @@ test('lane berths sit under the horizon, not on the bottom edge', () => {
   // the old 15..25 unit berths put the hulls at 84-97% of the height: "the boats
   // are too close to the bottom". Berths moved out and the hull grew to match.
   assert.ok(source.includes('const base = 26 + (index % 4) * 9 + Math.floor(index / 4) * 3'), 'berths must step 9 units apart so hulls do not stack')
-  assert.ok(source.includes('let boatScale = 2.8;'), 'the hull defaults to the 1.5.19 size')
+  assert.ok(source.includes('let boatScale = 2.5;'), 'the hull defaults to the size the user picked')
 })
 
 test('boats off is the switch, not a zero count', () => {
@@ -308,14 +308,14 @@ test('the hulls keep the 1.5.3 lanes, widened only by the panel setting', () => 
   // 1.5.21 went back to the fixed 6..20 unit amplitude and made it adjustable
   // instead. Nothing may reintroduce the frame-relative `across` field.
   assert.ok(source.includes('radiusRight: 6 + ((index * 3.7) % 14),'), 'the lanes must keep the fixed amplitude')
-  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;'), 'the amplitude must be scaled by the setting')
+  assert.ok(source.includes('const laneAcross = Math.max(-reach, Math.min(reach, Math.sin(angle) * lane.radiusRight * boatSpread));'), 'the amplitude must be scaled by the setting')
   assert.ok(!source.includes('lane.across'), 'the frame-relative sweep must stay gone')
 })
 
 test('boat range, pace and scale are panel settings', () => {
   // The hulls went missing twice this week; every knob that changes where they
   // are drawn has to be adjustable from the panel instead of hard-coded.
-  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight * boatSpread;'), 'the sweep must come from the setting')
+  assert.ok(source.includes('const laneAcross = Math.max(-reach, Math.min(reach, Math.sin(angle) * lane.radiusRight * boatSpread));'), 'the sweep must come from the setting')
   assert.ok(source.includes('lane.angle += dt * lane.speed * cruise * lane.surge * boatPace;'), 'the pace must come from the setting')
   assert.ok(source.includes('boatDummy.scale.setScalar(boatScale);'), 'the size must come from the setting')
   assert.ok(source.includes("if (d && d.type === 'oss-boats') applyBoatsMessage(d);"), 'the surface must accept the settings')
