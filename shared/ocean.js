@@ -74,6 +74,9 @@ let cloudsSetting = 'mid';
 // reported back through window.__ossState()
 let sunElevationDeg = 0;
 let sunAzimuthDeg = 0;
+// where the disc is actually aimed after the dome is squeezed into the frame
+let sunViewElevationDeg = 0;
+let sunViewAzimuthDeg = 0;
 let moonElevationDeg = 0;
 let moonBrightness = 0;
 let starsIntensity = 0;
@@ -400,9 +403,36 @@ const lerp = (a, b, t) => a + (b - a) * t;
 // shared/sky.js). horizonF = 0 deep night, 1 at/above the horizon; dayF = 0 at
 // the horizon, 1 once the sun is 12 deg up. DUSK sits exactly at the horizon so
 // the 1.2.7 sunset look is preserved, and a real NIGHT fills in below -18 deg.
-function applyElevation(elevationDeg, azimuthDeg) {
-  const el = elevationDeg * DEG;
-  const az = azimuthDeg * DEG;
+// The wallpaper is one fixed camera pointing north over the water: it sees about
+// 55° of sky, nothing above roughly 26°, and nothing behind itself. A true
+// compass sky therefore hides the sun for most of the day — it is behind the
+// camera all afternoon and above the frame near noon. The daily arc is folded
+// into that view instead: due east -> left edge, due west -> right edge, and
+// elevation 0..90° -> 1.5..24.5°. The palette still comes from the REAL
+// elevation (see applyElevation), so noon is still noon; only the disc moves.
+const VIEW_AZ_MIN = 90;   // due east
+const VIEW_AZ_MAX = 270;  // due west
+const VIEW_AZ_HALF = 40;  // degrees either side of the view axis
+const VIEW_EL_FLOOR = 1.5;
+const VIEW_EL_SCALE = 23 / 90;
+
+function viewAzimuth(azDeg) {
+  const rel = ((azDeg % 360) + 360) % 360;
+  const t = Math.min(1, Math.max(0, (rel - VIEW_AZ_MIN) / (VIEW_AZ_MAX - VIEW_AZ_MIN)));
+  return (t * 2 - 1) * VIEW_AZ_HALF;
+}
+
+function viewElevation(elDeg) {
+  if (elDeg > 0) return VIEW_EL_FLOOR + Math.min(90, elDeg) * VIEW_EL_SCALE;
+  // below the horizon it drops away quickly, so a set sun is really gone
+  return VIEW_EL_FLOOR + elDeg * 2.5;
+}
+
+// elevationDeg drives the palette and the stars; the view pair only aims the
+// disc and its glitter path. Manual mode passes them equal, as 1.2.7 did.
+function applyElevation(elevationDeg, azimuthDeg, viewElDeg, viewAzDeg) {
+  const el = (viewElDeg === undefined ? elevationDeg : viewElDeg) * DEG;
+  const az = (viewAzDeg === undefined ? azimuthDeg : viewAzDeg) * DEG;
   const ce = Math.cos(el);
   const se = Math.sin(el);
   uSunDir.value.set(ce * Math.sin(az), se, -ce * Math.cos(az));
@@ -418,6 +448,8 @@ function applyElevation(elevationDeg, azimuthDeg) {
 
   sunElevationDeg = elevationDeg;
   sunAzimuthDeg = azimuthDeg;
+  sunViewElevationDeg = viewElDeg === undefined ? elevationDeg : viewElDeg;
+  sunViewAzimuthDeg = viewAzDeg === undefined ? azimuthDeg : viewAzDeg;
 }
 
 // Manual slider / legacy 720 s cycle: t 0..1 spans deep night (0) through
@@ -439,8 +471,10 @@ function syncMoon(now) {
   moonBrightness = moonEnabled ? moon.brightness : 0;
   uMoonVisible.value = moonBrightness;
 
-  const el = moon.elevationDeg * DEG;
-  const az = moon.azimuthDeg * DEG;
+  // same squeeze as the sun: a real azimuth and elevation would put the moon
+  // behind the camera or above the frame for most of the month
+  const el = viewElevation(moon.elevationDeg) * DEG;
+  const az = viewAzimuth(moon.azimuthDeg) * DEG;
   const ce = Math.cos(el);
   uMoonDir.value.set(ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az));
 
@@ -472,7 +506,13 @@ function syncStars() {
 function refreshSky(now) {
   if (sunMode === 'real') {
     const sun = sunPosition(new Date(now), sunLat, sunLon);
-    applyElevation(sun.elevationDeg, sun.azimuthDeg);
+    // palette from the true elevation, disc aimed into the visible band
+    applyElevation(
+      sun.elevationDeg,
+      sun.azimuthDeg,
+      viewElevation(sun.elevationDeg),
+      viewAzimuth(sun.azimuthDeg),
+    );
   }
   syncMoon(now);
   syncStars();
@@ -836,6 +876,8 @@ if (SKIN) {
     daylight: currentDaylight,
     sunElevationDeg,
     sunAzimuthDeg,
+    sunViewElevationDeg,
+    sunViewAzimuthDeg,
     moonElevationDeg,
     moonBrightness,
     starsIntensity,

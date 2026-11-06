@@ -97,3 +97,12 @@ test('boats enter and leave across the frame edge, by the nearer side', () => {
   )
   assert.ok(source.includes('lane.shown = false'), 'the hull is dropped only once it is outside the frame')
 })
+
+test('the sun is aimed where the fixed camera can see it', () => {
+  // A true compass sun is behind the camera all afternoon and above the frame at
+  // noon, so the wallpaper showed no sun at all; the dome is squeezed into view.
+  assert.ok(source.includes('viewElevation(sun.elevationDeg)'), 'the disc elevation must be mapped into the frame')
+  assert.ok(source.includes('viewAzimuth(sun.azimuthDeg)'), 'the disc azimuth must be mapped into the frame')
+  assert.ok(source.includes('skyFromElevation(elevationDeg)'), 'the palette still comes from the real elevation')
+  assert.ok(source.includes('VIEW_AZ_HALF'), 'the squeeze needs a named span')
+})
