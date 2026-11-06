@@ -1581,6 +1581,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const milkyOut = el('milky-out');
       const boatsBox = el('boats');
       const meteorBox = el('meteor');
+      const daylightBox = el('stars-daylight');
       const latInput = el('lat');
       const lonInput = el('lon');
       const resetBtn = panel.querySelector('.oss-reset');
@@ -1684,6 +1685,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
         if (meteorBox) meteorBox.checked = state.meteor;
+      if (daylightBox) daylightBox.checked = state.starsDaylight;
         if (boatsBox) boatsBox.checked = state.boats;
         setSeg(segWave, state.waveMode);
         setSeg(segSun, state.sunMode);
@@ -1896,6 +1898,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       if (meteorBox) {
         on(meteorBox, 'change', () => {
           void save({ meteor: meteorBox.checked });
+          postSun();
+        });
+      }
+      if (daylightBox) {
+        on(daylightBox, 'change', () => {
+          void save({ starsDaylight: daylightBox.checked });
           postSun();
         });
       }
@@ -2128,12 +2136,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     glow: 'ossGlow',
   });
 
-  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
+  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
   const NULLABLE_KEYS = new Set(['lat', 'lon']);
   const TEXT_KEYS = new Set([
     'waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode',
-    'skyTone', 'tzMode',
+    'skyTone', 'tzMode', 'starMode', 'glassStyle',
   ]);
 
   function readSetting(key, fallback) {
