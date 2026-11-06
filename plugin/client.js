@@ -77,6 +77,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     clouds: 55,
     cloudSpeed: 1,
     cloudOpacity: 1,
+    // 1.5.26: frame budget. The scene is fill bound, so the quality preset is
+    // the lever that matters; glow is the one remaining full-screen pass.
+    quality: 'balanced',
+    glow: 55,
     glassMode: 'render',
     glassRadius: 14,
     colLeft: Object.freeze({ on: true, strength: 40 }),
@@ -200,6 +204,14 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: '漂移速度',
       cloudOpacity: '不透明度',
       glassRadius: '模糊半径',
+      perfGroup: '性能',
+      qualityMode: '画质档位',
+      quality: {
+        high: '高',
+        balanced: '平衡',
+        low: '省电',
+      },
+      glow: '泛光',
       colStrength: '强度',
       tzMode: '时钟',
       tzOffset: '时区偏移',
@@ -316,6 +328,14 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: 'Drift speed',
       cloudOpacity: 'Opacity',
       glassRadius: 'Blur radius',
+      perfGroup: 'Performance',
+      qualityMode: 'Quality',
+      quality: {
+        high: 'High',
+        balanced: 'Balanced',
+        low: 'Power saver',
+      },
+      glow: 'Glow',
       colStrength: 'Strength',
       tzMode: 'Clock',
       tzOffset: 'UTC offset',
@@ -360,6 +380,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   const WAVE_MODES = ['manual', 'throughput', 'amount'];
   const SKY_TONES = ['real', 'blue', 'warm'];
   const TZ_MODES = ['system', 'longitude', 'manual'];
+const QUALITY_LEVELS = ['high', 'balanced', 'low'];
 
   // A column used to store a blur letter. It now stores a 0..100 strength, and
   // a saved letter is folded into one so old profiles keep their look.
@@ -425,6 +446,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       clouds: clamp(dialFrom(source.clouds, { off: 0, low: 35, mid: 55, high: 80 }), 0, 100, DEFAULTS.clouds),
       cloudSpeed: clamp(source.cloudSpeed, 0, 4, DEFAULTS.cloudSpeed),
       cloudOpacity: clamp(source.cloudOpacity, 0, 1.5, DEFAULTS.cloudOpacity),
+      quality: QUALITY_LEVELS.includes(source.quality) ? source.quality : DEFAULTS.quality,
+      glow: clamp(source.glow, 0, 100, DEFAULTS.glow),
       glassMode: source.glassMode === 'css' ? 'css' : 'render',
       glassRadius: clamp(
         source.glassRadius,
@@ -811,6 +834,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         milky: state.milky,
         lineWidth: state.lineWidth,
         lineFadeDeg: state.lineFadeDeg,
+        quality: state.quality,
+        glow: state.glow,
       });
     };
 
@@ -1431,6 +1456,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${switchRow(pid('perf'), 'perf')}
           <p class="oss-sub" data-copy="glassNote"></p>`)}
         ${group('secAdvanced', `
+          <p class="oss-sub" data-copy="perfGroup"></p>
+          ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
+          ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
           <div class="oss-row"><button type="button" class="oss-reset" data-copy="reset"></button></div>
           <p class="oss-sub" data-copy="resetNote"></p>`)}
         <p class="oss-note" data-copy="note"></p>`;
@@ -1512,6 +1540,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['boat-scale', 'boatScale', 1, 'mul'],
         ['glass-range', 'glass', 0, 'pct'],
         ['glass-radius', 'glassRadius', 1, 'px'],
+        ['glow', 'glow', 0, 'pct'],
       ];
 
       // One formatter per kind of value; the panel never shows a raw float.
@@ -1611,7 +1640,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         'starSpikes', 'starBase', 'starHalo', 'starCount',
         'twinkleSpeed', 'twinkleAmp', 'milky', 'skyTone', 'constellation', 'cross', 'lineWidth',
         'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
-        'tzOffset', 'moon', 'lat', 'lon',
+        'tzOffset', 'moon', 'lat', 'lon', 'quality', 'glow',
       ]);
       const GLASS_KEYS = new Set(['glass', 'glassRadius', 'glassMode', 'perf']);
       const BOAT_KEYS = new Set(['boats', 'boatSpread', 'boatPace', 'boatScale']);
@@ -1706,6 +1735,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
             case pid('tz-mode'): return { tzMode: value };
             case pid('sky-tone'): return { skyTone: value };
             case pid('glass-mode'): return { glassMode: value };
+            case pid('quality'): return { quality: value };
             default: return null;
           }
         })();
@@ -1963,6 +1993,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     glassRadius: 'ossGlassRadius',
     tzMode: 'ossTzMode',
     tzOffset: 'ossTzOffset',
+    quality: 'ossQuality',
+    glow: 'ossGlow',
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats']);
@@ -2044,7 +2076,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.25';
+  const SKIN_BUILD = 'lab-1.5.26';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

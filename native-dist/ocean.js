@@ -19,7 +19,6 @@ import {
   positionLocal, positionWorld, cameraPosition
 } from './vendor/three.tsl.js';
 import { OrbitControls } from './vendor/addons/controls/OrbitControls.js';
-import { bloom } from './vendor/addons/tsl/display/BloomNode.js';
 import { skyFromElevation, manualElevationDeg, manualAzimuthDeg } from './sky.js';
 import { CONSTELLATION_LINES } from './stars-data.js';
 import { STAR_CATALOG } from './stars-catalog.js';
@@ -201,6 +200,9 @@ const uGlassLevels = uniformArray([0, 0, 0]);
 const uGlassActive = uniform(0);
 const uGlassEdge = uniform(0.0035);
 const uGlassSpread = uniform(2);
+// 1.5.26: the soft glow that replaced the mip-chain bloom
+const uGlowThreshold = uniform(0.62);
+const uGlowStrength = uniform(0.28);
 
 // ----------------------------------------------------------------------------
 // SECTION 2 · GERSTNER SWELL (identical to the standalone site)
@@ -269,12 +271,13 @@ const waveSurface = Fn(([xz, time, sea]) => {
 // ----------------------------------------------------------------------------
 
 const hash2 = Fn(([p]) => {
-  // Keep the sine input in a compact range. Large dot products lose enough
-  // float precision for the far field to band on some integrated GPUs.
+  // 1.5.26 perf: sin-based hashing was ~120 sin() per ocean pixel; a polynomial
+  // hash costs two fract/mul pairs and still gives an even gradient field. The
+  // fold keeps the argument small so far-field pixels do not band on iGPUs.
   const q = p.sub(floor(p.div(289)).mul(289));
-  const a = sin(q.dot(vec2(127.1, 311.7))).mul(43758.5453);
-  const b = sin(q.dot(vec2(269.5, 183.3))).mul(43758.5453);
-  return vec2(fract(a).mul(2).sub(1), fract(b).mul(2).sub(1));
+  const a = fract(q.dot(vec2(0.1031, 0.1030)).mul(43758.5453));
+  const b = fract(q.dot(vec2(0.2695, 0.1833)).mul(24634.6345));
+  return vec2(a.mul(2).sub(1), b.mul(2).sub(1));
 });
 
 const gradNoise = Fn(([p]) => {
@@ -293,16 +296,20 @@ const gradNoise = Fn(([p]) => {
 });
 
 const fbm = Fn(([p]) => {
+  // 1.5.26 perf: two octaves, not three. The third one moved no cloud boundary
+  // that survives the 0.58 opacity mix, and it was a third of the dome shader.
   const o1 = gradNoise(p);
   const o2 = gradNoise(p.mul(2.04).add(vec2(17.3, 9.1))).mul(0.5);
-  const o3 = gradNoise(p.mul(4.11).add(vec2(42.7, 28.6))).mul(0.25);
-  return o1.add(o2).add(o3);
+  return o1.add(o2);
 });
 
 const detailHeight = Fn(([xz, time]) => {
   const driftA = vec2(time.mul(0.55), time.mul(0.32));
   const driftB = vec2(time.mul(-0.4), time.mul(0.5));
-  return fbm(xz.mul(0.85).add(driftA)).add(fbm(xz.mul(2.1).add(driftB)).mul(0.45));
+  // 1.5.26 perf: two octaves instead of two full FBM fields. The ocean evaluates
+  // this three times for the finite-difference normal, so six gradient-noise
+  // samples per octave pair turned into a third of the frame on an iGPU.
+  return gradNoise(xz.mul(0.85).add(driftA)).add(gradNoise(xz.mul(2.1).add(driftB)).mul(0.45));
 });
 
 // ----------------------------------------------------------------------------
@@ -477,11 +484,11 @@ const oceanColor = Fn(() => {
     // sun specular: tight noise-modulated sparkle + broad gloss
     const H = normalize(uSunDir.add(V));
     const ndh = max(dot(N, H), 0);
-    const sparkleNoise = clamp(fbm(xz.mul(0.3).add(vec2(time.mul(-0.07), time.mul(0.05)))).mul(0.5).add(0.5), 0, 1);
+    const sparkleNoise = clamp(gradNoise(xz.mul(0.3).add(vec2(time.mul(-0.07), time.mul(0.05)))).mul(0.5).add(0.5), 0, 1);
     spec.assign(uSunColor.mul(pow(ndh, 500).mul(mix(0.4, 3.4, sparkleNoise)).add(pow(ndh, 48).mul(0.12))));
 
     // crest foam
-    const foamNoise = clamp(fbm(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
+    const foamNoise = clamp(gradNoise(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
     foam.assign(smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest)).mul(0.85));
   });
 
@@ -490,11 +497,14 @@ const oceanColor = Fn(() => {
   const sss = pow(max(dot(V, uSunDir), 0), 3).mul(max(crest, 0)).mul(0.18);
   col.addAssign(uShallowColor.mul(uSunColor).mul(sss));
 
-  // sky reflection (cloud FBM only where the reflection matters)
+  // sky reflection. 1.5.26 perf: no cloud noise here. The mask was only a hint
+  // that the reflection "matters", but a scaled FBM is evaluated for the whole
+  // water surface either way — a full third of the ocean pixel cost for clouds
+  // the wave normals smear out anyway. The dome still draws them.
   const R = reflect(V.negate(), N).toVar();
   R.y.assign(max(R.y, 0.04));
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(max(dot(N, V), 0)), 5)));
-  col.assign(mix(col, skyColor(R.normalize(), fresnel.greaterThan(0.25), float(0)), fresnel));
+  col.assign(mix(col, skyColor(R.normalize(), float(0), float(0)), fresnel));
 
   // moon sheen: a cool glitter path plus a broad glow, so a clear night sea
   // reads as water instead of a black void (uMoonVisible is 0 when the moon is
@@ -741,6 +751,13 @@ function applySunMessage(d) {
   if (Number.isFinite(dome)) skyDome = Math.max(0, Math.min(1, dome));
   if (Number.isFinite(Number(d.meteorRate))) meteorRate = Math.max(0.1, Math.min(6, Number(d.meteorRate)));
   if (Number.isFinite(Number(d.meteorBright))) meteorBright = Math.max(0.2, Math.min(3, Number(d.meteorBright)));
+  // 1.5.26 perf knobs. The frame is fill bound (halving the pixel count halves
+  // the cost), so the useful dials are the resolution budget and the glow cost.
+  if (Number.isFinite(Number(d.glow))) {
+    uGlowStrength.value = Math.max(0, Math.min(100, Number(d.glow))) / 100 * 0.5;
+    if (glowNodeRef) glowNodeRef.active = uGlowStrength.value > 0.01;
+  }
+  if (typeof d.quality === 'string') applyQuality(d.quality);
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
     const t = Number(d.t);
@@ -943,11 +960,122 @@ const glassWeight = Fn(() => {
   return clamp(weight.mul(uGlassActive), 0, 1);
 });
 
-function buildComposite(sceneColor, sceneBloom, glassNode) {
-  if (!glassNode) return sceneColor.add(sceneBloom);
+// ----------------------------------------------------------------------------
+// 1.5.26 · SOFT GLOW (replaces the mip-chain bloom)
+// The TSL bloom built a five-level mip chain and ran ~10 blur passes over the
+// whole frame; measured here it was 42 ms of a 126 ms frame — a third of the
+// budget for an effect whose output is low frequency. One thresholded 9-tap
+// blur at a quarter of the resolution reads the same at this scale: the halo
+// around the sun and the brightest stars survives, the soft wash behind it too.
+// ----------------------------------------------------------------------------
+
+const GLOW_DOWNSCALE = 4;
+const GLOW_SPREAD = 7; // taps to shift per blur pass, in quarter-res pixels
+const glowQuad = new THREE.QuadMesh();
+const glowDrawSize = new THREE.Vector2();
+let glowSavedState;
+
+class SoftGlowNode extends THREE.TempNode {
+  constructor(inputNode) {
+    super('vec4');
+    this.inputNode = inputNode;
+    this.invSize = uniform(new THREE.Vector2(1, 1));
+    this.direction = uniform(new THREE.Vector2(1, 0));
+    this.colorTexture = texture(null);
+    this.targetH = new THREE.RenderTarget(1, 1, { depthBuffer: false, type: THREE.HalfFloatType });
+    this.targetV = new THREE.RenderTarget(1, 1, { depthBuffer: false, type: THREE.HalfFloatType });
+    this.targetH.texture.name = 'OpenSea.glowH';
+    this.targetV.texture.name = 'OpenSea.glowV';
+    this.targetH.texture.generateMipmaps = false;
+    this.targetV.texture.generateMipmaps = false;
+    this._textureOutput = passTexture(this, this.targetV.texture);
+    this._materialH = null;
+    this._materialV = null;
+    this._width = 0;
+    this._height = 0;
+    this.active = false;
+    this.updateBeforeType = THREE.NodeUpdateType.FRAME;
+  }
+
+  getTextureNode() {
+    return this._textureOutput;
+  }
+
+  setSize(width, height) {
+    const w = Math.max(1, Math.round(width / GLOW_DOWNSCALE));
+    const h = Math.max(1, Math.round(height / GLOW_DOWNSCALE));
+    if (w === this._width && h === this._height) return;
+    this._width = w;
+    this._height = h;
+    this.targetH.setSize(w, h);
+    this.targetV.setSize(w, h);
+    this.invSize.value.set(1 / w, 1 / h);
+  }
+
+  // mirrored gaussian along this.direction; the first pass keeps only what is
+  // bright enough to glow, so the sea does not turn into a grey haze
+  _blurNode(sampleAt, brightPass) {
+    const step = this.invSize.mul(this.direction).mul(float(GLOW_SPREAD));
+    return Fn(() => {
+      const coord = uv();
+      const fetch = (at) => {
+        const rgba = sampleAt(at).rgb;
+        return brightPass ? max(rgba.sub(uGlowThreshold), vec3(0)) : rgba;
+      };
+      const sum = fetch(coord).mul(float(GLASS_WEIGHTS[0])).toVar();
+      for (let i = 1; i < GLASS_KERNEL; i++) {
+        const offset = step.mul(float(i));
+        sum.addAssign(fetch(coord.add(offset)).add(fetch(coord.sub(offset))).mul(float(GLASS_WEIGHTS[i])));
+      }
+      return vec4(sum, 1);
+    });
+  }
+
+  setup(builder) {
+    const context = builder.getSharedContext();
+    if (!this._materialH) {
+      this._materialH = new THREE.NodeMaterial();
+      this._materialH.name = 'OpenSea.glowH';
+      this._materialH.fragmentNode = this._blurNode((coord) => this.inputNode.sample(coord), true)().context(context);
+      this._materialH.needsUpdate = true;
+    }
+    if (!this._materialV) {
+      this._materialV = new THREE.NodeMaterial();
+      this._materialV.name = 'OpenSea.glowV';
+      this._materialV.fragmentNode = this._blurNode((coord) => this.colorTexture.sample(coord), false)().context(context);
+      this._materialV.needsUpdate = true;
+    }
+    return this._textureOutput;
+  }
+
+  updateBefore(frame) {
+    if (!this.active || !this._materialH || !this._materialV) return;
+    if (!this.inputNode || !this.inputNode.value) return;
+    const { renderer } = frame;
+    glowSavedState = THREE.RendererUtils.resetRendererState(renderer, glowSavedState);
+    renderer.getDrawingBufferSize(glowDrawSize);
+    this.setSize(glowDrawSize.width, glowDrawSize.height);
+
+    this.direction.value.set(1, 0);
+    glowQuad.material = this._materialH;
+    renderer.setRenderTarget(this.targetH);
+    glowQuad.render(renderer);
+
+    this.colorTexture.value = this.targetH.texture;
+    this.direction.value.set(0, 1);
+    glowQuad.material = this._materialV;
+    renderer.setRenderTarget(this.targetV);
+    glowQuad.render(renderer);
+
+    THREE.RendererUtils.restoreRendererState(renderer, glowSavedState);
+  }
+}
+
+function buildComposite(sceneColor, sceneGlow, glassNode) {
+  if (!glassNode) return sceneColor.add(sceneGlow);
   const blurred = glassNode.getTextureNode();
   const composite = Fn(() => {
-    const rgb = sceneColor.add(sceneBloom).rgb.toVar();
+    const rgb = sceneColor.add(sceneGlow).rgb.toVar();
     const weight = glassWeight();
     If(weight.greaterThan(0.001), () => {
       rgb.assign(mix(rgb, blurred.sample(uv()).rgb, weight));
@@ -963,6 +1091,8 @@ const glassRectState = [
   { x0: 0, y0: 0, x1: 0, y1: 0, level: 0 },
 ];
 let glassNode = null;
+// 1.5.26: the soft glow node, so the dial can switch its passes off entirely
+let glowNodeRef = null;
 let glassActive = false;
 let glassWarned = false;
 let glassScaleCapped = false;
@@ -1170,7 +1300,7 @@ let BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
 let FRAME_RATE_CAP = REDUCED_MOTION ? 20 : LOW_END_DEVICE ? 30 : 60;
 let FRAME_MS = 1000 / FRAME_RATE_CAP;
 let TARGET_FPS = REDUCED_MOTION ? 18 : LOW_END_DEVICE ? 28 : SKIN ? 40 : 55;
-const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.7 : 0.55;
+let MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.6 : 0.55;
 let adaptHold = 0;
 let renderScale = 1;
 // contract §3.4: the frosted glass caps the adaptive scale, it never raises it
@@ -1179,6 +1309,26 @@ let SCALE_CAP = 1;
 function applyResolutionScale(scale) {
   renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
   renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// 1.5.26: one dial for the whole frame budget. 'high' keeps the old caps,
+// 'balanced' is the desktop default, 'low' suits a laptop on battery.
+const QUALITY_PRESETS = {
+  high: { pixelRatio: 1.5, targetFps: 60, scaleCap: 1, minScale: 0.7 },
+  balanced: { pixelRatio: 1.2, targetFps: 45, scaleCap: 1, minScale: 0.6 },
+  low: { pixelRatio: 1, targetFps: 30, scaleCap: 0.85, minScale: 0.5 },
+};
+
+function applyQuality(level) {
+  const preset = QUALITY_PRESETS[level];
+  if (!preset || !renderer) return;
+  PIXEL_RATIO_CAP = REDUCED_MOTION ? Math.min(preset.pixelRatio, 0.9) : preset.pixelRatio;
+  BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
+  TARGET_FPS = REDUCED_MOTION ? 18 : preset.targetFps;
+  SCALE_CAP = preset.scaleCap;
+  MIN_SCALE = REDUCED_MOTION ? Math.min(preset.minScale, 0.5) : preset.minScale;
+  renderScale = Math.min(Math.max(renderScale, preset.minScale), SCALE_CAP);
+  applyResolutionScale(renderScale);
 }
 
 function animate(now) {
@@ -1289,7 +1439,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.25';
+const OCEAN_BUILD = 'lab-1.5.26';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1312,6 +1462,9 @@ async function boot() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
+    // 1.5.26: the resolution budget is a setting now; start from the preset the
+    // page asked for (the panel can move it afterwards)
+    applyQuality(SKIN ? QUALITY === 'low' ? 'low' : 'balanced' : 'high');
     document.body.appendChild(renderer.domElement);
 
     // --- scene & camera ----------------------------------------------------
@@ -1391,7 +1544,19 @@ async function boot() {
     const scenePass = pass(scene, camera);
     const sceneColor = scenePass.getTextureNode('output');
     const bloomStrength = SKIN ? (LOW_END_DEVICE ? 0.18 : 0.28) : 0.4;
-    const sceneBloom = bloom(sceneColor, bloomStrength, 0.3, 0.9);
+    // 1.5.26: the quarter-res glow replaces three's mip-chain bloom (see
+    // SoftGlowNode). uGlowStrength is the dial; the passes are skipped at 0.
+    uGlowStrength.value = bloomStrength;
+    let glowNode = null;
+    try {
+      glowNode = new SoftGlowNode(sceneColor);
+      glowNode.active = bloomStrength > 0.01;
+    } catch (err) {
+      glowNode = null;
+      console.warn('[OPEN SEA SKIN] soft glow disabled:', err);
+    }
+    glowNodeRef = glowNode;
+    const sceneGlow = glowNode ? glowNode.getTextureNode().sample(uv()).rgb.mul(uGlowStrength) : vec3(0);
     if (SKIN) {
       // contract §3.5: any failure here must keep the clear image on screen
       try {
@@ -1401,7 +1566,7 @@ async function boot() {
         warnGlass(err);
       }
     }
-    postProcessing.outputNode = buildComposite(sceneColor, sceneBloom, glassNode);
+    postProcessing.outputNode = buildComposite(sceneColor, sceneGlow, glassNode);
 
     // --- orbit controls -----------------------------------------------------
     controls = new OrbitControls(camera, renderer.domElement);
@@ -2352,7 +2517,11 @@ function updateStarDome(now, dt) {
     // pixel tall on a short window, and a sub-pixel quad rasterises as a dashed
     // line; the floor keeps the figures continuous at any window height.
     const fovDeg = boatCamera ? boatCamera.fov : 60;
-    const viewPx = typeof innerHeight === 'number' ? Math.max(240, innerHeight) : 800;
+    // The floor has to be measured in drawing-buffer pixels, not CSS pixels:
+    // with an adaptive render scale the buffer can be much shorter, and a floor
+    // computed from innerHeight then still rasterises as a dashed line.
+    const bufferPx = renderer && renderer.domElement ? renderer.domElement.height : 0;
+    const viewPx = bufferPx > 0 ? bufferPx : typeof innerHeight === 'number' ? Math.max(240, innerHeight) : 800;
     const pxWorld = (2 * STAR_RADIUS * Math.tan(fovDeg * DEG_TO_RAD * 0.5)) / viewPx;
     const half = Math.max(STAR_RADIUS * 0.0012, pxWorld * 0.9) * uLineWidth.value;
     for (let e = 0; e + 1 < layer.segmentCount; e += 2) {

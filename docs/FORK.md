@@ -86,3 +86,12 @@ node tests/fleet.test.mjs                # /fleet 计数口径 5 个用例
 - **星座连线变虚线**：腿是两片渐细四边形，半宽 `STAR_RADIUS * 0.0012 = 3.84` 世界单位；在小窗口里折算不到 1 像素，光栅化成断续的点。现在给一个像素下限 `pxWorld * 0.9`（`pxWorld = 2·STAR_RADIUS·tan(fov/2)/innerHeight`），大窗口下这条下限不生效，观感与 1.5.22 一致。
 - **星表**：`scripts/gen-stars-catalog.mjs` 从 d3-celestial 的 `stars.6.json` 抽 mag ≤ 5.5 的 2851 颗写进 `shared/stars-catalog.js`（79 KB）；星径 `uStarSize·10^(−falloff·mag)`、颜色按 B−V 插值、星芒只给 mag ≤ `uStarSpikes`。星表是静态产物，换源或调阈值后要重跑生成器（`--check` 校验），CC BY-SA 4.0 的署名写在 `THIRD_PARTY_NOTICES.md`。
 
+
+## GPU 开销：先把钱花在哪量清楚（2026-11-06，1.5.26）
+
+- **归因**：无头 Edge + CDP 采样 rAF（`tmp/perf-probe/`，`?ossdebug=1` 才挂 `__ossDebug`）。基线 126 ms/帧；绕过 post 只剩 86；半 pixelRatio 56；隐藏海洋 70；隐藏天穹 123（天穹本身不贵，是因为 post 还在跑）。结论是 **fill bound**：像素数是最大杠杆，其次是 post 链。把 bloom 换成空节点后 126 → 83，坐实 mip 链就是那 42 ms。
+- **泛光换实现**：`SoftGlowNode` 在 1/4 分辨率上做「阈值提取 + 两次可分离高斯」，权重用编译期 `GLASS_WEIGHTS`，`active=false` 时连 render target 都不碰。整条 post 链从 40 ms 掉到 ~2 ms。
+- **`sin` 是隐藏的成本**：`hash2` 每像素两次 `sin`，海洋一像素约 120 次。换成 `fract(dot(q,·)·43758.5453)` 的多项式哈希后 raw scene 86 → 71，视觉上只是噪声格子换了种分布。
+- **噪声预算**：海洋细节 2 个 FBM → 2 次梯度噪声；sparkle/泡沫单阶；云 3 阶 → 2 阶；海面反射干脆不算云（掩码是节点，云 fbm 对整片水面都算）。合计 126 → 70.4。
+- **像素下限要按缓冲高度算**：`renderer.domElement.height` 而不是 `innerHeight`，否则自适应 scale 下 0.9 像素下限实际只有 0.55 像素，连线碎成虚线。
+- 教训：这个渲染器的瓶颈是填充率与 transcendental 单元，不是顶点或 draw call（天体、星点、船的开关几乎不影响帧时间）。

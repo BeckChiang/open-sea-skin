@@ -283,7 +283,10 @@ test('the sky rebuild is skipped while it cannot be seen', () => {
 test('the adaptive scale steps rarely and keeps a sharp floor', () => {
   // The old loop pulsed the pixel ratio every 2 s and dropped to half
   // resolution; both read as stutter on the water.
-  assert.ok(source.includes('const MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.7 : 0.55;'), 'skin mode must keep a sharp floor')
+  // 1.5.26: the floor is a table now — one quality preset per level — but skin
+  // mode still starts above the half-resolution cliff.
+  assert.ok(source.includes('let MIN_SCALE = REDUCED_MOTION ? 0.5 : SKIN ? 0.6 : 0.55;'), 'skin mode must keep a sharp floor')
+  assert.ok(source.includes('MIN_SCALE = REDUCED_MOTION ? Math.min(preset.minScale, 0.5) : preset.minScale;'), 'the preset owns the floor')
   assert.ok(source.includes('adaptHold = 4;'), 'a scale change must hold for 8 s')
   assert.ok(source.includes('renderScale * 0.97'), 'the step must be gentle')
 })
