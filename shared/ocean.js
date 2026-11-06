@@ -912,8 +912,7 @@ if (SKIN) {
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
-    if (d && d.type === 'oss-bands') applyBandsMessage(d);
-    if (d && d.type === 'oss-fleet') {
+      if (d && d.type === 'oss-fleet') {
       const count = Number(d.count);
       // `off` is the panel switch: without it "0 subagents" and "boats turned off"
       // look identical, and the base hull would keep showing on a disabled skin.
@@ -957,6 +956,7 @@ if (SKIN) {
     starOpacity: starLayer ? starLayer.starsOpacity : 0,
     meteor: starLayer ? starLayer.meteor.active : false,
     boats: boatShown,
+    boatSpots: boatSpots.slice(0, 6),
     boatTarget,
     elapsed: uTime.value,
     manualTimeOfDay,
@@ -1327,29 +1327,11 @@ const BOAT_EXIT_RATE = 0.72;
 const BOAT_PROBE = 2.4;
 let boatTarget = BOAT_BASE;
 let boatShown = 0;
-// Normalised x ranges the page is not covering with a shell surface. Hulls are
-// steered into these: a boat behind the chat column is drawn and counted, yet
-// nobody can see it, which reads as "the count is wrong".
-let boatBands = [[0, 1]];
+// Where each drawn hull lands// Where each drawn hull lands on screen (normalised 0..1), refreshed every
+// frame. It is reported through __ossState so a hull that is counted but not
+// seen can be traced from the panel instead of guessed at.
+let boatSpots = [];
 
-// Keep only sane, wide-enough gaps; a page that reports nothing leaves the last
-// known layout in place rather than collapsing the fleet into the middle.
-function applyBandsMessage(data) {
-  const raw = data && data.bands;
-  if (!Array.isArray(raw)) return;
-  const bands = [];
-  for (const entry of raw) {
-    if (!Array.isArray(entry) || entry.length < 2) continue;
-    const a = Number(entry[0]);
-    const b = Number(entry[1]);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-    const x0 = Math.max(0, Math.min(1, Math.min(a, b)));
-    const x1 = Math.max(0, Math.min(1, Math.max(a, b)));
-    if (x1 - x0 < 0.04) continue;
-    bands.push([x0, x1]);
-  }
-  if (bands.length > 0) boatBands = bands.slice(0, 4);
-}
 // camera the fleet is anchored to; set when the boats are created
 let boatCamera = null;
 
@@ -1512,6 +1494,7 @@ function updateBoats(dt) {
   const seaLevel = Math.max(0, Math.min(1, (uSea.value - 0.25) / 1.5));
   const cruise = 0.65 + 0.95 * seaLevel;
   let placedCount = 0;
+  boatSpots = [];
 
   for (let index = 0; index < BOAT_MAX; index += 1) {
     const want = index < boatTarget ? 1 : 0;
@@ -1532,17 +1515,10 @@ function updateBoats(dt) {
     const ahead = lane.base + Math.cos(angle) * lane.radiusBack;
     // Sideways distance that puts the hull just past the frame edge at this depth.
     const offStage = boatApproachOffset(ahead);
-    // Half the width the camera can see at this depth.
-    const halfWidth = Math.max(1, offStage - BOAT_MARGIN);
-    // Steer into the gaps the page reports (left of the sidebar, right of the
-    // conversation, ...): the middle of the frame is covered by the chat column,
-    // so a hull cruising through x≈0 would be drawn but never seen.
-    const band = boatBands[index % boatBands.length];
-    const bandMid = (band[0] + band[1]) / 2;
-    const bandWidth = Math.max(0.05, band[1] - band[0]);
-    const laneCenter = (bandMid - 0.5) * 2 * halfWidth;
-    const laneAcross = laneCenter
-      + Math.sin(angle) * lane.radiusRight * Math.min(1, bandWidth * 2.4);
+    // The whole frame is fair water: a hull may cross behind the chat column,
+    // which is what a real sea behind the window would look like. No layout
+    // probing, no gaps to dodge.
+    const laneAcross = Math.sin(angle) * lane.radiusRight;
     // Every lane moves at its own pace, so three subagents added at once still
     // arrive one after another instead of as a fleet snapping into place.
     const laneEnter = BOAT_ENTER_RATE * (0.85 + (index % 4) * 0.1);
@@ -1676,6 +1652,13 @@ function updateBoats(dt) {
     // hugging the bottom edge.
     boatDummy.scale.setScalar(2.8);
     boatDummy.updateMatrix();
+    if (boatCamera) {
+      const spot = boatDummy.position.clone().project(boatCamera);
+      boatSpots.push([
+        Math.round((spot.x * 0.5 + 0.5) * 100) / 100,
+        Math.round((0.5 - spot.y * 0.5) * 100) / 100,
+      ]);
+    }
 
     boats.hull.setMatrixAt(active, boatDummy.matrix);
     boats.mast.setMatrixAt(active, boatDummy.matrix);

@@ -232,12 +232,15 @@ test('a session switch settles before it reshapes the fleet', () => {
   assert.ok(source.includes('lane.exitFrom = lane.exitSide'), 'the leaving edge must be remembered')
 })
 
-test('hulls are steered into the gaps the page leaves visible', () => {
-  // 2026-11-06: the panel said 3/3 and three hulls were drawn, but two sat behind
-  // the chat column, so the sea looked like it had one boat.
-  assert.ok(clientSource.includes('measureBands'), 'the page must measure its own gaps')
-  assert.ok(clientSource.includes("type: 'oss-bands'"), 'the gaps must be reported to the frame')
-  assert.ok(source.includes('function applyBandsMessage'), 'the frame must accept the reported gaps')
-  assert.ok(source.includes('boatBands[index % boatBands.length]'), 'lanes must be assigned to gaps')
-  assert.ok(source.includes('boatBands = bands.slice(0, 4)'), 'the reported layout must be kept')
+test('hulls roam the whole frame and report where they land', () => {
+  // 2026-11-06: steering hulls into the strips the page left uncovered put two of
+  // them off the visible edges. The sea spans the whole frame now, and each hull
+  // publishes its own screen position so "drawn but not seen" can be read, not
+  // guessed at.
+  assert.ok(!clientSource.includes('measureBands'), 'the page must not probe the layout for hulls')
+  assert.ok(!source.includes('applyBandsMessage'), 'no layout message may reach the lanes')
+  assert.ok(source.includes('const laneAcross = Math.sin(angle) * lane.radiusRight;'), 'lanes sweep the full frame')
+  assert.ok(source.includes('boatSpots.push(['), 'each hull must report its screen position')
+  assert.ok(source.includes('boatSpots: boatSpots.slice(0, 6),'), 'the report must reach the state')
+  assert.ok(clientSource.includes('.map((spot) =>'), 'the panel must print the positions')
 })
