@@ -2,6 +2,11 @@
 
 All notable changes to Open Sea Skin are documented here.
 
+## 1.5.10 — 2026-11-06
+
+### Changed
+- 船的帆与船体各提亮 1.75 / 1.5 倍、船体缩放 2.1 → 2.7：对话栏是 72% 不透明的玻璃膜，船落在它后面时对比度被吃掉大半，三艘看起来像一艘。
+
 ## 1.5.9 — 2026-11-06
 
 ### Added

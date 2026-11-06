@@ -1109,7 +1109,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.9';
+const OCEAN_BUILD = 'lab-1.5.10';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1461,8 +1461,8 @@ function createBoats(scene, cam) {
 
   // Boats follow the water's brightness but never drop to it: at midnight the
   // sail keeps a moonlight edge, which is what makes the silhouette readable.
-  const lit = uSkyLight.mul(0.8).add(0.05).add(uNightF.mul(0.3));
-  const hullLit = uSkyLight.mul(0.8).add(0.04).add(uNightF.mul(0.12));
+  const lit = uSkyLight.mul(0.8).add(0.05).add(uNightF.mul(0.3)).mul(1.75);
+  const hullLit = uSkyLight.mul(0.8).add(0.04).add(uNightF.mul(0.12)).mul(1.5);
   return {
     hull: make(hullGeometry, vec3(0.17, 0.2, 0.25).mul(hullLit)),
     mast: make(mastGeometry, vec3(0.26, 0.22, 0.19).mul(lit)),
@@ -1662,7 +1662,7 @@ function updateBoats(dt) {
     // 3.2 (not 2.2) because the lanes moved out to 36–52 units: the same angular
     // size as before, at a berth that reads as further out to sea instead of
     // hugging the bottom edge.
-    boatDummy.scale.setScalar(2.1);
+    boatDummy.scale.setScalar(2.7);
     boatDummy.updateMatrix();
     if (boatCamera) {
       const spot = boatDummy.position.clone().project(boatCamera);
