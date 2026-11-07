@@ -77,7 +77,7 @@ dsh plugin install C:\Users\<你>\DSH\plugins\open-sea-skin-lab
 
 ## 5. 测试
 
-`node:test` 单文件测试（6 个文件，104 条）：
+`node:test` 单文件测试（6 个文件，103 条）：
 
 ```powershell
 node tests/structure.test.mjs
@@ -90,7 +90,7 @@ node tests/sky-astro.test.mjs
 
 注意 `node --test tests/` 在本机会因 spawn 权限失败，逐文件直接跑即可（测试是进程内执行）。
 
-当前：**104 条全绿**（structure 48 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
+当前：**103 条全绿**（structure 52 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
 
 ---
 
