@@ -1,11 +1,11 @@
-# Open Sea Skin · Lab 分支说明（2.0.1）
+# Open Sea Skin · Lab 分支说明（2.0.2）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**重新构建版（fork）**，装在 DSH 桌面版的 `desktop` profile 里。首页与安装说明见 [`README.md`](README.md)，本文是该版本的技术说明。
 
 上游只提供「海面 + 夕阳 + 玻璃界面」；本分支在它的地基上重做了五块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**、**可逐项取舍的性能开关**、**可折叠且带解释的设置面板**。
 
 - 上游版本：1.2.7
-- 本分支版本：**2.0.1**（2.0.0 是冻结基线；本文档是该版本的完整说明）
+- 本分支版本：**2.0.2**（2.0.0 是冻结基线；本文档是该版本的完整说明）
 - 许可：MIT（见 `LICENSE`）；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`
 - 开发位置：`C:\Users\<你>\DSH\plugins\open-sea-skin-lab`，profile 用 `link:` 安装
 - 默认档：**画质「省电」（0.85× 像素比）+ 24 fps 上限**，夜间核显占用多数时候低于 20%
@@ -41,7 +41,7 @@
    ```
 3. 重启桌面端或按 F5 刷新窗口。
 
-**确认生效**：控制台第一行有 `[open-sea-skin] client lab-2.0.1` 与 `[open-sea-skin] ocean lab-2.0.1`。
+**确认生效**：控制台第一行有 `[open-sea-skin] client lab-2.0.2` 与 `[open-sea-skin] ocean lab-2.0.2`。
 
 ---
 

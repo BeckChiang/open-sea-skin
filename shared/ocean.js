@@ -841,7 +841,11 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.starFalloff))) uStarFalloff.value = Math.max(0.04, Math.min(0.5, Number(d.starFalloff)));
   if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(2.2, Number(d.starColor)));
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
-  if (d.starDaylight !== undefined) uStarDaylight.value = d.starDaylight ? 1 : 0;
+  // The panel has always sent `starsDaylight`; this side read `starDaylight`,
+  // so the switch only ever worked in the standalone demo.
+  if (d.starDaylight !== undefined || d.starsDaylight !== undefined) {
+    uStarDaylight.value = (d.starDaylight !== undefined ? d.starDaylight : d.starsDaylight) ? 1 : 0;
+  }
   if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(1.5, Number(d.lineTwinkle)));
   if (Number.isFinite(Number(d.lineSpeed))) uLineSpeed.value = Math.max(0.1, Math.min(3, Number(d.lineSpeed)));
   if (Number.isFinite(Number(d.overflow))) overflowTarget = Math.max(0, Math.min(1, Number(d.overflow)));
@@ -1439,6 +1443,11 @@ if (SKIN) {
     stars: starsSetting,
     clouds: cloudsSetting,
     renderScale,
+    // measured render rate and the cap it is held to: the panel prints these
+    // instead of timing its own requestAnimationFrame, which is the parent
+    // document's 60 Hz clock and says nothing about the frame's budget
+    fps: Math.round(fpsNow * 10) / 10,
+    fpsCap: FRAME_RATE_CAP,
     reducedMotion: REDUCED_MOTION,
     lowEndDevice: LOW_END_DEVICE,
     starOpacity: starLayer ? starLayer.starsOpacity : 0,
@@ -1649,7 +1658,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-2.0.1';
+const OCEAN_BUILD = 'lab-2.0.2';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -1873,6 +1882,15 @@ async function boot() {
 
     loopStarted = true;
     renderer.setAnimationLoop(animate);
+    // The panel's first oss-sun can land while init() is still awaiting the
+    // adapter; applyQuality() bails until a renderer exists, so the frame ran on
+    // the default 60 fps cap while the panel said 24. Ask for the settings again
+    // now that they can be applied.
+    try {
+      if (SKIN && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'oss-ready' }, SKIN_PARENT_ORIGIN || '*');
+      }
+    } catch { /* posting is best effort */ }
   } catch (err) {
     showInitError(err);
   }

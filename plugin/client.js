@@ -1126,22 +1126,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       return ['colLeft', 'colRight'].map(pick).filter(Boolean);
     };
 
-    // One click to see which boxes the strength dials actually talk about.
     // What the renderer is actually running at (the dial only asks): the panel
     // should answer "is the cheap tier in effect?" without opening devtools.
-    let fpsFrames = 0;
-    let fpsSince = 0;
-    let fpsSeen = 0;
-    const meterFps = (now) => {
-      if (!fpsSince) { fpsSince = now; fpsFrames = 0; return; }
-      fpsFrames += 1;
-      const span = now - fpsSince;
-      if (span >= 1000) {
-        fpsSeen = Math.round((fpsFrames * 1000) / span);
-        fpsSince = now;
-        fpsFrames = 0;
-      }
-    };
+    // The number comes from the ocean frame, never from a requestAnimationFrame
+    // meter running here — this document's clock stays at the display rate even
+    // when the scene is deliberately capped lower, which is how a 24 fps cap
+    // came to be reported as "55 fps".
 
     const perfText = () => {
       const ocean = readOceanState();
@@ -1151,7 +1141,11 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       parts.push(copy.perfTier.replace('{tier}', (copy.quality && copy.quality[state.quality]) || state.quality));
       parts.push(copy.perfCap.replace('{fps}', String(state.fps)));
       if (scale !== null) parts.push(copy.perfScale.replace('{scale}', scale.toFixed(2)).replace('{dpr}', ratio.toFixed(1)));
-      if (fpsSeen) parts.push(copy.perfFps.replace('{fps}', String(fpsSeen)));
+      // prefer the frame's own measurement: the panel's meter times this
+      // document's requestAnimationFrame, which stays at 60 even when the
+      // scene is deliberately capped lower
+      const measured = ocean && Number.isFinite(ocean.fps) && ocean.fps > 0 ? Math.round(ocean.fps) : 0;
+      if (measured) parts.push(copy.perfFps.replace('{fps}', String(measured)));
       return parts.join(' · ');
     };
 
@@ -1243,6 +1237,17 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     on(window, 'message', (event) => {
       const data = event && event.data;
+      const frameEl = document.getElementById(IDS.frame);
+      // The frame says when its GPU init finished. Everything posted before that
+      // was applied to a half-built renderer, so the settings are re-sent here.
+      if (data && data.type === 'oss-ready') {
+        if (frameEl instanceof HTMLIFrameElement && event.source && event.source !== frameEl.contentWindow) return;
+        postSun();
+        postGlass();
+        postBoats();
+        postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
+        return;
+      }
       if (!data || data.type !== 'oss-state' || !data.state || typeof data.state !== 'object') return;
       const el = document.getElementById(IDS.frame);
       if (el instanceof HTMLIFrameElement && event.source && event.source !== el.contentWindow) return;
@@ -1864,12 +1869,6 @@ ${switchRow(pid('perf'), 'perf')}
       refreshPerfOut();
       const perfTimer = window.setInterval(refreshPerfOut, 1500);
       surfaceCleanups.push(() => window.clearInterval(perfTimer));
-      const perfTick = (now) => {
-        meterFps(now);
-        window.requestAnimationFrame(perfTick);
-      };
-      window.requestAnimationFrame(perfTick);
-
       const segWave = el('wave-mode');
       const segSun = el('sun-mode');
       const segTz = el('tz-mode');
@@ -1976,6 +1975,10 @@ ${switchRow(pid('perf'), 'perf')}
         setSeg(segGlassMode, state.glassMode);
       setSeg(el('star-mode'), state.starMode);
       setSeg(el('glass-style'), state.glassStyle);
+      // quality/fps were only marked on click, so a freshly opened panel showed
+      // every performance button unlit even though one of them was in effect
+      setSeg(el('quality'), state.quality);
+      setSeg(el('fps'), String(state.fps));
       if (milkyOut) milkyOut.textContent = milkyText();
         for (const [key, entry] of Object.entries(columns)) {
           const entryState = state[key];
@@ -2559,7 +2562,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-2.0.1';
+  const SKIN_BUILD = 'lab-2.0.2';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

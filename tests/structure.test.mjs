@@ -595,8 +595,43 @@ test('the panel reports the tier it is actually running', () => {
   assert.ok(clientSource.includes("    quality: 'low',"), 'saver is the shipping default')
   assert.ok(clientSource.includes('  fps: 24,'), 'and so is the 24 fps cap')
   assert.ok(clientSource.includes('const perfText = () => {'), 'the readout exists')
-  assert.ok(clientSource.includes('const meterFps = (now) => {'), 'measured fps comes from a real frame counter')
+  assert.ok(!clientSource.includes('const meterFps = (now) => {'), 'no requestAnimationFrame meter in the panel: it times the display, not the scene')
+  assert.ok(!clientSource.includes('const perfTick = (now) => {'), 'and no rAF loop driving one')
+  assert.ok(clientSource.includes('Number.isFinite(ocean.fps)'), 'measured fps is read from the frame that draws it')
+  assert.ok(source.includes('fps: Math.round(fpsNow * 10) / 10,'), 'which reports what it actually rendered')
   assert.ok(clientSource.includes("copy.perfScale.replace('{scale}', scale.toFixed(2))"), 'and the render scale is shown, not the requested one')
+})
+
+test('the performance tiers show which one is in effect', () => {
+  // Marked on click only, so a panel opened later showed every button unlit
+  // while the saver tier and the 24 fps cap were both running.
+  assert.ok(clientSource.includes("setSeg(el('quality'), state.quality);"), 'the quality tier is marked on sync')
+  assert.ok(clientSource.includes("setSeg(el('fps'), String(state.fps));"), 'and so is the frame cap')
+  const sync = clientSource.indexOf('const syncUi = () => {')
+  const quality = clientSource.indexOf("setSeg(el('quality'), state.quality);")
+  const refresh = clientSource.indexOf('const refresh = () => {')
+  assert.ok(quality > sync && quality < refresh, 'inside syncUi, which every refresh runs')
+})
+
+test('the frame asks for the settings again once the GPU is up', () => {
+  // The first oss-sun can arrive while init() is still awaiting the adapter;
+  // applyQuality() bails until a renderer exists, so the frame used to keep the
+  // default 60 fps cap while the panel displayed 24.
+  assert.ok(source.includes("{ type: 'oss-ready' }"), 'the frame announces readiness')
+  const ready = source.indexOf("{ type: 'oss-ready' }")
+  const init = source.indexOf('await renderer.init();')
+  assert.ok(ready > init, 'after the adapter and device exist')
+  assert.ok(clientSource.includes("data.type === 'oss-ready'"), 'the panel listens for it')
+  const handler = clientSource.indexOf("data.type === 'oss-ready'")
+  const resend = clientSource.indexOf('postSun();', handler)
+  assert.ok(resend > handler, 'and re-sends the renderer-level settings')
+})
+
+test('the daylight star switch speaks the key the frame reads', () => {
+  // The panel has always sent starsDaylight; the frame read starDaylight, so
+  // the switch only ever worked in the standalone demo.
+  assert.ok(clientSource.includes('starsDaylight: state.starsDaylight,'), 'the panel sends starsDaylight')
+  assert.ok(source.includes('d.starsDaylight !== undefined'), 'and the frame accepts it')
 })
 
 

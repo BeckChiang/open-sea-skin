@@ -1,8 +1,8 @@
-# Open Sea Skin · Lab（2.0.1）
+# Open Sea Skin · Lab（2.0.2）
 
 **实时海洋皮肤** —— 给 DeepSeek Harness 桌面版 / Web 用的一层会呼吸的海面：浪跟着你的会话负载起伏，天光按真实星历走，星空是真的星表，船是你正在跑的子智能体。
 
-![version](https://img.shields.io/badge/version-2.0.1-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
+![version](https://img.shields.io/badge/version-2.0.2-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
 ---
 
@@ -10,12 +10,12 @@
 
 本项目是基于 **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)**（作者 **d-dev0101**，MIT 许可）**1.2.7** 版本**重新构建的 Lab 分支（fork）**，**不是上游官方版本**，也不由上游维护。
 
-它沿用了上游的渲染底座（three.js WebGPU + TSL 的海面、天空、云与毛玻璃思路），在底座之上重做了海浪驱动、天文日照、星空、船队与整块设置面板，演进到 **2.0.1**。原生代码、着色器、面板与测试都由本仓库维护，出现的问题请提到**本仓库**而不是上游。
+它沿用了上游的渲染底座（three.js WebGPU + TSL 的海面、天空、云与毛玻璃思路），在底座之上重做了海浪驱动、天文日照、星空、船队与整块设置面板，演进到 **2.0.2**。原生代码、着色器、面板与测试都由本仓库维护，出现的问题请提到**本仓库**而不是上游。
 
 - 上游项目：[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · 分叉起点：`v1.2.7`
 - 上游许可：MIT，全文见 [`LICENSE`](LICENSE)；必须保留的第三方署名见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - 为什么分叉、改了什么、怎么回退上游：[`docs/FORK.md`](docs/FORK.md)
-- 当前版本：**2.0.1**（tag `v2.0.1`；2.0.0 是冻结基线，tag `v2.0.0` 仍可安装）
+- 当前版本：**2.0.2**（tag `v2.0.2`；2.0.0 是冻结基线，tag `v2.0.0` 仍可安装）
 
 ---
 
@@ -57,7 +57,7 @@ dsh plugin add github:BeckChiang/open-sea-skin
 不想让本机走源码构建的话，用 Release 上的预构建包（免 `allowBuilds` 授权）：
 
 ```powershell
-dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.0.1/open-sea-skin-2.0.1.tgz
+dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.0.2/open-sea-skin-2.0.2.tgz
 ```
 
 ### 方式二：本地 link（改代码用）
@@ -79,8 +79,8 @@ dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.
 **确认生效**：控制台第一行会出现
 
 ```text
-[open-sea-skin] client lab-2.0.1
-[open-sea-skin] ocean lab-2.0.1
+[open-sea-skin] client lab-2.0.2
+[open-sea-skin] ocean lab-2.0.2
 ```
 
 ---
