@@ -180,7 +180,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       overflowGain: '超预算时白冠与喷雾的敏感度。',
       time: '按当地时间拖动，覆盖全天 24 小时。',
       tzOffset: '手动指定该地时区，只影响读数显示。',
-      glass: '三栏背景的透明度。',
+      glass: '面板与三栏底色的不透明度：0 = 完全透明（只剩边框），100 = 实底。',
       colStrength: '这一栏享受多少背景模糊。',
     },
       waveSource: '驱动来源',
@@ -228,7 +228,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       moonNames: ['新月', '娥眉月', '上弦月', '盈凸月', '满月', '亏凸月', '下弦月', '残月'],
       glassMode: '实现方式',
       perf: '高性能模式',
-      glassNote: '渲染器内模糊最省；CSS 模糊更兼容但更吃帧。三栏可分别开关与调强度。',
+      glassNote: '模糊与底色是两件事：模糊归上面的总开关，底色归这个滑杆。渲染器内模糊最省；CSS 模糊更兼容但更吃帧。三栏可分别开关与调强度。',
       search: '搜索设置项…',
       secSky: '天空与日照',
       secStars: '星空',
@@ -308,7 +308,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       close: 'Close',
       sea: 'Sea state',
       time: 'Daylight',
-      glass: 'Glass opacity',
+      glass: 'Glass opacity (0 = clear, 100 = solid)',
       enable: 'Enable Open Sea skin',
       autoCycle: 'Automatic day cycle',
       reset: 'Reset to defaults',
@@ -414,7 +414,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       moonNames: ['New moon', 'Waxing crescent', 'First quarter', 'Waxing gibbous', 'Full moon', 'Waning gibbous', 'Last quarter', 'Waning crescent'],
       glassMode: 'Implementation',
       perf: 'Performance mode',
-      glassNote: 'In-renderer blur is cheapest; CSS blur is more compatible but costs frames. Each column toggles separately.',
+      glassNote: 'Blur and fill are separate: the switch above owns the blur, this slider owns the fill. In-renderer blur is cheapest; CSS blur is more compatible but costs frames.',
       search: 'Search settings…',
       secSky: 'Sky & daylight',
       secStars: 'Stars',
@@ -540,7 +540,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
       enabled: source.enabled !== false,
       sea: clamp(source.sea, 0, 100, DEFAULTS.sea),
       time: clamp(source.time, 0, 1439, DEFAULTS.time),
-      glass: clamp(source.glass, 40, 90, DEFAULTS.glass),
+      glass: clamp(source.glass, 0, 100, DEFAULTS.glass),
       autoCycle: source.autoCycle !== false,
       waveMode: WAVE_MODES.includes(source.waveMode) ? source.waveMode : DEFAULTS.waveMode,
       floor: clamp(source.floor, 0, 60, DEFAULTS.floor),
@@ -661,6 +661,9 @@ ${column('body [data-rightbar-col], body .dshDesktopDetailsSurface', 'colRight')
 
   function glassCss(glass, state) {
     const light = glass / 100;
+    // The panel and its button were painted at a fixed .82/.78 alpha: the dial
+    // only moved the DSH tokens, so the shell stayed frosted at every setting.
+    const paneAlpha = Math.max(0, Math.min(1, light)).toFixed(3);
     const dark = Math.max(0.40, light - 0.12);
     return `
 /* Open Sea Skin: one translucent shell; nested fills must not compound.
@@ -783,7 +786,7 @@ ${blurCss(state)}`;
   position: fixed; z-index: 6000; width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 10px; border: 1px solid rgba(255,255,255,.22);
-  background: rgba(12,16,22,.78); backdrop-filter: blur(${panePx}px) saturate(130%);
+  background: rgba(12,16,22,${paneAlpha}); backdrop-filter: blur(${panePx}px) saturate(130%);
   color: #c5dce3; cursor: pointer; padding: 0;
   transition: color .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .1s ease;
 }
@@ -795,7 +798,7 @@ ${blurCss(state)}`;
   position:fixed; z-index:6001; width:300px; padding:16px;
   max-height:min(78vh, 720px); overflow-y:auto; overscroll-behavior:contain;
   border-radius:16px; border:1px solid rgba(255,255,255,.14);
-  background:rgba(10,14,20,.82); backdrop-filter:blur(${panePx}px) saturate(140%);
+  background:rgba(10,14,20,${paneAlpha}); backdrop-filter:blur(${panePx}px) saturate(140%);
   box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.1);
   color:#eef4f6; font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
   display:none; scrollbar-width:thin;
@@ -867,7 +870,7 @@ ${blurCss(state)}`;
    theme it was white text on a pale card. Same layout, inverted inks. Every rule
    here comes after the dark ones on purpose — equal specificity, later wins. */
 body:not([data-ds-dark-theme]) #${IDS.panel} {
-  background:rgba(247,249,252,.90);
+  background:rgba(247,249,252,${paneAlpha});
   border-color:rgba(12,20,28,.12);
   box-shadow:0 18px 50px rgba(10,20,30,.16), inset 0 1px 0 rgba(255,255,255,.75);
   color:#0d1620;
@@ -1692,7 +1695,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${switchRow(pid('frost'), 'frost')}
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
           ${segRow(pid('glass-style'), 'glassStyle', [['gaussian', 'glassStyles.gaussian'], ['box', 'glassStyles.box'], ['double', 'glassStyles.double'], ['radial', 'glassStyles.radial'], ['frost', 'glassStyles.frost'], ['tile', 'glassStyles.tile']])}
-          ${rangeRow(pid('glass-range'), 'glass', 40, 90, 1)}
+          ${rangeRow(pid('glass-range'), 'glass', 0, 100, 1)}
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
           ${colRow(pid('col-left'), 'cols.left')}
           ${colRow(pid('col-center'), 'cols.center')}
@@ -2375,7 +2378,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.42';
+  const SKIN_BUILD = 'lab-1.5.43';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

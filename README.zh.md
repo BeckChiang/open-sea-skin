@@ -1,11 +1,11 @@
-# Open Sea Skin · Lab 分支说明（1.5.42）
+# Open Sea Skin · Lab 分支说明（1.5.43）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 
 上游只提供「海面 + 夕阳 + 玻璃界面」；本分支在它的地基上加了四块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**、**可逐项取舍的性能开关**，并把所有能调的参数搬进了设置面板。
 
 - 上游版本：1.2.7（`plugin/client.js` 与 `native-dist/*` 原样起步）
-- 本分支版本：**1.5.42**
+- 本分支版本：**1.5.43**
 - 许可：MIT（见 `LICENSE`）；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`
 - 只在这台机器的 `C:\Users\recko\DSH\plugins\open-sea-skin-lab` 开发，profile 用 `link:` 安装
 
@@ -27,7 +27,7 @@
 ## 2. 安装
 
 ```powershell
-Expand-Archive .\open-sea-skin-lab-1.5.42.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+Expand-Archive .\open-sea-skin-lab-1.5.43.zip -DestinationPath C:\Users\<你>\DSH\plugins\
 ```
 
 然后在 DSH 里安装：
@@ -40,7 +40,7 @@ dsh plugin install C:\Users\<你>\DSH\plugins\open-sea-skin-lab
 
 重启桌面端（或 `F5`），背景应当出现海面。
 
-**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.42` 与 `[open-sea-skin] ocean lab-1.5.42`。
+**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.43` 与 `[open-sea-skin] ocean lab-1.5.43`。
 
 ---
 
