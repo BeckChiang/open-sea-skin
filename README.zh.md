@@ -85,15 +85,6 @@
 
 点「**预览左右栏范围（2.6 秒）**」会在屏幕上框出两栏真实区域，青色虚线框 = 量到的范围。
 
-
-### 3.4 对话区底色
-
-中间对话列本身是外壳而不是卡片，皮肤为了让海面透出来把它的填色清成了透明；
-毛玻璃组的「**对话区底色**」滑杆（0–100，默认 40）把底色按 alpha 铺回去：
-
-- `0` = 保持完全透明，海面直接透过来；
-- `40` 左右接近两侧栏的观感；
-- 只作用于 `[data-slot="main.conversation"]`，消息气泡、代码块、输入框仍用各自的 token。
 强度 0 或关掉该栏开关 = 那一栏不模糊。总开关关掉后两栏都不糊，但设置面板仍保留 9 px 底模糊，否则面板压在流动海面上读不清。
 
 ### 3.5 默认快照
@@ -121,7 +112,7 @@ node scripts/build-runtime.mjs            # shared/ + plugin/ → native-dist/
 node tests/structure.test.mjs             # 每个文件单独跑，node --test 会 EPERM
 ```
 
-`node:test` 单文件测试（6 个文件，114 条）：
+`node:test` 单文件测试（6 个文件，113 条）：
 
 | 文件 | 覆盖 |
 |---|---|
@@ -132,7 +123,7 @@ node tests/structure.test.mjs             # 每个文件单独跑，node --test 
 | `tests/solar.test.mjs` | 14 条：日月星历、暮光次序、档位解析 |
 | `tests/sky-astro.test.mjs` | 12 条：坐标变换与恒星时 |
 
-当前：**113 条全绿**（structure 63 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
+当前：**113 条全绿**（structure 62 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
 
 ---
 
