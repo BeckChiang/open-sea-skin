@@ -5,13 +5,13 @@
   "description": "实时海洋皮肤 · Realtime ocean theme for DeepSeek Harness Desktop and Web",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BeckChiang/open-sea-skin-lab.git"
+    "url": "git+https://github.com/BeckChiang/open-sea-skin.git"
   },
-  "homepage": "https://github.com/BeckChiang/open-sea-skin-lab",
+  "homepage": "https://github.com/BeckChiang/open-sea-skin",
   "publishConfig": {
     "access": "public"
   },
-  "bugs": "https://github.com/BeckChiang/open-sea-skin-lab/issues",
+  "bugs": "https://github.com/BeckChiang/open-sea-skin/issues",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",
@@ -34,6 +34,9 @@
     "native-dist/ocean.js",
     "native-dist/solar.js",
     "native-dist/sky.js",
+    "native-dist/sky-astro.js",
+    "native-dist/stars-data.js",
+    "native-dist/stars-catalog.js",
     "native-dist/skin.html",
     "native-dist/styles.css",
     "native-dist/vendor/**/*",
@@ -42,9 +45,7 @@
     "README.md",
     "README.zh.md",
     "README.en.md",
-    "THIRD_PARTY_NOTICES.md",
-    "native-dist/sky-astro.js",
-    "native-dist/stars-data.js"
+    "THIRD_PARTY_NOTICES.md"
   ],
   "dsh": {
     "bundle": {
@@ -57,22 +58,14 @@
   },
   "scripts": {
     "build": "node scripts/build-runtime.mjs",
-    "build:site": "node scripts/build-pages.mjs",
+    "gen:stars": "node scripts/gen-stars-catalog.mjs",
     "check:generated": "node scripts/build-runtime.mjs --check",
     "prepublishOnly": "npm run build && npm run check:generated",
     "test": "node tests/structure.test.mjs && node tests/fleet.test.mjs && node tests/stars.test.mjs && node tests/sky.test.mjs && node tests/solar.test.mjs && node tests/sky-astro.test.mjs",
-    "check": "npm run build:site && npm run check:generated && npm test",
-    "package:extension": "bash scripts/package-extension.sh",
-    "test:browser": "node scripts/browser-acceptance.mjs",
-    "test:desktop": "node scripts/desktop-acceptance.mjs && node scripts/official-desktop-acceptance.mjs",
-    "test:website": "node scripts/website-acceptance.mjs && node scripts/website-loading-acceptance.mjs",
-    "capture": "node scripts/capture-gallery.mjs"
+    "check": "npm run check:generated && npm test"
   },
   "engines": {
     "node": ">=20"
-  },
-  "devDependencies": {
-    "playwright": "^1.55.0"
   },
   "license": "MIT",
   "author": "BeckChiang"
