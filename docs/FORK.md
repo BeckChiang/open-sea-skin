@@ -40,12 +40,12 @@ node --check shared/ocean.js            # 语法检查（ES module 按 --input-t
 ```sh
 # 装本 fork（同一包名 open-sea-skin，profile 里的 cordis.patch.yml insert id 不变）
 plugin_manager remove_bundle  open-sea-skin
-plugin_manager install_bundle link:C:/Users/recko/DSH/plugins/open-sea-skin-lab
+plugin_manager install_bundle link:C:/Users/<你>/DSH/plugins/open-sea-skin-lab
 ```
 
 回退：`remove_bundle` 本 fork，再 `install_bundle open-sea-skin@1.2.7`（npm 源）。
 
-当前状态（2026-11-06）：已按上面两步装进 profile `desktop`，`node_modules/open-sea-skin` 是指向本目录的符号链接，插件版本显示 **1.5.2**（`plugin_manager list_bundles` 可见 `source: link:C:\Users\recko\DSH\plugins\open-sea-skin-lab`）。改完源码后宿主的静态路由（`/open-sea-skin/*`）即时反映新文件，但**浏览器侧的 client.js 需要刷新页面/重启桌面端**才会重新加载；改了 `plugin/index.js`（宿主半）则必须按右上角 dsh-unlag 的刷新按钮或完全退出桌面端重开。
+当前状态（2026-11-07，2.0.0）：已按上面两步装进 profile `desktop`，`node_modules/open-sea-skin` 是指向本目录的符号链接，插件版本显示 **2.0.0**（`plugin_manager list_bundles` 可见 `source: link:C:\Users\<你>\DSH\plugins\open-sea-skin-lab`）。改完源码后宿主的静态路由（`/open-sea-skin/*`）即时反映新文件，但**浏览器侧的 client.js 需要刷新页面/重启桌面端**才会重新加载；改了 `plugin/index.js`（宿主半）则必须按右上角 dsh-unlag 的刷新按钮或完全退出桌面端重开。
 
 改完一律先跑：
 

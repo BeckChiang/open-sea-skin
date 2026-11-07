@@ -1,321 +1,146 @@
-<div align="center">
-  <img src="extension/icons/icon128.png" width="80" height="80" alt="Open Sea 海浪标志" />
-  <h1>Open Sea · DeepSeek Harness 海洋皮肤</h1>
-  <p><strong>让你的工作空间，拥有自己的海平线。</strong><br>动态海洋主题 · 夕阳光影 · 透明玻璃界面</p>
-  <p><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
-  <p>
-    <a href="https://github.com/d-dev0101/open-sea-skin/releases"><img src="https://img.shields.io/github/v/release/d-dev0101/open-sea-skin?color=138b8b&amp;label=GitHub%20release" alt="GitHub 最新版本" /></a>
-    <a href="https://www.npmjs.com/package/open-sea-skin"><img src="https://img.shields.io/npm/v/open-sea-skin?color=138b8b&amp;label=npm" alt="npm 已发布版本" /></a>
-    <a href="https://github.com/d-dev0101/open-sea-skin/actions/workflows/ci.yml"><img src="https://github.com/d-dev0101/open-sea-skin/actions/workflows/ci.yml/badge.svg" alt="构建与回归测试" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-138b8b" alt="MIT 开源许可" /></a>
-  </p>
-  <h2>👀 安装前，请务必先去官网看效果</h2>
-  <p>调一调海浪，找一束夕阳，选一层玻璃。<br><strong>亲手体验之后，再选择适合你的安装方式。</strong></p>
-  <p><a href="https://d-dev0101.github.io/open-sea-skin/"><strong>🌊 官网交互体验</strong></a> · <a href="#install">📦 安装指南</a> · <a href="https://github.com/d-dev0101/open-sea-skin/releases">🚀 下载版本</a> · <a href="https://github.com/d-dev0101/open-sea-skin/issues">💬 问题反馈</a></p>
-</div>
+# Open Sea Skin · Lab（2.0.0）
 
-## 🌊 先看海动起来
+**实时海洋皮肤** —— 给 DeepSeek Harness 桌面版 / Web 用的一层会呼吸的海面：浪跟着你的会话负载起伏，天光按真实星历走，星空是真的星表，船是你正在跑的子智能体。
 
-![Open Sea 在 DeepSeek Harness 中的深色海洋动态实录，玻璃不透明度 40%](docs/screenshots/harness-dark-overview-40.gif)
+![version](https://img.shields.io/badge/version-2.0.0-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
-🎬 原有 Harness 实录 · 40% 玻璃不透明度 · [浅色、海浪与夕阳动图](#gallery) · [亲手调节官网效果](https://d-dev0101.github.io/open-sea-skin/)
+---
 
-## 🛠️ 当前维护状态
+## 项目声明
 
-**GitHub 修复版：v1.2.7 · npm 可安装版：v1.2.6。** v1.2.7 已修复浅色面板、侧栏叠色和新版聊天卡片透明度；npm 发布等待维护者登录，下面的复制包名暂时保留可用的 1.2.6。需要修复版可按[本地包安装步骤](docs/install.zh.md#下载本地包备用)安装，勿把 GitHub 下载链接直接填进安装器。
+本项目是基于 **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)**（作者 **d-dev0101**，MIT 许可）**1.2.7** 版本**重新构建的 Lab 分支（fork）**，**不是上游官方版本**，也不由上游维护。
 
-🔎 已核对官方 Harness **0.2.1-rc.5**。验证覆盖官方 Mac 包内运行时与真实 Web 页面、安装/卸载和浅深色；**Windows 原生客户端尚未实测**。[查看兼容性记录与已知问题 →](docs/compatibility.md)
+它沿用了上游的渲染底座（three.js WebGPU + TSL 的海面、天空、云与毛玻璃思路），在底座之上重做了海浪驱动、天文日照、星空、船队与整块设置面板，演进到 **2.0.0**。原生代码、着色器、面板与测试都由本仓库维护，出现的问题请提到**本仓库**而不是上游。
 
-## 🚀 官方客户端，三步开始
+- 上游项目：[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · 分叉起点：`v1.2.7`
+- 上游许可：MIT，全文见 [`LICENSE`](LICENSE)；必须保留的第三方署名见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+- 为什么分叉、改了什么、怎么回退上游：[`docs/FORK.md`](docs/FORK.md)
+- 当前版本：**2.0.0**（冻结基线，tag `v2.0.0`）
 
-🖥️ **用官方客户端？直接安装 Harness 插件即可。** Windows / Mac 操作相同，不用终端，也不用先装浏览器扩展。
+---
 
-1. 🧩 点击侧栏 **「插件 → 添加插件」**。
-2. 📋 复制下方包名，粘贴后点击 **「安装」**。
-3. ✅ 安装完成后 **「立即启用」**；出现重启提示时按提示操作。
+## 相对上游 1.2.7 新增了什么
 
-```text
-open-sea-skin@1.2.6
-```
+上游给的是一张会动的海面壁纸。本分支要它回答一个问题：**这片海能不能反映我正在做的事？** 一共五块。
 
-🇨🇳 大陆用户可选中国大陆镜像源；找不到版本时切换官方 npm 源。
+| # | 能力 | 具体做了什么 |
+|---|---|---|
+| 1 | **负载驱动的波浪** | 浪高跟「当前会话 token 吞吐」或「本会话累计消费」走，带 EMA 平滑与波峰下限；超限时白冠与喷雾按 `dt·1.3` 渐显，不会突然叠加 |
+| 2 | **真实天文的天色** | 本地 NOAA 星历每秒重算太阳高度/方位，日出日落、月相照度、三条暮光线（金星带 / 地影 / 朝晚不对称）都有；单曲线 `skyLight` 让天色全天连续，不会在某个时刻跳变 |
+| 3 | **真实星空** | 2851 颗真实恒星（HYG 子集，含星等与 B−V）：按星等定尺寸、按色温上色、亮星带四芒、88 星座 150 条折线按星座整体呼吸；银河按银心高度决定可见度，带内星点密度加权；流星每帧推进 |
+| 4 | **跟着会话走的船队** | 每个**运行中的子智能体**一艘船，切会话立即重排；船速来自浪（不是秒表），离场侧在离场那一刻冻结 |
+| 5 | **能取舍的性能与面板** | 画质档位（高/平衡/省电）+ 帧率上限（24/30/45/60）+ 1/4 分辨率 9-tap 泛光；十一组可折叠面板 + 搜索 + 每项一句解释 + 每项持久化 + 默认快照。无头实测 **126 ms → 70 ms 一帧** |
 
-🌐 用的是 Harness Web？[跳到 Web 插件安装](#dsh-plugin)。遇到问题？[查看中文排错指南](docs/install.zh.md)。
+几个数字上的差别（同一台核显机器）：
 
-> 💡 **只选一种安装方式。** Harness 插件和浏览器扩展是两条不同路径，不要在同一个 Harness 中重复安装。
+- 星空：上游无星表 → 本分支 2851 颗真实恒星、88 星座、150 条折线
+- 面板：上游 4 组 → 本分支 **11 组**、可搜索、可存默认快照
+- 画质：上游固定渲染比例 → 本分支三档画质 × 四档帧率上限，且按帧耗时自适应缩放
+- 玻璃：只作用于**左右侧栏**，中间会话区不参与（不做估算式覆盖、不画分割线、不压暗界面）
 
-<details>
-<summary>🛍️ 已经装了社区插件市场？</summary>
+> 完整逐项说明与 113 条测试覆盖见 [`README.zh.md`](README.zh.md)。
 
-搜索 **Open Sea / open-sea-skin**，核对项目为 **d-dev0101/open-sea-skin**，再检查版本并安装。
+---
 
-市场尚未同步时，改用官方客户端的「添加插件」。**不需要为了安装 Open Sea 先安装第三方市场。**
+## 安装
 
-</details>
+本分支**不走 npm**，是本地 link 安装（改动即时生效，方便自己改渲染）。
 
-**Open Sea 是为 DeepSeek Harness（DSH）制作的开源海洋皮肤与界面美化插件。**
+1. 把仓库放到 DSH 插件目录：
 
-🌊 让真实流动的海浪成为背景。<br>
-🌅 从白天调到夕阳，选择你喜欢的光线。<br>
-🫧 自由调节玻璃不透明度，让海洋与工作界面自然融合。
-
-> 本项目为社区作品，**不是 DeepSeek 官方产品**。适用对象是 **DeepSeek Harness**，不是 DeepSeek 网页聊天站点；也与 OpenSea NFT 交易平台无关。
-
-<p align="center"><a href="#features">特色功能</a> · <a href="#gallery">实拍动图</a> · <a href="#install">选择安装方式</a> · <a href="#faq">常见问题</a> · <a href="#development">开发文档</a></p>
-
-<a id="features"></a>
-
-## ✨ 不只是换一张壁纸
-
-| 特色 | 你能体验到什么 |
-| --- | --- |
-| 🌊 实时海洋 | 实时渲染海浪与反射，不是循环播放的壁纸视频。 |
-| 🌅 阳光与夕阳 | 自己选择光照，或开启 12 分钟自动昼夜循环。 |
-| 🫧 透明玻璃界面 | 玻璃不透明度可在 **40%–90%** 间调整，适配 Harness 深色与浅色布局。 |
-| 🎛️ 快捷调节 | 左下角打开皮肤设置，即时调整波浪、日光和透明度。 |
-| 🏠 保留你的主页 | 不接管浏览器新标签页，不改掉原来安装的主页插件。 |
-| 🔒 本地资源 | 海洋脚本、three.js 与字体随包提供，无皮肤遥测或运行时 CDN 请求。 |
-| ⌨️ 顺手的交互 | 中英文界面、键盘操作、Esc 关闭，以及减少动态效果支持。 |
-
-<a id="gallery"></a>
-
-## 🎬 DeepSeek Harness 真实效果
-
-以下动图来自原生 Harness 集成，统一为 **40% 玻璃不透明度**。全景基准：波浪大小 **56**、日光 **下午（55）**。想自己调？先打开[官网实时预览](https://d-dev0101.github.io/open-sea-skin/)。
-
-### 🌙 深色模式 · 在海面上专注对话
-
-![DeepSeek Harness 深色海洋主题，玻璃不透明度 40%](docs/screenshots/harness-dark-overview-40.gif)
-
-### ☀️ 浅色模式 · 给工作空间一点阳光
-
-![DeepSeek Harness 浅色海洋主题，玻璃不透明度 40%](docs/screenshots/harness-light-overview-40.gif)
-
-### 🌊 调整海浪 · 从平静到涌浪
-
-日光固定为下午，波浪大小变化后回到基准值 56。
-
-![在 DeepSeek Harness 皮肤设置中调整海浪大小](docs/screenshots/harness-wave-control-40.gif)
-
-### 🌅 调整光照 · 从正午走向夕阳
-
-波浪固定为 56，日光从正午平滑变化到黄昏。
-
-![将 DeepSeek Harness 动态海洋背景从白天调整到夕阳](docs/screenshots/harness-daylight-sunset-40.gif)
-
-<a id="install"></a>
-
-## 📦 安装指南 · 只选一种方式
-
-| 编号 | 你在用什么？ | 从这里开始 |
-| --- | --- | --- |
-| **1 🖥️ 推荐** | **官方客户端 · Windows / Mac** | [客户端内安装，无需终端](#official-desktop) |
-| **2 🌐 插件** | 浏览器里运行的 Harness Web | [在运行 Harness 的电脑上安装](#dsh-plugin) |
-| **3 🧩 扩展** | 本机 Harness Web，想用浏览器扩展换肤 | [安装 Chrome / Edge 扩展](#browser-extension) |
-| **4 🔧 进阶** | 不支持插件的已构建前端 | [静态前端安装](#static-installer) |
-| **5 🛠️ 开发者** | 自己编译 Harness 源码 | [原生源码接入](#source-integration) |
-
-<a id="official-desktop"></a>
-
-### 1. 🖥️ 官方客户端（Windows / Mac）——优先推荐
-
-**Windows 和 Mac 使用相同的界面步骤，不需要安装 Node.js，也不需要打开终端。**
-
-1. 打开 DeepSeek Harness，点击左侧 **「插件」**，再点 **「添加插件」**。
-2. 复制下面这一行，粘贴到插件名称输入框：
-
-   ```text
-   open-sea-skin@1.2.6
+   ```powershell
+   git clone https://github.com/BeckChiang/open-sea-skin-lab.git "$env:USERPROFILE\DSH\plugins\open-sea-skin-lab"
    ```
 
-3. 中国大陆用户可选择 **「中国大陆镜像源」**；下载失败时可切换 **「官方 npm 源」**。
-4. 点击 **「安装」**，检查安装信息，完成后点击 **「立即启用」**；如果客户端提示重启，按提示操作。
-5. 点击左下角 **「皮肤设置」**，建议先试 **40% 玻璃不透明度**。
+2. 在 DSH profile 的 `package.json`（`%USERPROFILE%\.dsh\profiles\desktop\package.json`）里加 `link:` 依赖：
 
-> 💡 入口是侧栏的「插件」，不是「设置 → 内置插件」。安装时填写包名，不要填写 GitHub 仓库或远程压缩包链接。
+   ```json
+   "open-sea-skin": "link:C:/Users/<你>/DSH/plugins/open-sea-skin-lab"
+   ```
 
-#### 🌐 三种安装源，怎么选？
+3. 重启桌面端（改了宿主半 `plugin/index.js` 必须完全退出重开；只改客户端按 F5）。
 
-**插件名称一栏填 `open-sea-skin@1.2.6`；源地址在「安装源」里选择或填写，两者不要填反。** Windows 和 Mac 步骤相同。
+**确认生效**：控制台第一行会出现
 
-| 安装源选项 | 完整地址 / 填写内容 | 适用情况 |
-| --- | --- | --- |
-| **🌍 npm 官方源** | `https://registry.npmjs.org` | 首选官方发布源，新版本从这里发布。 |
-| **🇨🇳 中国大陆镜像源** | `https://registry.npmmirror.com` | 大陆网络可尝试；镜像同步可能晚于官方源。 |
-| **🏢 自定义地址** | 填你使用的 **npm registry** 完整地址；也可填 `https://registry.npmjs.org` 使用官方源 | 适合企业/内网代理。它不是额外的固定公共镜像，需要能访问或代理 `open-sea-skin`。 |
-
-📦 **公开源目前可安装 1.2.6；1.2.7 的 npm 发布尚未完成。** GitHub 修复包请按[本地安装步骤](docs/install.zh.md#下载本地包备用)使用。选择镜像不会加速另行粘贴的 GitHub URL。
-
-🛟 遇到 404 / 找不到版本，先换官方源；自定义源出现 401 / 403，请按该源要求登录。[更详细的源选择与排错 →](docs/install.zh.md#三种安装源如何填写)
-
-#### 🔄 更新、暂停与卸载
-
-- **更新旧版：** 在「插件」页卸载旧版 Open Sea，再按上述步骤安装。已核对的官方安装器暂不支持第三方插件原地升级。
-- **暂时关闭：** 在皮肤面板关闭海洋，或在「插件」页停用 Open Sea。
-- **完整卸载：** 在「插件」页找到 Open Sea，选择卸载。无需运行 Web 卸载命令。
-
-> 🛟 不要删除整个 Harness 配置目录、会话目录或锁文件。安装报错时先看[中文恢复与排错指南](docs/install.zh.md)。
-
-📖 [Windows / Mac 中文详细指南与常见报错](docs/install.zh.md) · [下载官方客户端](https://github.com/deepseek-ai/deepseek-harness/releases)
-
-<a id="dsh-plugin"></a>
-
-### 2. 🌐 Harness Web ——一条命令安装
-
-在启动 `dsh web` 的那台电脑上运行。Windows PowerShell 与 macOS 终端使用同一条命令：
-
-```sh
-dsh plugin --profile web add open-sea-skin@1.2.6
+```text
+[open-sea-skin] client lab-2.0.0
+[open-sea-skin] ocean lab-2.0.0
 ```
 
-安装完成后，重启正在运行的 `dsh web`，刷新浏览器页面。
-这个入口只安装到 Web 配置，**不会给官方客户端安装插件**。
+---
 
-📖 [Web 安装与排错](docs/dsh-plugin.md)
+## 设置面板
 
-<a id="browser-extension"></a>
+右上角圆形按钮打开，顶部搜索框按关键字过滤并自动展开命中的分组；每次打开都从全部折叠开始。
 
-### 3. 🧩 Chrome / Edge 浏览器扩展
+| 分组 | 里面有什么 |
+|---|---|
+| 皮肤与界面 | 总开关 |
+| 波浪 | 驱动方式（吞吐/金额/手动）、浪高、波峰下限、湍流、满额浪高、平滑、溢出增益 |
+| 天空与日照 | 驱动模式（真实时钟/手动）、24 小时滑杆与「现在」、经纬度与定位、时区三档、月亮、日出日落与暮光读数 |
+| 星空 | 星空距离与穹顶比例、星点大小、亮度、色温饱和与偏置、星等截止与衰减、光晕、底噪星场、闪烁、银河、夜色三档、白天也显示星空 |
+| 星座 | 连线亮度、粗细、地面淡出高度、闪烁强度与速度、星芒阈值 |
+| 流星 | 开关、频率、亮度 |
+| 云 | 云量、漂移速度、不透明度 |
+| 船与舰队 | 开关、散布、节奏、大小 |
+| 毛玻璃 | 总开关、不透明度、半径、六种形状、左右栏强度、栏位预览、性能模式 |
+| 高级 | 画质档位、帧率上限、运行读数、泛光、把当前设置设为默认、恢复默认 |
 
-适用于在浏览器中打开的本机 Harness，Windows / Mac 均可使用。
+### 性能档位
 
-1. [下载扩展 ZIP](https://github.com/d-dev0101/open-sea-skin/releases/download/v1.2.7/open-sea-skin-extension-v1.2.7.zip)，先解压。
-2. 打开 `chrome://extensions` 或 `edge://extensions`，开启 **「开发者模式」**。
-3. 点击 **「加载已解压的扩展程序」**，选择包含 `manifest.json` 的目录。
-4. 回到 `127.0.0.1` 或 `localhost` 上的 Harness 页面，刷新一次。
+| 档位 | 像素比 | 目标帧率 | 说明 |
+|---|---|---|---|
+| 高 | 1.5× | 60 | 清晰优先，核显吃紧 |
+| 平衡 | 1.0× | 45 | 折中 |
+| 省电（默认） | 0.85× | 30 | 核显友好 |
 
-🏠 保留你原来的主页和新标签页插件。浏览器扩展不会安装到官方桌面客户端里。
+帧率上限与画质档位相互独立，实际取两者中更省的那个；渲染比例还会按真实帧耗时自适应缩放。高级组里的**运行读数**显示的是渲染器真实状态，例如：
 
-<a id="static-installer"></a>
-
-### 4. 🔧 静态前端安装（进阶备用）
-
-<details>
-<summary>仅当你的已构建 Harness 前端不支持插件时，展开操作</summary>
-
-此方式会修改前端文件。先停止 Harness，[查看脚本](install.sh)，再在 **macOS / Linux 的 Bash** 中执行：
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/d-dev0101/open-sea-skin/main/install.sh | bash
+```text
+运行中：画质 省电 · 上限 24 fps · 渲染比例 0.58×（屏幕 1.0×） · 实测 30 fps
 ```
 
-随后重新启动 `dsh web`。Harness 前端升级后，使用 `bash -s -- --update` 重新应用皮肤。
-**不是 Windows PowerShell 命令，也不适用于修改官方桌面客户端安装目录。**
+---
 
-📖 [指定路径、备份与恢复](native-dist/README.md)
+## 构建与测试
 
-</details>
-
-<a id="source-integration"></a>
-
-### 5. 🛠️ Harness 源码接入（开发者）
-
-<details>
-<summary>仅当你自己开发、编译 Harness 时，展开说明</summary>
-
-可将海洋控制接入 Harness 的设置与插槽，需要自行构建前后端。
-验证基线是 `0.1.2-alpha.3`，不是适用于所有新版的一键安装方案。
-
-📖 [原生源码接入指南](harness-plugin/README.md)
-
-</details>
-
-<a id="faq"></a>
-
-## 💡 安装前，你可能想知道
-
-<details>
-<summary><strong>会替换浏览器新标签页，或者修改 DeepSeek 网页版吗？</strong></summary>
-
-不会。扩展只作用于经过验证的本地 DeepSeek Harness 页面，不接管浏览器主页，也不会为 `chat.deepseek.com` 换肤。
-
-</details>
-
-<details>
-<summary><strong>如何关闭或卸载？</strong></summary>
-
-**官方客户端：** 在左侧「插件」中停用或卸载 Open Sea。
-
-**Harness Web：** 临时关闭可用快捷面板；卸载使用：
-
-```sh
-dsh plugin --profile web remove open-sea-skin
+```powershell
+node scripts/build-runtime.mjs     # shared/ + plugin/ → native-dist/
+node tests/structure.test.mjs      # 单文件跑（node --test 整目录在本机会 EPERM）
 ```
 
-随后重启 Harness。浏览器扩展可在扩展管理页移除。静态安装用户先停止 Harness，再运行：
+六个 `node:test` 文件、**113 条断言**：结构 62 / 船队 5 / 星表 6 / 天色 14 / 星历 14 / 坐标 12。
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/d-dev0101/open-sea-skin/main/install.sh | bash -s -- --uninstall
+星表是静态派生文件，不联网：`node scripts/gen-stars-catalog.mjs` 从 `d3-celestial` 的 HYG 重新生成，再跑 `build-runtime.mjs`。
+
+---
+
+## 已知限制
+
+- **星表静态**：2851 颗来自 HYG 子集（经 `d3-celestial`，CC BY-SA 4.0），更新需重跑生成器。
+- **穹顶是立体投影**：`θ' = 2·atan(tan(θ/2)/fold)`，目的是把更多天装进同样画幅且星座不变形，不是鱼眼。
+- **无头浏览器验不到真机观感**：无头 Edge 拿不到 WebGPU（回退软件 WebGL2），帧耗时只能看相对份额；面板与毛玻璃要在真机 F5 看。
+- **9 颗共享星**（Alpheratz、Elnath、Car/Pup/Vel、Ophiuchus/Serpens）会同时出现在两个星座里，不影响闪烁。
+
+---
+
+## 目录
+
+```text
+open-sea-skin-lab/
+├── plugin/       # DSH 插件入口：index.js（资源服务）、client.js（面板与消息）
+├── shared/       # 真正跑的逻辑：ocean.js、sky.js、solar.js、stars-*.js
+├── native-dist/  # 构建产物（iframe 页面加载这份）
+├── scripts/      # build-runtime.mjs、gen-stars-catalog.mjs
+├── tests/        # 6 个 node:test 文件
+├── docs/         # FORK.md（分叉决策与踩坑）、CONTRACT.md（消息契约）
+└── README.md / README.zh.md / README.en.md / CHANGELOG.md
 ```
 
-之后重新启动 Harness。静态卸载器删除自己的加载标记与资源，不删除你的会话。页面无法加载时，请参阅[恢复指南](native-dist/README.md)。
+---
 
-</details>
+## 许可与致谢
 
-<details>
-<summary><strong>是否保证兼容所有最新版 Harness / Desktop？</strong></summary>
-
-已核对最新发布通道的 Harness **0.2.1-rc.5**，并用官方 macOS 包内运行时完成隔离安装、真实 Web 页面加载、皮肤调节和卸载重启。页面回归覆盖 macOS / Windows 的浅深色与 40% / 90% 玻璃组合。**这不等于 Windows 原生客户端端到端测试，也不是所有未来版本的兼容承诺。**
-
-📋 [版本、测试方法、历史验证基线与未解决问题](docs/compatibility.md)。
-
-如果升级后遇到问题，请[提供 Harness 版本、安装方式，以及去除敏感信息的截图或日志](https://github.com/d-dev0101/open-sea-skin/issues)。
-
-</details>
-
-<details>
-<summary><strong>会占用很多性能吗？聊天数据安全吗？</strong></summary>
-
-渲染器支持自适应分辨率、隐藏标签页暂停和减少动态效果。动态 3D 海洋仍会使用 GPU，建议先在官网用自己的设备体验。
-
-皮肤不收集或上传聊天数据；扩展权限仅用于存储设置和访问本地 Harness。这描述的是 Open Sea，不代表宿主应用自身的数据处理行为。[隐私与权限说明 →](docs/privacy.md)
-
-</details>
-
-## 🔒 权限与隐私
-
-Open Sea 没有聊天数据上传或分析功能。安装版的海洋渲染脚本、three.js 与字体随包提供。
-浏览器扩展读取页面标记以识别 Harness，并修改界面样式；视觉偏好使用 Chrome / Edge 的同步存储，开启浏览器同步时可能跨设备同步。
-仓库里的旧版 `site/` 演示会从 jsDelivr 加载依赖，不属于安装包或当前官网。详见[中文隐私说明](docs/privacy.md)。
-
-<a id="development"></a>
-
-## 🛠️ 开发与开源生态
-
-基于 **WebGPU、three.js 与 TSL**，包含五组 Gerstner 波、海面反射、泡沫与天空光照。共享源码位于 `shared/`，生成的插件、扩展和静态加载器保持同步；`site/` 保留最初版展示。
-
-使用 Node.js 20+：
-
-```sh
-npm ci
-npm run build
-npm run check
-npx playwright install chromium
-npm run test:browser
-npm run test:desktop
-npm run test:website
-```
-
-| 快捷文档 | 内容 |
-| --- | --- |
-| [技术架构](docs/architecture.md) | 渲染器、共享控制器与安装适配 |
-| [原生源码集成](harness-plugin/README.md) | Harness 设置与 slots 接入、兼容基线 |
-| [发布指南](docs/releasing.md) | 打包与发布流程 |
-| [更新日志](CHANGELOG.md) | 版本变化与修复记录 |
-| [Issues / Pull requests](https://github.com/d-dev0101/open-sea-skin/issues) | 报错、建议与参与贡献 |
-| [DSH 插件目录](https://github.com/topics/dsh-plugin) | 探索社区插件生态 |
-
-## 🤝 反馈与许可
-
-💬 **遇到问题？欢迎用中文提问。** [提交 Issue](https://github.com/d-dev0101/open-sea-skin/issues/new) 时，附上以下信息，方便定位：
-
-- 🖥️ 系统：Windows / macOS，以及 Harness 版本。
-- 📦 安装：皮肤版本、安装方式（客户端插件 / Web 插件 / 浏览器扩展等）。
-- 🔎 现象：操作步骤、报错原文，以及去除敏感信息的截图。
-
-🔐 请勿公开密码、Token 或私人对话。<br>
-💡 有改进建议也欢迎交流；想参与开发，可提交 [Pull request](https://github.com/d-dev0101/open-sea-skin/pulls)。
-
-项目代码使用 [MIT 开源许可](LICENSE)，第三方代码与字体遵循各自许可，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
-
-<p align="center"><a href="https://d-dev0101.github.io/open-sea-skin/"><strong>🌊 找到你的那片海，先去官网试试看</strong></a></p>
+- 本仓库：**MIT**（`LICENSE`），版权行 `Copyright (c) 2026 Open Sea Skin contributors`。
+- 上游：**d-dev0101/open-sea-skin**，MIT，作者 **d-dev0101** —— 本分支的一切始于它。
+- 第三方：three.js 0.178.0（MIT）、HYG 星表经 d3-celestial（CC BY-SA 4.0）、Geist 字体（OFL）。逐项声明与本地许可副本见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 与 `native-dist/vendor/licenses/`。
