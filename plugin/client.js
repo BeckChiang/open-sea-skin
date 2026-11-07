@@ -33,7 +33,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   const DEFAULTS = Object.freeze({
     enabled: true,
     sea: 45,
-    time: 55,
+    time: 720,
     glass: 72,
     autoCycle: true,
     waveMode: 'throughput',
@@ -156,7 +156,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveSrcThroughput: '吞吐',
       waveSrcAmount: '金额',
       sunSource: '时间来源',
-      manualTime: '手动日照',
+      manualTime: '手动时刻（24 小时）',
+  timeNow: '现在',
       lat: '纬度',
       lon: '经度',
       locate: '使用我的位置',
@@ -172,7 +173,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     sunOut: '太阳：—',
     sunReadout: '太阳：真实高度 {el}°，方位 {az}°，画面里画在 {view}°',
     sunReadoutNight: '太阳：现在在地平线下（方位 {az}°），夜里没有日盘',
-    sunReadoutManual: '太阳：手动模式下由滑杆决定，不对应真实时刻',
+    sunReadoutManual: '太阳：按手动时刻计算（滑杆=当地时间，全天 24 小时）',
       sunTimes: '今日 日出 {rise} · 日落 {set}',
       sunTimesNone: '今日无日出日落（极昼或极夜）',
       moonInfo: '月亮：{name}，亮面 {p}%，高度 {h}°',
@@ -242,6 +243,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       tzMode: '时钟',
       tzOffset: '时区偏移',
       clockOut: '本机 {local} · 该地 {place}',
+    clockManual: '手动时刻 {at} · 太阳与月亮按该时刻计算',
       twilightOut: '暮光 民用 {civil} · 航海 {nautical} · 天文 {astro}',
       twilightNone: '—',
       skyTones: { real: '真实', blue: '深蓝', warm: '暖夜' },
@@ -298,7 +300,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       waveSrcThroughput: 'throughput',
       waveSrcAmount: 'spend',
       sunSource: 'Time source',
-      manualTime: 'Manual daylight',
+      manualTime: 'Manual clock (24 h)',
+  timeNow: 'Now',
       lat: 'Latitude',
       lon: 'Longitude',
       locate: 'Use my location',
@@ -314,7 +317,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     sunOut: 'Sun: \u2014',
     sunReadout: 'Sun: {el}\u00b0 up at bearing {az}\u00b0, drawn at {view}\u00b0 in the frame',
     sunReadoutNight: 'Sun: below the horizon now (bearing {az}\u00b0), no disc at night',
-    sunReadoutManual: 'Sun: manual mode \u2014 the slider sets it, not the clock',
+    sunReadoutManual: 'Sun: solved for the manual clock (slider = local time, full 24 h)',
       sunTimes: 'today {rise} sunrise \u00b7 {set} sunset',
       sunTimesNone: 'no sunrise or sunset today (polar day or night)',
       moonInfo: 'Moon: {name}, {p}% lit, {h}\u00b0 up',
@@ -384,6 +387,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       tzMode: 'Clock',
       tzOffset: 'UTC offset',
       clockOut: 'Here {local} · there {place}',
+    clockManual: 'Manual {at} · sun and moon solved for that instant',
       twilightOut: 'Twilight civil {civil} · nautical {nautical} · astro {astro}',
       twilightNone: '—',
       skyTones: { real: 'Real', blue: 'Deep blue', warm: 'Warm night' },
@@ -449,7 +453,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
     return {
       enabled: source.enabled !== false,
       sea: clamp(source.sea, 0, 100, DEFAULTS.sea),
-      time: clamp(source.time, 0, 100, DEFAULTS.time),
+      time: clamp(source.time, 0, 1439, DEFAULTS.time),
       glass: clamp(source.glass, 40, 90, DEFAULTS.glass),
       autoCycle: source.autoCycle !== false,
       waveMode: WAVE_MODES.includes(source.waveMode) ? source.waveMode : DEFAULTS.waveMode,
@@ -533,12 +537,17 @@ const FPS_LEVELS = [24, 30, 45, 60];
     return requested.toLowerCase().startsWith('zh') ? COPY.zh : COPY.en;
   }
 
-  function timeLabel(copy, value) {
-    const t = value / 100;
-    if (t < 0.12) return copy.times[0];
-    if (t < 0.30) return copy.times[1];
-    if (t < 0.62) return copy.times[2];
-    return copy.times[3];
+  // 1.5.33: the daylight slider is minutes after local midnight.
+  function clockLabel(minutes) {
+    const total = Math.max(0, Math.min(1439, Math.round(Number(minutes) || 0)));
+    const hh = String(Math.floor(total / 60)).padStart(2, '0');
+    const mm = String(total % 60).padStart(2, '0');
+    return hh + ':' + mm;
+  }
+
+  function nowMinutes() {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
   }
 
   function alpha(value) {
@@ -1122,12 +1131,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const refreshSunReadout = () => {
       const clockEl = document.getElementById(pid('clock-out'));
       if (clockEl) {
-        const place = clockNow(placeOffset());
-        const local = clockNow(deviceOffset());
-        const zone = `UTC${placeOffset() >= 0 ? '+' : '−'}${Math.abs(placeOffset())}`;
-        clockEl.textContent = copy.clockOut
-          .replace('{local}', local)
-          .replace('{place}', `${place} ${zone}`);
+        // In manual mode the sky is solved for a chosen instant, so say which one
+        // instead of printing a clock the picture no longer follows.
+        if (state.sunMode === 'manual') {
+          clockEl.textContent = copy.clockManual.replace('{at}', clockLabel(state.time));
+        } else {
+          const place = clockNow(placeOffset());
+          const local = clockNow(deviceOffset());
+          const zone = `UTC${placeOffset() >= 0 ? '+' : '−'}${Math.abs(placeOffset())}`;
+          clockEl.textContent = copy.clockOut
+            .replace('{local}', local)
+            .replace('{place}', `${place} ${zone}`);
+        }
       }
       const twilightEl = document.getElementById(pid('twilight-out'));
       const el = document.getElementById(pid('sun-out'));
@@ -1296,9 +1311,15 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         fleetAt = now;
         void pollFleet();
       }
-      refreshSunReadout();
-      refreshMoonReadout();
-      if (milkyOut) milkyOut.textContent = milkyText();
+      // The readouts and the wave/bridge lines live in the panel's scope. With the
+      // panel closed they are not defined at all, so touching them would throw on
+      // every tick and the surface would never follow the session. The engine runs
+      // whether or not a panel is mounted, so the panel bits are optional.
+      try {
+        refreshSunReadout();
+        refreshMoonReadout();
+        if (milkyOut) milkyOut.textContent = milkyText();
+      } catch { /* no panel mounted */ }
 
       if (state.waveMode === 'manual') {
         rate = 0;
@@ -1352,7 +1373,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const alphaSea = 1 - Math.exp(-elapsed / Math.max(0.4, state.smooth / 2));
       seaValue += (target - seaValue) * alphaSea;
       postToOcean(seaValue);
-      refreshWaveReadout();
+      try {
+        refreshWaveReadout();
+      } catch { /* no panel mounted */ }
     };
 
     const startWaveEngine = () => {
@@ -1442,7 +1465,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         // The frame boots with one boat on the water; the poll below reposts the
         // real count on the first tick after load.
-        startWaveEngine();
+        // started here as well: with the panel closed the surface used to freeze
         startFleetEngine();
         if (glassTimer) window.clearInterval(glassTimer);
         glassTimer = window.setInterval(postGlass, 1500);
@@ -1498,7 +1521,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ${group('secSky', `
           ${segRow(pid('sun-mode'), 'sunSource', [['real', 'sunModes.real'], ['manual', 'sunModes.manual']])}
           <p class="oss-sub" id="${pid('clock-out')}"></p>
-          ${rangeRow(pid('time-range'), 'manualTime', 0, 100, 1)}
+          <div class="oss-row"><div class="oss-head"><label for="${pid('time-range')}" data-copy="manualTime"></label><output class="oss-value" id="${pid('time-range-out')}"></output></div><input type="range" id="${pid('time-range')}" min="0" max="1439" step="1" /><button type="button" class="oss-mini oss-now" id="${pid('time-now')}" data-copy="timeNow"></button></div>
           <div class="oss-inline"><label for="${pid('lat')}" data-copy="lat"></label><input class="oss-mini" id="${pid('lat')}" type="number" step="0.01" min="-90" max="90" /></div>
           <div class="oss-inline"><label for="${pid('lon')}" data-copy="lon"></label><input class="oss-mini" id="${pid('lon')}" type="number" step="0.01" min="-180" max="180" /></div>
           <div class="oss-row"><button type="button" class="oss-mini oss-locate" id="${pid('locate')}" data-copy="locate"></button><span class="oss-sub oss-locate-out" id="${pid('locate-out')}"></span></div>
@@ -1668,7 +1691,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           case 'tps': return `${Math.round(value)} tok/s`;
           case 'yuan': return `¥${Math.round(value)}`;
           case 'sec': return `${Number(value).toFixed(1).replace(/\.0$/, '')}s`;
-          case 'clock': return state.sunMode === 'real' ? copy.realTime : timeLabel(copy, value);
+          case 'clock': return state.sunMode === 'real' ? copy.realTime : clockLabel(value);
           case 'tz': return `UTC${value >= 0 ? '+' : '−'}${Math.abs(value)}`;
         case 'mag': return `${value.toFixed(1)}${copy.magSuffix}`;
         case 'offset': return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)}`;
@@ -1840,6 +1863,14 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         );
       };
       if (locateBtn) on(locateBtn, 'click', runLocate);
+    const nowBtn = panel.querySelector(`#${pid('time-now')}`);
+    if (nowBtn) on(nowBtn, 'click', () => {
+      // back to the live clock: the slider value is only meaningful in manual mode
+      state = normalize({ ...state, sunMode: 'real', time: nowMinutes() });
+      save();
+      syncUi();
+      postSun();
+    });
 
       on(panel, 'click', (event) => {
         const option = event.target instanceof Element ? event.target.closest('.oss-seg button') : null;
@@ -1850,7 +1881,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         const patch = (() => {
           switch (group.id) {
             case pid('wave-mode'): return { waveMode: value };
-            case pid('sun-mode'): return { sunMode: value };
+            case pid('sun-mode'):
+          // walking into manual lights up *now*, not 12:00, or the first drag jumps
+          return value === 'manual' ? { sunMode: value, time: nowMinutes() } : { sunMode: value };
             case pid('tz-mode'): return { tzMode: value };
             case pid('sky-tone'): return { skyTone: value };
             case pid('glass-mode'): return { glassMode: value };
@@ -2047,6 +2080,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       }
       seaValue = state.sea;
       applyEnabled();
+      // the sea follows the session even when no panel is mounted
+      startWaveEngine();
       if (typeof options.listen === 'function') {
         const dispose = options.listen((patch) => {
           state = normalize({ ...state, ...patch });
@@ -2215,7 +2250,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.32';
+  const SKIN_BUILD = 'lab-1.5.33';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

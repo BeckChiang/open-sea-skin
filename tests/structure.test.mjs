@@ -412,3 +412,21 @@ test('the moon wears the phase it reports', () => {
   assert.ok(source.includes('const lit = smoothstep(-0.22, 0.22, mx.sub(uMoonPhaseCos));'), 'the terminator subtracts the phase cosine')
   assert.ok(!source.includes('mx.add(uMoonPhaseCos)'), 'the mirrored terminator is gone')
 })
+
+test('manual daylight is a clock, not a brightness ramp', () => {
+  // A 0..1 ramp made the sun crawl up a synthetic arc and left the moon parked.
+  // Manual mode now feeds a real instant into the same solver as the live clock.
+  assert.ok(source.includes('function skyInstant(nowMs) {'), 'one instant helper for both modes')
+  assert.ok(source.includes('const when = skyInstant(now);'), 'the sky is solved for that instant')
+  assert.ok(source.includes('syncMoon(when.getTime());'), 'the moon travels with the clock')
+  assert.ok(source.includes('manualMinutes = ((t % 1440) + 1440) % 1440;'), 'the host sends minutes after midnight')
+  assert.ok(!source.includes("if (Number.isFinite(t) && t >= 0 && t <= 100 && sunMode === 'manual') {"), 'the old ramp is gone')
+  assert.ok(clientSource.includes('max="1439"'), 'the slider spans the whole day')
+  assert.ok(clientSource.includes('function clockLabel(minutes) {'), 'the value reads as HH:MM')
+})
+
+test('the sea follows the session with no panel mounted', () => {
+  // The tick used to live inside the panel, so closing it froze the waves.
+  assert.ok(clientSource.includes('// the sea follows the session even when no panel is mounted'), 'started from the controller')
+  assert.ok(clientSource.includes('} catch { /* no panel mounted */ }'), 'panel readouts are optional')
+})

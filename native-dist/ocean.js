@@ -40,6 +40,18 @@ const SKIN_SEA = SKIN_QUERY.has('sea') ? Number(SKIN_QUERY.get('sea')) : null;
 const SKIN_TIME = SKIN_QUERY.has('t') ? Number(SKIN_QUERY.get('t')) : null;
 const SKIN_PARENT_ORIGIN = SKIN_QUERY.get('parentOrigin');
 let manualTimeOfDay = SKIN_QUERY.get('auto') === '0';
+// 1.5.33: manual light is a *clock*, not a brightness ramp. Minutes after local
+// midnight pick a real instant, and the sun, the moon and the star field are all
+// solved for that instant — which is the only way the arc looks like a real day
+// and the moon actually travels across the sky.
+let manualMinutes = null;
+
+function skyInstant(nowMs) {
+  if (manualMinutes === null) return new Date(nowMs);
+  const midnight = new Date(nowMs);
+  midnight.setHours(0, 0, 0, 0);
+  return new Date(midnight.getTime() + manualMinutes * 60000);
+}
 let currentDaylight = SKIN_TIME !== null ? SKIN_TIME : 55;
 
 const REDUCED_MOTION = typeof matchMedia === 'function'
@@ -745,12 +757,14 @@ function refreshSunTimes(now) {
 }
 
 function refreshSky(now) {
-  refreshSunTimes(now);
-  if (sunMode === 'real') {
-    const sun = sunPosition(new Date(now), sunLat, sunLon);
+  const when = skyInstant(now);
+  refreshSunTimes(when.getTime());
+  {
+    // real and manual share one solver: manual only changes which instant is fed in
+    const sun = sunPosition(when, sunLat, sunLon);
     // ten minutes ahead decides whether the band is warming up or cooling down,
     // which is what picks the morning rose over the evening ember
-    sunRising = sunPosition(new Date(now + 600000), sunLat, sunLon).elevationDeg > sun.elevationDeg;
+    sunRising = sunPosition(new Date(when.getTime() + 600000), sunLat, sunLon).elevationDeg > sun.elevationDeg;
     // palette from the true elevation, disc aimed into the visible band
     applyElevation(
       sun.elevationDeg,
@@ -759,7 +773,7 @@ function refreshSky(now) {
       viewAzimuth(sun.azimuthDeg),
     );
   }
-  syncMoon(now);
+  syncMoon(when.getTime());
   syncStars();
 }
 
@@ -828,10 +842,17 @@ function applySunMessage(d) {
   if (typeof d.quality === 'string') applyQuality(d.quality);
   // 1.5.27: frame rate is a budget dial of its own, on top of the resolution one
   if (Number.isFinite(Number(d.fps))) applyFpsCap(Number(d.fps));
+  const t = Number(d.t);
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
-    const t = Number(d.t);
-    if (Number.isFinite(t) && t >= 0 && t <= 100) applyTimeOfDay(t / 100);
+    if (Number.isFinite(t)) {
+      const before = manualMinutes;
+      manualMinutes = ((t % 1440) + 1440) % 1440;
+      // the dome holds a 20 s refresh and a cached list: a scrub has to rebuild
+      if (before !== manualMinutes && starLayer) starLayer.lastSky = -1e9;
+    }
+  } else {
+    manualMinutes = null;
   }
   refreshSky(Date.now());
 }
@@ -1344,9 +1365,7 @@ if (SKIN) {
       }
       // In `real` mode the sky is driven by solar.js; a host that keeps
       // posting t (sea updates arrive at 4 Hz) must not overwrite it.
-      if (Number.isFinite(t) && t >= 0 && t <= 100 && sunMode === 'manual') {
-        applyTimeOfDay(t / 100);
-      }
+      // daylight is carried by oss-sun now; a sea tick must never move the sun
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
@@ -1410,6 +1429,7 @@ if (SKIN) {
     boatError,
     elapsed: uTime.value,
     manualTimeOfDay,
+    manualMinutes,
   });
 }
 
@@ -1599,7 +1619,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.32';
+const OCEAN_BUILD = 'lab-1.5.33';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2665,7 +2685,8 @@ function applyStarDials() {
   starLayer.lastSky = -1e9;
 }
 
-function updateStarDome(now, dt) {
+function updateStarDome(nowRaw, dt) {
+  const now = skyInstant(nowRaw).getTime();
   if (!starLayer) return;
   const layer = starLayer;
   const grade = starLevelOf(starsSetting);
