@@ -765,13 +765,21 @@ body[data-ds-dark-theme] :is([data-shortcut-modal="settings"], [role="dialog"], 
 ${blurCss(state)}`;
   }
 
-  function uiCss() {
+  // The panel and its button are glass as well: give them the same radius the
+  // columns use, so "blur 0" really means a crisp window everywhere.
+  function paneBlur(state) {
+    if (state.perf) return 0;
+    return Math.max(0, Math.round(state.glassRadius * 0.85));
+  }
+
+  function uiCss(state) {
+    const panePx = paneBlur(state);
     return `
 #${IDS.button} {
   position: fixed; z-index: 6000; width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 10px; border: 1px solid rgba(255,255,255,.22);
-  background: rgba(12,16,22,.78); backdrop-filter: blur(14px) saturate(130%);
+  background: rgba(12,16,22,.78); backdrop-filter: blur(${panePx}px) saturate(130%);
   color: #c5dce3; cursor: pointer; padding: 0;
   transition: color .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .1s ease;
 }
@@ -783,7 +791,7 @@ ${blurCss(state)}`;
   position:fixed; z-index:6001; width:300px; padding:16px;
   max-height:min(78vh, 720px); overflow-y:auto; overscroll-behavior:contain;
   border-radius:16px; border:1px solid rgba(255,255,255,.14);
-  background:rgba(10,14,20,.82); backdrop-filter:blur(22px) saturate(140%);
+  background:rgba(10,14,20,.82); backdrop-filter:blur(${panePx}px) saturate(140%);
   box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.1);
   color:#eef4f6; font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
   display:none; scrollbar-width:thin;
@@ -931,6 +939,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const updateGlass = () => {
       const style = document.getElementById(IDS.glass);
       if (style) style.textContent = glassCss(state.glass, state);
+      const chrome = document.getElementById(IDS.uiStyle);
+      if (chrome) chrome.textContent = uiCss(state);
     };
 
     const post = (message) => {
@@ -1575,7 +1585,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       if (document.getElementById(IDS.button)) return;
       const style = document.createElement('style');
       style.id = IDS.uiStyle;
-      style.textContent = uiCss();
+      style.textContent = uiCss(state);
       (document.head || document.documentElement).appendChild(style);
 
       const button = document.createElement('button');
@@ -2350,7 +2360,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.40';
+  const SKIN_BUILD = 'lab-1.5.41';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

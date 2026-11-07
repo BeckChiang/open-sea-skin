@@ -496,7 +496,7 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
   col.addAssign(vec3(0.012, 0.014, 0.019).mul(uMoonVisible).mul(uNightF).mul(uAirglow));
 
   // clouds only inside the low band: skips one FBM for most sky pixels
-  const band = smoothstep(0.03, 0.16, d.y).mul(smoothstep(0.6, 0.22, d.y));
+  const band = smoothstep(0.02, 0.09, d.y).mul(smoothstep(0.92, 0.30, d.y));
   If(band.mul(cloudMask).greaterThan(0.001), () => {
     const proj = d.xz.div(d.y.add(0.18)).mul(0.55);
     // 1.5.23: they drift now, and the dial can stop them dead (0 = frozen) or
@@ -510,8 +510,11 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     // 1.2.7 used a fixed bright cloud tint and looked like daylight at night.
     // Daytime clouds now take the horizon hue (blue) instead of near-white, so a
     // cloudy noon no longer greys the whole sky out; at dusk uSunColor warms them.
-    const cloudColor = uHorizonColor.mul(uSkyLight.mul(1.3)).add(vec3(0.05)).toVar();
-    col.assign(mix(col, cloudColor, cover.mul(0.58).mul(density).mul(uCloudOpacity)));
+    // Cloud keeps a mostly neutral body so it reads as cloud at any hour: the
+  // horizon colour only tints it (warm at dusk, blue-grey at noon).
+  const cloudTint = mix(uHorizonColor, vec3(0.86, 0.90, 0.96), float(0.42)).toVar();
+  const cloudColor = cloudTint.mul(uSkyLight.mul(1.5)).add(vec3(0.075)).toVar();
+    col.assign(mix(col, cloudColor, cover.mul(0.74).mul(density).mul(uCloudOpacity)));
   });
 
   // Night tint last, so it scales everything the dome drew above the horizon.
@@ -1554,6 +1557,8 @@ function animate(now) {
   if (SKIN && starLayer) {
     try {
       updateStarDome(now, dt);
+      skySeconds += dt;
+      updateMeteors(starLayer, skySeconds, dt);
     } catch (err) {
       starLayer = null;
       console.warn('[open-sea-skin] star dome disabled', err);
@@ -1636,7 +1641,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.40';
+const OCEAN_BUILD = 'lab-1.5.41';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2647,6 +2652,9 @@ let lastAltDeg = 0;
 // covers the Big Dipper. The dome folds sky angles toward the view axis by this
 // factor, using a stereographic fold so the constellations keep their shape
 // (every angle is scaled by the same local factor, so figures are not sheared).
+// Animation clock: seconds since boot, advanced by dt so a slow frame does not
+// teleport a meteor along its path.
+let skySeconds = 0;
 let skyZoom = 2;
 // How much of that fold applies to the dome. 0 keeps the plain perspective sky
 // (the old look), 1 is the full fold; in between mixes the two angles.
@@ -2774,6 +2782,8 @@ function updateStarDome(nowRaw, dt) {
   const shown = layer.starsOpacity > 0.004;
   layer.stars.visible = shown;
   layer.lines.visible = shown;
+  layer.meteorLine.visible = shown;
+  layer.meteorHead.visible = shown;
   // the band is weakest when the galactic centre is under the horizon, and the
   // bright core only exists when the centre itself is up
   uMilkyVisible.value = shown ? 0.35 + 0.65 * smoothstepRange(-10, 10, galacticCentreAlt) : 0;
@@ -2867,11 +2877,19 @@ function updateStarDome(nowRaw, dt) {
     lineGlow.needsUpdate = true;
   }
 
-  // meteors: random streaks that only exist at night
+}
+
+
+// Meteors are a per-frame animation, so they cannot live inside the 20 s sky
+// rebuild: a streak that lasts 0.6 s would advance twice and die unseen. The
+// clock is also the animation clock, not the wall clock: Date/1000 is about 1.7e9,
+// which reads as "spawned long ago" and makes every frame a first frame.
+function updateMeteors(layer, seconds, dt) {
+  if (!layer || !layer.meteor) return;
   const meteor = layer.meteor;
   const meteorPositions = layer.meteorLine.geometry.getAttribute('position');
   const meteorHeadPositions = layer.meteorHead.geometry.getAttribute('position');
-  const elapsed = now / 1000;
+  const elapsed = seconds;
   if (meteor.active) {
     meteor.elapsed += dt;
     const progress = Math.min(1, meteor.elapsed / meteor.duration);
@@ -2884,14 +2902,15 @@ function updateStarDome(nowRaw, dt) {
     meteorHeadPositions.setXYZ(0, head.x, head.y, head.z);
     meteorHeadPositions.needsUpdate = true;
     // a fade in and out, scaled by how hot this particular streak is
-    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 2.6 * meteor.power * meteorBright;
+    uMeteorGlow.value = layer.starsOpacity * Math.sin(progress * Math.PI) * 2.9 * meteor.power * meteorBright;
     if (progress >= 1) {
       meteor.active = false;
-      meteor.next = elapsed + (2.5 + Math.random() * 5) / meteorRate;
+      meteor.next = elapsed + (2.2 + Math.random() * 4.5) / meteorRate;
+      uMeteorGlow.value = 0;
     }
   } else {
     uMeteorGlow.value = 0;
-    if (elapsed > meteor.next && layer.starsOpacity > 0.25 && meteorEnabled) {
+    if (elapsed > meteor.next && layer.starsOpacity > 0.2 && meteorEnabled) {
       // Spawn inside the slice of sky the camera actually shows. Picking the
       // azimuth uniformly put four out of five streaks behind the viewer, which
       // read as "meteors never render".

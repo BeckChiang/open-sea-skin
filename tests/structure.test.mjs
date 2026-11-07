@@ -520,3 +520,20 @@ test('a leaving hull never vanishes inside the frame', () => {
   assert.ok(source.includes('lane.exitSide * lane.exitReach - lane.away'), 'the exit steers to that fixed reach')
   assert.ok(source.includes('Math.abs(lane.away) >= lane.exitReach - 0.5'), 'the hull is dropped only past it')
 })
+
+test('a meteor lives on the animation clock, not the sky rebuild', () => {
+  // The streak used to sit inside the 20 s rebuild: it advanced twice in its whole
+  // 0.6 s life, so nothing was ever visible. It also read Date/1000 as its clock.
+  assert.ok(source.includes('function updateMeteors(layer, seconds, dt) {'), 'meteors own their update')
+  assert.ok(source.includes('updateMeteors(starLayer, skySeconds, dt);'), 'called every frame')
+  assert.ok(!source.includes('if (elapsed > meteor.next && layer.starsOpacity > 0.25'), 'the old gated spawn is gone')
+})
+
+test('cloud is a deck, and the paper is not frosted at blur zero', () => {
+  // A band that only covered the first ten degrees read as haze.
+  assert.ok(source.includes('smoothstep(0.02, 0.09, d.y)'), 'the cloud band reaches up the sky')
+  assert.ok(source.includes('const cloudTint = mix(uHorizonColor'), 'cloud keeps a neutral body')
+  // The panel chrome was hard-wired to 22 px, so blur 0 still left it frosted.
+  assert.ok(clientSource.includes('function paneBlur(state) {'), 'one dial drives the chrome too')
+  assert.ok(clientSource.includes('backdrop-filter:blur(${panePx}px) saturate(140%);'), 'panel blur follows it')
+})
