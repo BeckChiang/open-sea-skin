@@ -1,3 +1,12 @@
+# 1.5.53
+
+## Removed
+
+- The column divider overlay (`oss-seam`) and the side-rail dimming are gone
+  entirely: no lines, no shading, no resize listener, no `seam` / `seamDim`
+  state or persistence keys. The skin now only changes how each rail blurs;
+  it never paints on top of the interface.
+
 # 1.5.52
 
 ## Changed

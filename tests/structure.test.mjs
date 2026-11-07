@@ -600,27 +600,7 @@ test('the panel reports the tier it is actually running', () => {
 })
 
 
-test('the columns get a drawn boundary, not just a blur', () => {
-  assert.ok(clientSource.includes("    seam: true,"), 'dividers are on by default')
-  assert.ok(clientSource.includes("    seamDim: 55,"), 'and the rails are dimmed a little')
-  assert.ok(clientSource.includes("const SEAM_ID = 'oss-seam';"), 'one fixed overlay holds the lines')
-  assert.ok(clientSource.includes('const updateSeam = () => {'), 'it is recomputed, not drawn once')
-  assert.ok(clientSource.includes("    seam: 'ossSeam',"), 'the choice persists')
-  assert.ok(clientSource.includes("'starsDaylight', 'frost', 'seam']"), 'and a boolean key exists for it')
-})
 
-test('the seam survives a reload, and it only dresses the two rails', () => {
-  // normalize() re-builds state from a whitelist; a field missing there is
-  // silently dropped on every load, which is exactly how the seam vanished.
-  assert.ok(clientSource.includes('seam: source.seam !== false'), 'seam is normalised')
-  assert.ok(clientSource.includes('seamDim: clamp(source.seamDim'), 'dim is normalised')
-  assert.ok(clientSource.includes("seam: 'ossSeam'"), 'and persists')
-  assert.ok(clientSource.includes("pid('seam-dim')"), 'dim has a dial')
-  // the middle column is out of scope: no fill, no blur, no control
-  assert.ok(!clientSource.includes('seamFill'), 'no conversation pane')
-  assert.ok(!clientSource.includes('colCenter'), 'no middle column anywhere')
-  assert.ok(clientSource.includes("return [pick('colLeft'), pick('colRight')].filter(Boolean);"), 'blur only dresses the rails')
-})
 
 test('the runtime readout is built on mount, not on a button press', () => {
   // It used to sit inside the "make this the default" click handler, so the
@@ -632,4 +612,12 @@ test('the runtime readout is built on mount, not on a button press', () => {
   assert.ok(makeDefault > block, 'and not inside the button handler')
   assert.ok(clientSource.includes('refreshPerfOut();'), 'it paints once immediately')
   assert.ok(clientSource.includes("perfOut.textContent = perfText();"), 'from perfText()')
+})
+
+test('glass only dresses the two rails, and nothing draws over the UI', () => {
+  assert.ok(!/seam/i.test(clientSource), 'no seam state, no overlay, no dimming')
+  assert.ok(!clientSource.includes('colCenter'), 'no middle column either')
+  assert.ok(clientSource.includes("return [pick('colLeft'), pick('colRight')].filter(Boolean);"), 'blur only touches the rails')
+  assert.ok(clientSource.includes("colLeft: ["), 'the left rail is measured')
+  assert.ok(clientSource.includes("colRight: ['[data-rightbar-col]"), 'and the right one')
 })
