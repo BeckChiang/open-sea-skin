@@ -613,3 +613,29 @@ test('the columns get a drawn boundary, not just a blur', () => {
   assert.ok(clientSource.includes("    seam: 'ossSeam',"), 'the choice persists')
   assert.ok(clientSource.includes("'starsDaylight', 'frost', 'seam']"), 'and a boolean key exists for it')
 })
+
+test('the seam survives a reload, and the conversation gets its own pane', () => {
+  // normalize() re-builds state from a whitelist; a field missing there is
+  // silently dropped on every load, which is exactly how the seam vanished.
+  assert.ok(clientSource.includes('seam: source.seam !== false'), 'seam is normalised')
+  assert.ok(clientSource.includes('seamDim: clamp(source.seamDim'), 'dim is normalised')
+  assert.ok(clientSource.includes('seamFill: clamp(source.seamFill'), 'pane fill is normalised')
+  assert.ok(clientSource.includes("seamFill: 'ossSeamFill'"), 'pane fill persists')
+  assert.ok(clientSource.includes("pid('seam-fill')"), 'and has a dial')
+  // the centre pane is what makes the middle read as a panel, like the rails do
+  assert.ok(clientSource.includes('border-radius:18px'), 'the centre pane is drawn')
+  assert.ok(clientSource.includes('let centre = found[1] || null;'), 'measured centre wins')
+  assert.ok(clientSource.includes('x1 - x0 > 120'), 'the rails gap stands in for it')
+})
+
+test('the runtime readout is built on mount, not on a button press', () => {
+  // It used to sit inside the "make this the default" click handler, so the
+  // numbers only appeared after that button was pressed once.
+  const mount = clientSource.indexOf("const searchBox = el('search');")
+  const block = clientSource.indexOf("const perfOut = el('perf-out');")
+  const makeDefault = clientSource.indexOf("const makeDefaultBtn = el('make-default');")
+  assert.ok(block > mount, 'the block lives in the mount body')
+  assert.ok(makeDefault > block, 'and not inside the button handler')
+  assert.ok(clientSource.includes('refreshPerfOut();'), 'it paints once immediately')
+  assert.ok(clientSource.includes("perfOut.textContent = perfText();"), 'from perfText()')
+})

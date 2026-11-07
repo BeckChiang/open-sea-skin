@@ -1,3 +1,20 @@
+# 1.5.51
+
+## Fixed
+
+- The column seam vanished after a reload: `normalize()` rebuilds state from a
+  whitelist and `seam` / `seamDim` were not in it, so both were dropped on every
+  load and the overlay removed itself. Both are normalised and persisted now.
+- The runtime readout only appeared after pressing «把当前设置设为默认»: the block
+  was injected inside that click handler. It is created in the mount body and
+  refreshes every 1.5 s.
+
+## Added
+
+- 「交互区底色」dial: the conversation column gets its own translucent pane, so the
+  middle reads as a panel the way the DSH rails do. The centre is measured when the
+  shell exposes it, otherwise the gap between the two rails stands in.
+
 # 变更记录
 
 ## 1.5.50

@@ -93,6 +93,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: true,
     seam: true,
     seamDim: 55,
+    seamFill: 45,
   glassMode: 'render',
     glassRadius: 20,
     colLeft: Object.freeze({ on: true, strength: 28 }),
@@ -156,6 +157,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: '背景模糊',
     seam: '分栏分割线',
     seamDim: '侧栏压暗',
+    seamFill: '交互区底色',
     hints: {
       qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 45；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
       fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
@@ -166,6 +168,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
       seam: '在左侧栏 / 交互区、交互区 / 右侧栏之间画一条细线，并把两侧栏压暗一档——模糊看不出边界，线可以。',
       seamDim: '两侧栏压暗的强度。0 只留分割线。',
+      seamFill: '给中间会话窗口加一层半透明底色，让它像侧栏那样成为一块独立面板。0 = 透明。',
       cols: {
         left: '左侧栏（会话/项目列表）。',
         center: '交互区（左右两栏之间的对话与输入）。若没有独立容器，预览会按两条侧栏之间的空档估算，用橙色框并标「≈」。',
@@ -367,6 +370,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: 'Background blur',
     seam: 'Column dividers',
     seamDim: 'Dim side rails',
+    seamFill: 'Conversation pane',
     hints: {
       qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 45; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
       fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
@@ -377,6 +381,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
       seam: 'Draws a hairline between the rails and the conversation, and dims the rails a step: blur has no edge, a line does.',
       seamDim: 'How much the rails are dimmed. 0 leaves only the hairline.',
+      seamFill: 'Gives the conversation its own translucent pane so it reads as a panel like the rails. 0 = transparent.',
       cols: {
         left: 'Left column: the session and project list.',
         center: 'Conversation: the chat and composer between the two rails. When it has no container of its own the preview estimates the gap and marks it with a tilde.',
@@ -647,6 +652,9 @@ const FPS_LEVELS = [24, 30, 45, 60];
     fps: FPS_LEVELS.includes(Number(source.fps)) ? Number(source.fps) : DEFAULTS.fps,
       glow: clamp(source.glow, 0, 100, DEFAULTS.glow),
       frost: source.frost !== false,
+      seam: source.seam !== false,
+      seamDim: clamp(source.seamDim, 0, 100, DEFAULTS.seamDim),
+      seamFill: clamp(source.seamFill, 0, 100, DEFAULTS.seamFill),
     glassMode: source.glassMode === 'css' ? 'css' : 'render',
       glassRadius: clamp(
         source.glassRadius,
@@ -1158,32 +1166,55 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     // Blur alone cannot say where a column ends, so draw the boundary: one line
     // at each rail edge plus a slight shading of the rails themselves.
     const SEAM_ID = 'oss-seam';
+    const seamRects = () => {
+      const found = measureAllColumns();
+      const left = found[0] || null;
+      const right = found[2] || null;
+      const width = window.innerWidth || 1;
+      const height = window.innerHeight || 1;
+      let centre = found[1] || null;
+      if (!centre) {
+        const x0 = left ? left.x1 : 0;
+        const x1 = right ? right.x0 : width;
+        if (x1 - x0 > 120) centre = { key: 'colCenter', x0, x1, y0: 0, y1: height, guess: true };
+      }
+      return { left, right, centre };
+    };
+
     const updateSeam = () => {
       const existing = document.getElementById(SEAM_ID);
-      const found = measureAllColumns();
-      const left = found[0];
-      const right = found[2];
-      const edges = [];
-      if (left) edges.push(left.x1);
-      if (right) edges.push(right.x0);
-      if (!state.seam || !edges.length) {
+      if (!state.seam) {
         if (existing) existing.remove();
         return;
       }
+      const { left, right, centre } = seamRects();
+      if (!left && !right) {
+        if (existing) existing.remove();
+        return;
+      }
+      const dim = clamp(state.seamDim, 0, 100, 0) / 100;
+      const fill = clamp(state.seamFill, 0, 100, 0) / 100;
       const layer = existing || document.createElement('div');
       layer.id = SEAM_ID;
       layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147480000;';
-      const dim = clamp(state.seamDim, 0, 100, 0) / 100;
       let html = '';
-      for (const x of edges) {
-        html += `<i style="position:absolute;top:0;bottom:0;left:${Math.round(x)}px;width:1px;background:linear-gradient(180deg,rgba(143,233,228,0),rgba(143,233,228,.55) 16%,rgba(143,233,228,.55) 84%,rgba(143,233,228,0));box-shadow:0 0 10px rgba(120,214,232,.35);"></i>`;
+      // the conversation gets its own pane, like the rails do in the stock UI
+      if (centre && fill > 0.02) {
+        const pad = 6;
+        const w = Math.max(0, Math.round(centre.x1 - centre.x0) - pad * 2);
+        const h = Math.max(0, Math.round(centre.y1 - centre.y0) - pad * 2);
+        html += `<b style="position:absolute;left:${Math.round(centre.x0) + pad}px;top:${Math.round(centre.y0) + pad}px;width:${w}px;height:${h}px;border-radius:18px;background:linear-gradient(180deg,rgba(8,16,24,.92),rgba(6,12,20,.86));box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);opacity:${(fill * 0.42).toFixed(2)};"></b>`;
+      }
+      for (const x of [left ? left.x1 : null, right ? right.x0 : null]) {
+        if (x === null) continue;
+        html += `<i style="position:absolute;top:0;bottom:0;left:${Math.round(x)}px;width:1px;background:linear-gradient(180deg,rgba(143,233,228,0),rgba(143,233,228,.6) 14%,rgba(143,233,228,.6) 86%,rgba(143,233,228,0));box-shadow:0 0 12px rgba(120,214,232,.4);"></i>`;
       }
       if (dim > 0.02) {
         for (const rail of [left, right]) {
           if (!rail) continue;
           const w = Math.max(0, Math.round(rail.x1 - rail.x0));
           const h = Math.max(0, Math.round(rail.y1 - rail.y0));
-          html += `<b style="position:absolute;left:${Math.round(rail.x0)}px;top:${Math.round(rail.y0)}px;width:${w}px;height:${h}px;border-radius:12px;background:rgba(2,8,14,.85);opacity:${(dim * 0.45).toFixed(2)};"></b>`;
+          html += `<b style="position:absolute;left:${Math.round(rail.x0)}px;top:${Math.round(rail.y0)}px;width:${w}px;height:${h}px;border-radius:12px;background:rgba(2,8,14,.9);opacity:${(dim * 0.42).toFixed(2)};"></b>`;
         }
       }
       layer.innerHTML = html;
@@ -1892,6 +1923,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
           ${switchRow(pid('seam'), 'seam')}
           ${rangeRow(pid('seam-dim'), 'seamDim', 0, 100, 5)}
+          ${rangeRow(pid('seam-fill'), 'seamFill', 0, 100, 5)}
           ${colRow(pid('col-left'), 'cols.left')}
           ${colRow(pid('col-center'), 'cols.center')}
           ${colRow(pid('col-right'), 'cols.right')}
@@ -1929,6 +1961,21 @@ ${switchRow(pid('perf'), 'perf')}
       const lonInput = el('lon');
       const resetBtn = panel.querySelector('#' + pid('reset'));
       const searchBox = el('search');
+
+      // runtime readout: created once per mount, not on a button press
+      const perfOut = el('perf-out');
+      const refreshPerfOut = () => {
+        if (perfOut) perfOut.textContent = perfText();
+      };
+      refreshPerfOut();
+      updateSeam();
+      const perfTimer = window.setInterval(refreshPerfOut, 1500);
+      surfaceCleanups.push(() => window.clearInterval(perfTimer));
+      const perfTick = (now) => {
+        meterFps(now);
+        window.requestAnimationFrame(perfTick);
+      };
+      window.requestAnimationFrame(perfTick);
 
       const segWave = el('wave-mode');
       const segSun = el('sun-mode');
@@ -1997,6 +2044,7 @@ ${switchRow(pid('perf'), 'perf')}
         ['glass-radius', 'glassRadius', 1, 'px'],
         ['glow', 'glow', 0, 'pct'],
       ['seam-dim', 'seamDim', 0, 'pct'],
+      ['seam-fill', 'seamFill', 0, 'pct'],
       ];
 
       // One formatter per kind of value; the panel never shows a raw float.
@@ -2297,20 +2345,6 @@ ${switchRow(pid('perf'), 'perf')}
         baseline = snapshot;
         void options.storage.set({ baseline: snapshot });
         refreshDefaultOut();
-
-      const perfOut = el('perf-out');
-      const refreshPerfOut = () => {
-        if (perfOut) perfOut.textContent = perfText();
-      };
-      refreshPerfOut();
-      updateSeam();
-      const perfTimer = window.setInterval(refreshPerfOut, 1500);
-      surfaceCleanups.push(() => window.clearInterval(perfTimer));
-      const perfTick = (now) => {
-        meterFps(now);
-        window.requestAnimationFrame(perfTick);
-      };
-      window.requestAnimationFrame(perfTick);
       });
       refreshDefaultOut();
 
@@ -2520,6 +2554,7 @@ ${switchRow(pid('perf'), 'perf')}
     frost: 'ossFrost',
     seam: 'ossSeam',
     seamDim: 'ossSeamDim',
+    seamFill: 'ossSeamFill',
     glassMode: 'ossGlassMode',
     colLeft: 'ossColLeft',
     colCenter: 'ossColCenter',
@@ -2644,7 +2679,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.50';
+  const SKIN_BUILD = 'lab-1.5.51';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
