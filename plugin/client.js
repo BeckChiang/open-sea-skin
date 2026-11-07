@@ -86,8 +86,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     cloudOpacity: 1,
     // 1.5.26: frame budget. The scene is fill bound, so the quality preset is
     // the lever that matters; glow is the one remaining full-screen pass.
-    quality: 'balanced',
-  fps: 30,
+    quality: 'low',
+  fps: 24,
     glow: 55,
     glassStyle: 'gaussian',
     frost: true,
@@ -128,6 +128,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       reset: '恢复默认',
       resetNote: '恢复默认：有自己保存的默认就用它，否则回到内置值（波浪 45 / 日光 55 / 玻璃 72 / 自动循环开）',
       makeDefault: '把当前设置设为默认',
+      perfTier: '运行中：画质 {tier}',
+      perfCap: '上限 {fps} fps',
+      perfScale: '渲染比例 {scale}×（屏幕 {dpr}×）',
+      perfFps: '实测 {fps} fps',
       defaultBuiltin: '当前默认：内置值。',
       defaultSaved: '当前默认：{at} 保存的快照。',
       previewCols: '预览三栏范围（2.6 秒）',
@@ -158,7 +162,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
       cols: {
         left: '左侧栏（会话/项目列表）。',
-        center: '交互区（中间的对话与输入）。',
+        center: '交互区（左右两栏之间的对话与输入）。若没有独立容器，预览会按两条侧栏之间的空档估算，用橙色框并标「≈」。',
         right: '右侧栏（文件与预览面板，未打开时不生效）。',
       },
       skyDist: '把整片天空压进一个更宽的角度；1 倍是真实视场，2 倍能看到更多星座。',
@@ -331,6 +335,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       reset: 'Reset to defaults',
       resetNote: 'Restore: your saved baseline if you have one, otherwise the built-in values (sea 45 / daylight 55 / glass 72 / auto cycle on)',
       makeDefault: 'Use current settings as defaults',
+      perfTier: 'Running: {tier}',
+      perfCap: 'cap {fps} fps',
+      perfScale: 'render scale {scale}x (screen {dpr}x)',
+      perfFps: 'measured {fps} fps',
       defaultBuiltin: 'Defaults: built-in values.',
       defaultSaved: 'Defaults: snapshot saved {at}.',
       previewCols: 'Preview the three columns (2.6 s)',
@@ -361,7 +369,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
       cols: {
         left: 'Left column: the session and project list.',
-        center: 'Conversation: the chat and composer in the middle.',
+        center: 'Conversation: the chat and composer between the two rails. When it has no container of its own the preview estimates the gap and marks it with a tilde.',
         right: 'Right column: files and preview. Has no effect while it is closed.',
       },
       skyDist: 'Packs the sky into a wider angle; 1x is the real field, 2x folds in more constellations.',
@@ -1073,7 +1081,13 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     const COLUMN_SELECTORS = {
       colLeft: ['[data-slot="sidebar"]', '.dshDesktopSidebarSurface', '#root > div:first-child > :first-child'],
-      colCenter: ['[data-slot="main.conversation"]', '.dshDesktopConversationSurface'],
+      colCenter: [
+        '[data-slot="main.conversation"]',
+        '[data-slot="main"]',
+        '.dshDesktopConversationSurface',
+        '[data-conversation]',
+        'main',
+      ],
       colRight: ['[data-rightbar-col]', '.dshDesktopDetailsSurface'],
     };
 
@@ -1120,10 +1134,46 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         const rect = element.getBoundingClientRect();
         return { key, x0: rect.left, y0: rect.top, x1: rect.right, y1: rect.bottom };
       };
-      return ['colLeft', 'colCenter', 'colRight'].map(pick);
+      const found = ['colLeft', 'colCenter', 'colRight'].map(pick);
+      // The chat column often has no stable hook; when it is missing, the space
+      // between the side rails is the honest answer to "where is it?".
+      if (!found[1] && found[0] && found[2]) {
+        const left = found[0];
+        const right = found[2];
+        found[1] = { key: 'colCenter', x0: left.x1, y0: left.y0, x1: right.x0, y1: left.y1, guess: true };
+      }
+      return found;
     };
 
     // One click to see which three boxes the strength dials actually talk about.
+    // What the renderer is actually running at (the dial only asks): the panel
+    // should answer "is the cheap tier in effect?" without opening devtools.
+    let fpsFrames = 0;
+    let fpsSince = 0;
+    let fpsSeen = 0;
+    const meterFps = (now) => {
+      if (!fpsSince) { fpsSince = now; fpsFrames = 0; return; }
+      fpsFrames += 1;
+      const span = now - fpsSince;
+      if (span >= 1000) {
+        fpsSeen = Math.round((fpsFrames * 1000) / span);
+        fpsSince = now;
+        fpsFrames = 0;
+      }
+    };
+
+    const perfText = () => {
+      const ocean = readOceanState();
+      const scale = ocean && Number.isFinite(ocean.renderScale) ? ocean.renderScale : null;
+      const ratio = window.devicePixelRatio || 1;
+      const parts = [];
+      parts.push(copy.perfTier.replace('{tier}', (copy.quality && copy.quality[state.quality]) || state.quality));
+      parts.push(copy.perfCap.replace('{fps}', String(state.fps)));
+      if (scale !== null) parts.push(copy.perfScale.replace('{scale}', scale.toFixed(2)).replace('{dpr}', ratio.toFixed(1)));
+      if (fpsSeen) parts.push(copy.perfFps.replace('{fps}', String(fpsSeen)));
+      return parts.join(' · ');
+    };
+
     const previewColumns = () => {
       for (const node of document.querySelectorAll('.oss-colmap')) node.remove();
       const labels = { colLeft: copy.cols.left, colCenter: copy.cols.center, colRight: copy.cols.right };
@@ -1134,8 +1184,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483000;border:2px dashed rgba(143,233,228,.85);border-radius:10px;box-shadow:inset 0 0 0 9999px rgba(143,233,228,.06);'
           + 'left:' + rect.x0 + 'px;top:' + rect.y0 + 'px;width:' + (rect.x1 - rect.x0) + 'px;height:' + (rect.y1 - rect.y0) + 'px;';
         const chip = document.createElement('span');
-        chip.textContent = labels[rect.key] || rect.key;
+        chip.textContent = (labels[rect.key] || rect.key) + (rect.guess ? ' ≈' : '');
+        if (rect.guess) box.style.borderColor = 'rgba(255,206,120,.85)';
         chip.style.cssText = 'position:absolute;left:8px;top:8px;padding:2px 7px;border-radius:6px;background:rgba(10,20,26,.82);color:#c9fffb;font-size:11px;line-height:1.6;';
+        if (rect.guess) chip.style.color = '#ffd9a0';
         box.append(chip);
         document.body.append(box);
       }
@@ -1799,6 +1851,7 @@ ${switchRow(pid('perf'), 'perf')}
           ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
           ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
         ${segRow(pid('fps'), 'fpsMode', [['24', 'fps.24'], ['30', 'fps.30'], ['45', 'fps.45'], ['60', 'fps.60']])}
+<p class="oss-sub" id="${pid('perf-out')}"></p>
           <div class="oss-row"><button type="button" class="oss-reset" id="${pid('make-default')}" data-copy="makeDefault"></button></div>
           <p class="oss-sub" id="${pid('default-out')}"></p>
           <div class="oss-row"><button type="button" class="oss-reset" id="${pid('reset')}" data-copy="reset"></button></div>
@@ -2183,6 +2236,19 @@ ${switchRow(pid('perf'), 'perf')}
         baseline = snapshot;
         void options.storage.set({ baseline: snapshot });
         refreshDefaultOut();
+
+      const perfOut = el('perf-out');
+      const refreshPerfOut = () => {
+        if (perfOut) perfOut.textContent = perfText();
+      };
+      refreshPerfOut();
+      const perfTimer = window.setInterval(refreshPerfOut, 1500);
+      surfaceCleanups.push(() => window.clearInterval(perfTimer));
+      const perfTick = (now) => {
+        meterFps(now);
+        window.requestAnimationFrame(perfTick);
+      };
+      window.requestAnimationFrame(perfTick);
       });
       refreshDefaultOut();
 
@@ -2514,7 +2580,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.48';
+  const SKIN_BUILD = 'lab-1.5.49';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

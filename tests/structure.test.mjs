@@ -590,3 +590,17 @@ test('every performance dial explains itself', () => {
   assert.ok(clientSource.includes("fpsMode: '帧率上限：显卡每秒最多画多少帧"), 'and so is the frame cap')
   assert.ok(clientSource.includes("left: '左侧栏（会话/项目列表）。'"), 'columns are named in plain words')
 })
+
+test('the panel reports the tier it is actually running', () => {
+  assert.ok(clientSource.includes("    quality: 'low',"), 'saver is the shipping default')
+  assert.ok(clientSource.includes('  fps: 24,'), 'and so is the 24 fps cap')
+  assert.ok(clientSource.includes('const perfText = () => {'), 'the readout exists')
+  assert.ok(clientSource.includes('const meterFps = (now) => {'), 'measured fps comes from a real frame counter')
+  assert.ok(clientSource.includes("copy.perfScale.replace('{scale}', scale.toFixed(2))"), 'and the render scale is shown, not the requested one')
+})
+
+test('the centre column is measured, or honestly estimated', () => {
+  assert.ok(clientSource.includes("'[data-slot=\"main\"]'"), 'more than one hook is tried for the chat column')
+  assert.ok(clientSource.includes('if (!found[1] && found[0] && found[2]) {'), 'when none matches, the gap between the rails is used')
+  assert.ok(clientSource.includes("rect.guess ? ' ≈' : ''"), 'and the estimate is marked as an estimate')
+})
