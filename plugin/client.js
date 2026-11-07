@@ -74,7 +74,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     cross: 100,
     lineWidth: 1,
     lineFadeDeg: 14,
-    lineTwinkle: 0.7,
+    lineTwinkle: 0.8,
     // meteors
     meteor: true,
     meteorRate: 1,
@@ -1559,7 +1559,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('star-spikes'), 'starSpikes', 0, 6, 0.1)}
           ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
           ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}
-          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 1.5, 0.01)}`)}
+          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 1.5, 0.05)}`)}
         ${group('secMeteor', `
           ${switchRow(pid('meteor'), 'meteor')}
           ${rangeRow(pid('meteor-rate'), 'meteorRate', 0.1, 6, 0.1)}
@@ -1666,7 +1666,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['cross', 'cross', 0, 'pct'],
         ['line-width', 'lineWidth', 2, 'f2'],
         ['line-fade', 'lineFadeDeg', 1, 'deg'],
-        ['line-twinkle', 'lineTwinkle', 2, 'pct'],
+        ['line-twinkle', 'lineTwinkle', 0, 'pct'],
         ['meteor-rate', 'meteorRate', 1, 'f1'],
         ['meteor-bright', 'meteorBright', 2, 'f2'],
         ['clouds', 'clouds', 0, 'pct'],
@@ -2251,7 +2251,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.37';
+  const SKIN_BUILD = 'lab-1.5.38';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

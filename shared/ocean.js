@@ -205,7 +205,7 @@ const uStarDaylight = uniform(0);
 const uStarBias = uniform(0);
 const uStarMode = uniform(0);
 const uStarCut = uniform(5.5);
-const uLineTwinkle = uniform(0.7);
+const uLineTwinkle = uniform(0.8);
 const uMilkyVisible = uniform(0);
 const uOverflow = uniform(0);
 // The dial is a budget verdict, and a verdict can flip in one tick: a session
@@ -1632,7 +1632,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.37';
+const OCEAN_BUILD = 'lab-1.5.38';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2440,7 +2440,10 @@ function createStarLayer(scene) {
     const owner = segmentNames[i] || '';
     if (!namePhase.has(owner)) namePhase.set(owner, (hashName(owner) % 628) / 100);
     // 2.4 rad steps decorrelate neighbouring legs while staying deterministic
-    const phase = namePhase.get(owner) + ((i * 2.399963) % 6.283);
+    // One phase per constellation. The extra per-polyline offset made each leg
+    // breathe on its own clock, so a figure looked like it was tearing apart
+    // instead of inhaling; neighbouring figures still differ by name.
+    const phase = namePhase.get(owner) * 2.399963;
     for (let v = 0; v < 8; v += 1) linePhaseAttr[i * 8 + v] = phase;
   }
   const lineGeometry = new THREE.BufferGeometry();
@@ -2478,8 +2481,10 @@ function createStarLayer(scene) {
   // and the per-edge phase keeps neighbouring legs from pulsing together. The
   // result never flashes as one sky; it drifts.
   // 0.55 rad/s is an 11 s breath; 2.1 rad/s rides on top as a shimmer.
-  const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.62)
-    .add(sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.38));
+  // 0.72 + 0.28: the slow beat dominates, the fast one only roughens it. A
+  // symmetric 50/50 mix cancelled itself out and read as flicker, not breath.
+  const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.72)
+    .add(sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.28));
   // 0.21 rad/s is a ~30 s swell shared by every line: the constellation phase
   // stops the picture from flashing in unison, this envelope stops it from
   // looking dead when the phases cancel out.

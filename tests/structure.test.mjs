@@ -394,7 +394,7 @@ test('the sky follows the sun instead of a switch', () => {
 test('the constellation lines breathe one constellation at a time', () => {
   // A global pulse reads as a flicker; per-edge phases read as air moving.
   assert.ok(source.includes("lineGeometry.setAttribute('aLinePhase', new THREE.BufferAttribute(linePhaseAttr, 1));"), 'each edge carries its own phase')
-  assert.ok(source.includes('const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.62)'), 'two incommensurate rates')
+  assert.ok(source.includes('const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.72)'), 'two incommensurate rates')
   assert.ok(source.includes('function hashName(text) {'), 'the phase is deterministic per constellation name')
 })
 
@@ -462,9 +462,9 @@ test('the overflow dial fades instead of switching', () => {
 test('the breath is slow enough to read', () => {
   // The first beat is an 11 s period (0.55 rad/s); the 2.1 rad/s shimmer rides on
   // top. A 0.9 rad/s-only mix was too even to notice at 1 px.
-  assert.ok(source.includes('sin(uTime.mul(0.55).add(linePhase)).mul(0.62)'), 'slow beat')
-  assert.ok(source.includes('sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.38)'), 'fast shimmer')
-  assert.ok(source.includes('const uLineTwinkle = uniform(0.7);'), 'default is a visible swing')
+  assert.ok(source.includes('sin(uTime.mul(0.55).add(linePhase)).mul(0.72)'), 'slow beat')
+  assert.ok(source.includes('sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.28)'), 'fast shimmer')
+  assert.ok(source.includes('const uLineTwinkle = uniform(0.8);'), 'default is a visible swing')
   assert.ok(!source.includes('Math.min(0.6, Number(d.lineTwinkle))'), 'the dial can reach 1')
 })
 
@@ -475,4 +475,11 @@ test('the whole sky inhales together', () => {
   assert.ok(source.includes('.mul(0.8).add(0.6)'), 'a shared 0.725..1.275 envelope')
   assert.ok(source.includes('.mul(lineBreath);'), 'applied to the ribbon colour')
   assert.ok(source.includes('sin(uTime.mul(0.21))'), 'about a 30 s period')
+})
+
+test('a constellation blinks as one figure', () => {
+  // The polyline index used to be part of the phase, so UMa's seven polylines
+  // each breathed on their own and the figure looked like it was tearing.
+  assert.ok(source.includes('const phase = namePhase.get(owner) * 2.399963;'), 'phase comes from the name only')
+  assert.ok(!source.includes('namePhase.get(owner) + ((i * 2.399963) % 6.283)'), 'no per-polyline offset')
 })
