@@ -663,7 +663,9 @@ ${column('body [data-rightbar-col], body .dshDesktopDetailsSurface', 'colRight')
     const light = glass / 100;
     // The panel and its button were painted at a fixed .82/.78 alpha: the dial
     // only moved the DSH tokens, so the shell stayed frosted at every setting.
-    const paneAlpha = Math.max(0, Math.min(1, light)).toFixed(3);
+    // The app shell goes fully clear at 0, but the settings panel keeps a floor:
+    // it is the only surface that can put the value back, so it must stay legible.
+    const paneAlpha = Math.max(0.18, Math.min(1, light)).toFixed(3);
     const dark = Math.max(0.40, light - 0.12);
     return `
 /* Open Sea Skin: one translucent shell; nested fills must not compound.
