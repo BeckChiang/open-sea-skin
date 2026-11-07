@@ -857,7 +857,7 @@ ${blurCss(state)}`;
 #${IDS.panel} .oss-seg { display:flex; gap:4px; }
 #${IDS.panel} .oss-seg button { flex:1; padding:5px 0; font-size:10.5px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); color:rgba(255,255,255,.72); cursor:pointer; transition:color .15s ease, border-color .15s ease, background .15s ease; }
 #${IDS.panel} .oss-seg button:hover { color:#dafdfb; border-color:rgba(143,233,228,.35); }
-#${IDS.panel} .oss-seg button.on { border-color:rgba(143,233,228,.55); background:rgba(143,233,228,.16); color:#dafdfb; }
+#${IDS.panel} .oss-seg button.on { border-color:rgba(143,233,228,.85); background:rgba(143,233,228,.3); color:#f2fffe; font-weight:600; box-shadow:inset 0 0 0 1px rgba(143,233,228,.35), 0 0 10px rgba(143,233,228,.22); }
 #${IDS.panel} .oss-inline { display:flex; align-items:center; gap:8px; margin-top:9px; }
 #${IDS.panel} .oss-inline > label { flex:0 0 52px; font-size:11px; color:rgba(255,255,255,.7); }
 #${IDS.panel} .oss-mini { width:100%; min-width:0; padding:5px 8px; border-radius:7px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#eef4f6; font-size:11px; font-variant-numeric:tabular-nums; }
@@ -899,7 +899,8 @@ body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button { color:rgba(13,22,
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button:hover,
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-locate:hover { color:#0a4f4d; border-color:rgba(13,122,118,.35); background:rgba(13,122,118,.08); }
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-seg button.on {
-  background:rgba(13,122,118,.16); border-color:rgba(13,122,118,.5); color:#0a4f4d;
+  background:rgba(13,122,118,.26); border-color:rgba(13,122,118,.8); color:#063d3b; font-weight:600;
+  box-shadow:inset 0 0 0 1px rgba(13,122,118,.3);
 }
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-reset:hover { background:rgba(13,122,118,.12); border-color:rgba(13,122,118,.4); }
 body:not([data-ds-dark-theme]) #${IDS.panel} .oss-close { color:rgba(13,22,32,.55); }
@@ -2021,6 +2022,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           }
         })();
         if (!patch) return;
+        setSeg(group, value);
         void save(patch);
         refresh();
       });
@@ -2220,6 +2222,9 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       } catch (error) {
         console.warn('[Open Sea Skin] Failed to load settings; using defaults.', error);
       }
+      // A reload is a new session: the manual clock re-seeds to the wall clock, so
+      // a page that was left on a manual midnight opens on the real time of day.
+      if (state.sunMode === 'manual') state.time = nowMinutes();
       seaValue = state.sea;
       applyEnabled();
       // the sea follows the session even when no panel is mounted
@@ -2394,7 +2399,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.46';
+  const SKIN_BUILD = 'lab-1.5.47';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

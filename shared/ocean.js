@@ -468,13 +468,16 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     };
     const core = starOf(local, hx, hy)
       .add(starOf(local2, jx, jy).mul(0.62));
-    const gate = smoothstep(0.965, 0.999, hg).mul(hb.mul(0.9).add(0.55));
+    // stars pile up along the galactic plane: a plain uniform field reads as noise
+    const bandNear = pow(float(1).sub(abs(dot(d, normalize(uGalNormal)))), 5);
+    const bandDensity = bandNear.mul(1.4).add(1);
+    const gate = smoothstep(0.965, 0.999, hg).mul(hb.mul(0.9).add(0.55)).mul(bandDensity);
     const twinkle = sin(uTime.mul(uTwinkleSpeed).mul(hg.mul(2.4).add(1.3)).add(hx.mul(29.7))).mul(0.22).add(0.78);
     const altitude = smoothstep(0.02, 0.32, d.y);
     col.addAssign(vec3(0.86, 0.92, 1).mul(core).mul(gate).mul(twinkle).mul(altitude).mul(uStars).mul(2.2).mul(uStarHaze));
   });
 
-  // Milky Way: a soft band along the galactic plane. Faint, and only at night —
+  // Milky Way: a soft band along the galactic plane, only at night.
   // it is the one night-sky term that is not a point light.
   const milkyOn = uMilky.mul(uMilkyVisible).mul(uNightF).mul(astro);
   If(milkyOn.greaterThan(0.001), () => {
@@ -483,11 +486,11 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     // a wide disc and a much tighter core, minus the dust lane that splits the
     // band in two: that lane is what makes it read as the Milky Way and not as a
     // blurry gradient.
-    const wide = pow(near, 2.2);
-    const core = pow(near, 12).mul(0.85);
-    const lane = smoothstep(float(0.17), float(0.02), gal).mul(pow(near, 3)).mul(0.4);
+    const wide = pow(near, 2.6);
+    const core = pow(near, 10).mul(1.0);
+    const lane = smoothstep(float(0.19), float(0.03), gal).mul(pow(near, 2.4)).mul(0.55);
     const band = wide.add(core).sub(lane);
-    col.addAssign(vec3(0.085, 0.078, 0.108).mul(band).mul(milkyOn));
+    col.addAssign(vec3(0.072, 0.067, 0.090).mul(band).mul(milkyOn));
   });
 
   // Airglow: a very faint green-blue wash that never leaves a dark sky, and the
@@ -1646,7 +1649,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.46';
+const OCEAN_BUILD = 'lab-1.5.47';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2791,7 +2794,7 @@ function updateStarDome(nowRaw, dt) {
   layer.meteorHead.visible = shown;
   // the band is weakest when the galactic centre is under the horizon, and the
   // bright core only exists when the centre itself is up
-  uMilkyVisible.value = shown ? 0.35 + 0.65 * smoothstepRange(-10, 10, galacticCentreAlt) : 0;
+  uMilkyVisible.value = shown ? 0.55 + 0.45 * smoothstepRange(-10, 14, galacticCentreAlt) : 0;
 
   // 15 deg/hour: a 5 s refresh is a 0.02 deg step, i.e. invisible
   // A hidden sky costs nothing: skip the rebuild while the layer is faded out.

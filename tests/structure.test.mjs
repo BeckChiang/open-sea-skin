@@ -392,7 +392,7 @@ test('the sky follows the sun instead of a switch', () => {
   assert.ok(source.includes('const targetFade = daylight ? 1 : smoothstepRange(6, -2, sunElevationDeg);'), 'the fade is a smoothstep of the sun height')
   assert.ok(source.includes('layer.stars.visible = shown;'), 'a faded dome is skipped, not drawn at zero alpha')
   assert.ok(source.includes('const skyVeto = daylight ? 1 :'), 'daylight mode is not vetoed by the night factor')
-  assert.ok(source.includes('uMilkyVisible.value = shown ? 0.35 + 0.65 * smoothstepRange(-10, 10, galacticCentreAlt) : 0;'), 'the band follows the galactic centre')
+  assert.ok(source.includes('uMilkyVisible.value = shown ? 0.55 + 0.45 * smoothstepRange(-10, 14, galacticCentreAlt) : 0;'), 'the band follows the galactic centre')
 })
 
 test('the constellation lines breathe one constellation at a time', () => {
@@ -555,4 +555,18 @@ test('the settings panel keeps a readable floor of blur', () => {
   assert.ok(clientSource.includes('const PANEL_BLUR_FLOOR = 9;'), 'the floor exists')
   assert.ok(clientSource.includes('return state.frost ? Math.max(PANEL_BLUR_FLOOR, wanted) : PANEL_BLUR_FLOOR;'), 'the switch cannot drop it')
   assert.ok(!clientSource.includes('if (!state.frost || state.perf) return 0;'), 'the old early return is gone')
+})
+
+test('a reload starts from the wall clock, and a chosen mode shows itself', () => {
+  // leaving a manual midnight behind must not greet the next session with night
+  assert.ok(clientSource.includes("if (state.sunMode === 'manual') state.time = nowMinutes();"), 'manual clock re-seeds on load')
+  // the active option has to be readable at a glance, not a 16% tint
+  assert.ok(clientSource.includes('box-shadow:inset 0 0 0 1px rgba(143,233,228,.35)'), 'active seg is highlighted')
+  assert.ok(clientSource.includes('setSeg(group, value);'), 'and lights up on click, not after the save')
+})
+
+test('the milky way carries its own stars', () => {
+  assert.ok(source.includes('const bandDensity = bandNear.mul(1.4).add(1);'), 'the band thickens the star field')
+  assert.ok(source.includes('.mul(bandDensity);'), 'and the gate uses it')
+  assert.ok(source.includes('vec3(0.072, 0.067, 0.090).mul(band)'), 'band body colour')
 })
