@@ -54,11 +54,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     skyTone: 'real',
     // stars: brightness, art, haze
     stars: 100,
-    starSize: 8.5,
-    starMin: 3.0,
+    starSize: 12,
+    starMin: 4.2,
     starFalloff: 0.16,
     starColor: 1.5,
-    starSpikes: 1.6,
+    starSpikes: 2.2,
     starBase: 0.82,
     starHalo: 0.28,
     starCount: 1,
@@ -141,6 +141,46 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatStale: '宿主插件还是旧版，先按右上角刷新按钮或重启桌面端',
       boatOff: '已关闭船只',
       secGlass: '毛玻璃',
+    hints: {
+      skyDist: '把整片天空压进一个更宽的角度；1 倍是真实视场，2 倍能看到更多星座。',
+      stars: '星点的总亮度。0 关闭星空，150% 最亮。',
+      starSize: '最亮那颗星（星等 0）的直径，暗星按星等缩小。',
+      starFalloff: '星等每差 1 等缩小多少，0.16 接近肉眼观感。',
+      starColor: '色温饱和度。100% 用真实 B−V 颜色，0 是纯白。',
+      starBias: '整体偏冷（负）或偏暖（正），用来抵消屏幕色偏。',
+      starMode: '真实 = 天文色；单色 = 全白；夸张 = 放大蓝橙差异。',
+      starHalo: '每颗星外圈的柔光占比，0 是硬点。',
+      starCount: '背景里随机撒的那层星，不来自星表。',
+      twinkleSpeed: '星点闪烁的快慢。',
+      twinkleAmp: '星点闪烁的幅度，0 完全不闪。',
+      milky: '银河强度。银心落到地平线下会自动变淡。',
+      skyTone: '整体色调：真实 / 偏蓝 / 偏暖。',
+      constellation: '星座连线的亮度。',
+      cross: '星点十字星芒的亮度。',
+      lineWidth: '连线粗细。星点会跟着放大，避免粗线顶着针尖。',
+      lineFadeDeg: '连线在地平线上方多少度内淡出。',
+      lineTwinkle: '整个星座一起呼吸的幅度，0 是常亮。',
+      lineSpeed: '呼吸快慢，0.55 约 11 秒一拍。',
+      starSpikes: '星等亮于这个值的星才有星芒（默认 2.2 等，约 60 颗）。',
+      starCut: '暗于这个星等就不画了，越小越省。',
+      meteorRate: '流星出现频率的倍数。',
+      meteorBright: '流星亮度倍数。',
+      clouds: '云量。',
+      cloudSpeed: '云的漂移速度。',
+      cloudOpacity: '云的不透明度。',
+      glassRadius: '背景模糊的真实半径（像素）。',
+      glow: '泛光强度，0 关闭，能省一点 GPU。',
+      quality: '画质档位：影响像素比与分辨率自适应。',
+      fps: '帧率上限，越低越省电。',
+      boatSpread: '船在水平方向能游多远。',
+      boatPace: '船的巡航速度。',
+      boatScale: '船的大小。',
+      overflowGain: '超预算时白冠与喷雾的敏感度。',
+      time: '按当地时间拖动，覆盖全天 24 小时。',
+      tzOffset: '手动指定该地时区，只影响读数显示。',
+      glass: '三栏背景的透明度。',
+      colStrength: '这一栏享受多少背景模糊。',
+    },
       waveSource: '驱动来源',
       manualSea: '手动波浪',
       floor: '波谷下限',
@@ -286,6 +326,46 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatStale: 'Host plugin is stale: press the header refresh button, or restart',
       boatOff: 'Boats off',
       secGlass: 'Frosted glass',
+    hints: {
+      skyDist: 'Packs the sky into a wider angle; 1x is the real field, 2x folds in more constellations.',
+      stars: 'Overall star brightness. 0 hides the sky, 150% is the brightest.',
+      starSize: 'Diameter of a magnitude-0 star; fainter ones shrink along the scale.',
+      starFalloff: 'How much a star shrinks per magnitude. 0.16 matches the naked eye.',
+      starColor: 'Saturation of the B-V colour; 100% is the catalogue, 0 is white.',
+      starBias: 'Shift the sky cooler (negative) or warmer (positive).',
+      starMode: 'Real = astronomical colour; mono = white; vivid = exaggerated.',
+      starHalo: 'Soft glow around each dot; 0 makes it a hard pixel.',
+      starCount: 'The random background haze that is not from the catalogue.',
+      twinkleSpeed: 'How fast the dots scintillate.',
+      twinkleAmp: 'How much they scintillate; 0 keeps them steady.',
+      milky: 'Strength of the Milky Way; it fades when the core sets.',
+      skyTone: 'Overall cast: real / blue / warm.',
+      constellation: 'Brightness of the constellation figures.',
+      cross: 'Brightness of the four-point spikes.',
+      lineWidth: 'Stroke width; the dots grow with it so a thick leg never ends in a pinhead.',
+      lineFadeDeg: 'Degrees above the horizon where the figures dissolve.',
+      lineTwinkle: 'Depth of the whole-figure breathing; 0 keeps it steady.',
+      lineSpeed: 'Speed of that breath; 0.55 is about one beat per 11 seconds.',
+      starSpikes: 'Stars brighter than this get spikes (default 2.2, about 60 stars).',
+      starCut: 'Nothing fainter than this magnitude is drawn; lower saves work.',
+      meteorRate: 'Multiplier on how often meteors appear.',
+      meteorBright: 'Multiplier on meteor brightness.',
+      clouds: 'Cloud cover.',
+      cloudSpeed: 'How fast the cloud drifts.',
+      cloudOpacity: 'How solid the cloud looks.',
+      glassRadius: 'Real blur radius of the background, in pixels.',
+      glow: 'Bloom strength; 0 turns it off and saves a little GPU.',
+      quality: 'Pixel ratio and adaptive resolution: high / balanced / saver.',
+      fps: 'Frame rate ceiling; lower is cheaper.',
+      boatSpread: 'How far the hulls range sideways.',
+      boatPace: 'Cruising speed of the boats.',
+      boatScale: 'Size of the boats.',
+      overflowGain: 'How eagerly over-budget sessions grow whitecaps and spray.',
+      time: 'Drag through the local 24 hour day.',
+      tzOffset: 'Manual timezone for the readout only.',
+      glass: 'Opacity of the three background columns.',
+      colStrength: 'How much blur this column gets.',
+    },
       waveSource: 'Driven by',
       manualSea: 'Manual sea state',
       floor: 'Wave floor',
@@ -742,7 +822,9 @@ ${blurCss(state)}`;
   border-top:4px solid transparent; border-bottom:4px solid transparent;
   transform:rotate(90deg); transition:transform .16s ease; opacity:.75;
 }
-#${IDS.panel} .oss-sec:not([open]) > .oss-caption::before { transform:rotate(0deg); }
+#${IDS.panel} .oss-hint { margin:-1px 0 2px; font-size:11px; line-height:1.4; opacity:.55; }
+  #${IDS.panel} .oss-hint:empty { display:none; }
+  #${IDS.panel} .oss-sec:not([open]) > .oss-caption::before { transform:rotate(0deg); }
 #${IDS.panel} .oss-sec:not([open]) > .oss-caption { margin-bottom:0; opacity:.72; }
 #${IDS.panel} .oss-search { margin:12px 0 4px; }
 #${IDS.panel} .oss-search input {
@@ -1431,6 +1513,15 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       button.classList.toggle('active', open);
       button.setAttribute('aria-expanded', String(open));
       if (open) {
+        // Fold everything on every open: the panel element survives being closed,
+        // so a group left expanded last time used to still be expanded now.
+        panel.querySelectorAll('.oss-sec').forEach((section) => {
+          section.open = false;
+          section.hidden = false;
+        });
+        panel.querySelectorAll('.oss-row, .oss-inline, .oss-col').forEach((item) => { item.hidden = false; });
+        const filter = panel.querySelector('.oss-search input');
+        if (filter instanceof HTMLInputElement) filter.value = '';
         previousFocus = document.activeElement;
         const rect = button.getBoundingClientRect();
         panel.style.left = `${Math.min(Math.max(12, rect.left - panel.offsetWidth + 34), window.innerWidth - panel.offsetWidth - 12)}px`;
@@ -1502,9 +1593,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       panel.setAttribute('aria-modal', 'false');
       panel.setAttribute('aria-label', copy.button);
 
-      const rangeRow = (id, key, min, max, step) => `<div class="oss-row"><div class="oss-head"><label for="${id}" data-copy="${key}"></label><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" /></div>`;
-      const segRow = (id, key, options) => `<div class="oss-row"><div class="oss-head"><span data-copy="${key}"></span></div><div class="oss-seg" id="${id}">${options.map(([value, copyKey]) => `<button type="button" data-value="${value}" data-copy="${copyKey}"></button>`).join('')}</div></div>`;
-      const switchRow = (id, key) => `<div class="oss-row oss-switch"><label for="${id}" data-copy="${key}"></label><input type="checkbox" id="${id}" /></div>`;
+      // Every control explains itself in one line underneath: "falloff" or "dome
+      // share" is not something a user should have to reverse-engineer.
+      const hint = (key) => `<p class="oss-hint" data-copy="hints.${key}"></p>`;
+      const rangeRow = (id, key, min, max, step) => `<div class="oss-row"><div class="oss-head"><label for="${id}" data-copy="${key}"></label><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" />${hint(key)}</div>`;
+      const segRow = (id, key, options) => `<div class="oss-row"><div class="oss-head"><span data-copy="${key}"></span></div><div class="oss-seg" id="${id}">${options.map(([value, copyKey]) => `<button type="button" data-value="${value}" data-copy="${copyKey}"></button>`).join('')}</div>${hint(key)}</div>`;
+      const switchRow = (id, key) => `<div class="oss-row oss-switch"><label for="${id}" data-copy="${key}"></label><input type="checkbox" id="${id}" />${hint(key)}</div>`;
       // One slider per column: the shared radius times this column's share.
       const colRow = (id, key) => `<div class="oss-col" id="${id}"><div class="oss-col-head"><label for="${id}-on" data-copy="${key}"></label><input type="checkbox" id="${id}-on" /></div><div class="oss-head"><span data-copy="colStrength"></span><output class="oss-value" id="${id}-out"></output></div><input type="range" id="${id}-strength" min="0" max="100" step="1" /></div>`;
       // Collapsible group: eleven of them do not fit on one screen unfolded.
@@ -1540,10 +1634,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           <p class="oss-sub" data-copy="sunNote"></p>`)}
         ${group('secStars', `
           ${rangeRow(pid('sky-dist'), 'skyDist', 0.6, 3, 0.05)}
-          ${rangeRow(pid('dome-amount'), 'domeAmount', 0, 1, 0.01)}
           ${rangeRow(pid('stars'), 'stars', 0, 200, 1)}
           ${rangeRow(pid('star-size'), 'starSize', 1, 14, 0.1)}
-          ${rangeRow(pid('star-min'), 'starMin', 0.5, 4, 0.05)}
           ${rangeRow(pid('star-falloff'), 'starFalloff', 0.04, 0.5, 0.01)}
           ${rangeRow(pid('star-color'), 'starColor', 0, 2.2, 0.05)}
           ${rangeRow(pid('star-bias'), 'starBias', -0.3, 0.3, 0.01)}
@@ -1653,10 +1745,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['time-range', 'time', 0, 'clock'],
         ['tz-offset', 'tzOffset', 1, 'tz'],
         ['sky-dist', 'skyDist', 2, 'x'],
-        ['dome-amount', 'domeAmount', 2, 'factor'],
         ['stars', 'stars', 0, 'pct'],
         ['star-size', 'starSize', 1, 'px'],
-  ['star-min', 'starMin', 2, 'px'],
   ['star-falloff', 'starFalloff', 2, 'f2'],
   ['star-color', 'starColor', 2, 'f2'],
   ['star-spikes', 'starSpikes', 1, 'f2'],
@@ -1787,7 +1877,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // Which message a slider belongs to; everything not listed is local-only.
       const SKY_KEYS = new Set([
         'skyDist', 'domeAmount', 'stars', 'starSize', 'starMin', 'starFalloff', 'starColor',
-        'starSpikes', 'starBase', 'starHalo', 'starCount',
+        'starSpikes', 'starBase', 'starHalo', 'starCount', 'starBias', 'starMode', 'starCut',
+        'lineTwinkle', 'lineSpeed', 'starsDaylight', 'overflowGain',
         'twinkleSpeed', 'twinkleAmp', 'milky', 'skyTone', 'constellation', 'cross', 'lineWidth',
         'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
         'tzOffset', 'moon', 'lat', 'lon', 'quality', 'glow', 'fps',
@@ -2259,7 +2350,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.39';
+  const SKIN_BUILD = 'lab-1.5.40';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

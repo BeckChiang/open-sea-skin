@@ -341,9 +341,13 @@ test('the panel is one searchable set of collapsible groups', () => {
   }
   assert.ok(clientSource.includes("<details class=\"oss-sec\""), 'groups must be <details> elements')
   assert.ok(clientSource.includes("const RANGE_ROWS = ["), 'one table must drive the sliders')
-  for (const row of ["['star-size', 'starSize'", "['dome-amount', 'domeAmount'", "['glass-radius', 'glassRadius'", "['tz-offset', 'tzOffset'"]) {
+  for (const row of ["['star-size', 'starSize'", "['glass-radius', 'glassRadius'", "['tz-offset', 'tzOffset'"]) {
     assert.ok(clientSource.includes(row), `${row} must be a panel dial`)
   }
+  // The dome share folded into the zoom dial and the faint-star floor now follows
+  // the bright-star size, so neither is a second slider for the same thing.
+  assert.ok(!clientSource.includes("pid('dome-amount')"), 'the dome share is not a second zoom dial')
+  assert.ok(!clientSource.includes("pid('star-min')"), 'the faint floor is not a second size dial')
   assert.ok(!clientSource.includes("pid('col-left-level')"), 'the four-step column button must be gone')
   assert.ok(clientSource.includes("setRowVisible(el('tz-offset'), state.tzMode === 'manual')"), 'the offset slider follows the clock mode')
   assert.ok(clientSource.includes('const titleHit'), 'searching a group title must keep that group open')
@@ -377,7 +381,7 @@ test('the stars are billboards with a real disc, not square point sprites', () =
   // layer) used to throw inside createStarLayer and blank the whole dome.
   assert.ok(source.includes('starMaterial.positionNode = positionLocal.add(edgeOffset.mul(extent).mul(uStarPxWorld));'), 'the quad is billboarded in the shader')
   assert.ok(source.includes('const spikeOn = smoothstep(float(2.0), float(6.0), aSpike);'), 'faint stars must not grow rays')
-  assert.ok(source.includes('const radius = aSize.mul(0.5);'), 'the bright core is a disc, sized in pixels')
+  assert.ok(source.includes('const radius = aSize.mul(0.62);'), 'the bright core is a disc, sized in pixels')
   assert.ok(!source.includes('crossColorAttr'), 'no leftover attribute references in the star layer')
 })
 
@@ -473,7 +477,7 @@ test('the whole sky inhales together', () => {
   // looked static even though every line was moving. One slow shared envelope
   // gives the sky a breath of its own.
   assert.ok(source.includes('.mul(0.8).add(0.6)'), 'a shared 0.725..1.275 envelope')
-  assert.ok(source.includes('.mul(lineBreath);'), 'applied to the ribbon colour')
+  assert.ok(source.includes('.mul(lineBreath)'), 'applied to the ribbon colour')
   assert.ok(source.includes('sin(uTime.mul(0.21))'), 'about a 30 s period')
 })
 
@@ -490,5 +494,29 @@ test('the breath speed is a dial', () => {
 })
 
 test('star dots grow with the stroke', () => {
-  assert.ok(source.includes('const lineBoost = 0.6 + 0.4 * clamp(uLineWidth.value, 0.2, 4);'), 'dots ride the stroke width')
+  assert.ok(source.includes('const lineBoost = 0.6 + 0.4 * Math.min(4, Math.max(0.2, uLineWidth.value));'), 'dots ride the stroke width')
+  // Handing plain numbers to the node clamp yields a node, and arithmetic on that
+  // is NaN: every dot silently lost its size in 1.5.39 because of it.
+  assert.ok(!source.includes('clamp(uLineWidth.value'), 'the stroke boost must stay plain JavaScript')
+})
+
+test('the panel explains itself and opens folded', () => {
+  // Every control carries a one-line explanation, so "falloff" or "dome share"
+  // does not have to be reverse-engineered from its effect.
+  assert.ok(clientSource.includes('const hint = (key) =>'), 'row builders must add a hint line')
+  assert.ok(clientSource.includes('class="oss-hint"'), 'the hint has its own class')
+  assert.equal((clientSource.match(/hints: \{/g) || []).length, 2, 'both dictionaries carry the hints')
+  assert.ok(clientSource.includes("lineTwinkle: '整个星座一起呼吸的幅度"), 'zh hint text')
+  // A panel element survives being closed, so opening it must fold everything again.
+  assert.ok(clientSource.includes("panel.querySelectorAll('.oss-sec').forEach((section) => {"), 'every open folds the groups')
+  assert.ok(clientSource.includes('section.open = false;'), 'the fold really sets open to false')
+})
+
+test('a leaving hull never vanishes inside the frame', () => {
+  // offStage depends on the depth the hull is at, and a hull still on its way out
+  // can swing to a shallower berth where the edge is nearer; the reach is frozen
+  // at departure instead of being recomputed every frame.
+  assert.ok(source.includes('lane.exitReach = offStage + 4;'), 'the reach is fixed when the hull leaves')
+  assert.ok(source.includes('lane.exitSide * lane.exitReach - lane.away'), 'the exit steers to that fixed reach')
+  assert.ok(source.includes('Math.abs(lane.away) >= lane.exitReach - 0.5'), 'the hull is dropped only past it')
 })

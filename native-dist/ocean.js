@@ -180,7 +180,7 @@ const uCloudSpeed = uniform(1);
 const uCloudOpacity = uniform(1);
 
 // Star art dials (1.5.23): every one is continuous, so the panel never snaps.
-const uStarSize = uniform(8.5);
+const uStarSize = uniform(12);
 const uStarBase = uniform(0.82);
 const uStarHaze = uniform(1);
 const uHaloStrength = uniform(0.28);
@@ -191,7 +191,7 @@ const uTwinkleAmp = uniform(0.3);
 // Real magnitudes (1.5.25): the size floor, how fast size falls off with
 // magnitude, the colour saturation, and the magnitude below which a star gets
 // diffraction spikes instead of a plain point.
-const uStarMin = uniform(3.0);
+const uStarMin = uniform(4.2);
 const uStarFalloff = uniform(0.16);
 const uStarColor = uniform(1.5);
 // billboard basis for the star quads: world units per screen pixel at the star
@@ -199,7 +199,7 @@ const uStarColor = uniform(1.5);
 const uStarPxWorld = uniform(1.0);
 const uStarRight = uniform(new THREE.Vector3(1, 0, 0));
 const uStarUp = uniform(new THREE.Vector3(0, 1, 0));
-const uStarSpikes = uniform(1.6);
+const uStarSpikes = uniform(2.2);
 const uStarFade = uniform(1);
 const uStarDaylight = uniform(0);
 const uStarBias = uniform(0);
@@ -1636,7 +1636,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.39';
+const OCEAN_BUILD = 'lab-1.5.40';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2138,11 +2138,17 @@ function updateBoats(dt) {
       if (lane.exitSide === 0) {
         // Leave by the nearer edge, judged from where the hull is right now.
         lane.exitSide = Math.sign(laneAcross + lane.away) || lane.side;
+        // Freeze the distance here. `offStage` depends on the depth the hull is
+        // at, and a hull still on its way out can swing to a shallower berth
+        // where that edge is much nearer: recomputing it every frame made a
+        // boat disappear while still inside the frame.
+        lane.exitReach = offStage + 4;
       }
-      lane.away += (lane.exitSide * offStage - lane.away) * Math.min(1, dt * laneExit);
-      if (Math.abs(lane.away) >= offStage - 1) {
+      lane.away += (lane.exitSide * lane.exitReach - lane.away) * Math.min(1, dt * laneExit);
+      if (Math.abs(lane.away) >= lane.exitReach - 0.5) {
         // Fully outside the frame: dropping the hull here cannot be seen.
         lane.shown = false;
+        lane.exitReach = 0;
         lane.exitSide = 0;
         lane.away = 0;
         lane.lastAway = 0;
@@ -2342,11 +2348,17 @@ function createStarLayer(scene) {
   // vertices cost nothing next to a line width.
   const segments = [];
   const segmentNames = [];
+  // Which legs sit at the ends of a polyline: only those taper into the star,
+  // otherwise every joint would dim and the figure would look beaded.
+  const capStart = [];
+  const capEnd = [];
   for (const line of CONSTELLATION_LINES) {
     const points = line.points || line;
     for (let i = 1; i < points.length; i += 1) {
       segments.push(points[i - 1], points[i]);
       segmentNames.push(line.name || '');
+      capStart.push(i === 1 ? 1 : 0);
+      capEnd.push(i === points.length - 1 ? 1 : 0);
     }
   }
   const segmentCount = segments.length;
@@ -2413,16 +2425,16 @@ function createStarLayer(scene) {
   // pxDist and aSize are both in pixels: aSize is the disc diameter, so the
   // bright core fades out over one pixel at the rim instead of stretching into
   // a soft blob.
-  const radius = aSize.mul(0.5);
-  const core = smoothstep(radius, radius.sub(0.75), pxDist);
-  const halo = smoothstep(aSize.mul(0.95), aSize.mul(0.45), pxDist).mul(uHaloStrength).mul(0.32);
+  const radius = aSize.mul(0.62);
+  const core = smoothstep(radius, radius.mul(0.45), pxDist);
+  const halo = smoothstep(aSize.mul(1.15), aSize.mul(0.62), pxDist).mul(uHaloStrength).mul(0.4);
   // four rays along the quad axes; the length is per star, so only the bright
   // ones get spikes and the faint ones stay clean dots
   const spikeOn = smoothstep(float(2.0), float(6.0), aSpike);
   const axisGap = min(abs(corner.x), abs(corner.y)).mul(extent);
   const rayCore = smoothstep(float(1.4), float(0.0), axisGap);
   const reach = smoothstep(aSpike, aSpike.mul(0.12).max(1.0), pxDist);
-  const spikeGlow = rayCore.mul(reach).mul(spikeOn).mul(0.9).mul(uCrossGlow);
+  const spikeGlow = rayCore.mul(reach).mul(spikeOn).mul(1.55).mul(uCrossGlow);
   const shape = core.add(halo).add(spikeGlow).min(1.0);
   starMaterial.colorNode = aColor.mul(aGlow).mul(twinkle).mul(uStarGlow).mul(uStarBase).mul(shape);
 
@@ -2439,6 +2451,9 @@ function createStarLayer(scene) {
   const lineGlowAttr = new Float32Array(edgeCount * 8);
   const lineSideAttr = new Float32Array(edgeCount * 8);
   const linePhaseAttr = new Float32Array(edgeCount * 8);
+  const lineAlongAttr = new Float32Array(edgeCount * 8);
+  const lineCapStartAttr = new Float32Array(edgeCount * 8);
+  const lineCapEndAttr = new Float32Array(edgeCount * 8);
   const namePhase = new Map();
   for (let i = 0; i < edgeCount; i += 1) {
     const owner = segmentNames[i] || '';
@@ -2455,6 +2470,9 @@ function createStarLayer(scene) {
   lineGeometry.setAttribute('aLineGlow', new THREE.BufferAttribute(lineGlowAttr, 1));
   lineGeometry.setAttribute('aSide', new THREE.BufferAttribute(lineSideAttr, 1));
   lineGeometry.setAttribute('aLinePhase', new THREE.BufferAttribute(linePhaseAttr, 1));
+  lineGeometry.setAttribute('aAlong', new THREE.BufferAttribute(lineAlongAttr, 1));
+  lineGeometry.setAttribute('aCapStart', new THREE.BufferAttribute(lineCapStartAttr, 1));
+  lineGeometry.setAttribute('aCapEnd', new THREE.BufferAttribute(lineCapEndAttr, 1));
   const lineIndex = new Uint32Array(edgeCount * 12);
   for (let i = 0; i < edgeCount; i += 1) {
     const at = i * 8;
@@ -2464,6 +2482,12 @@ function createStarLayer(scene) {
     lineSideAttr[side + 2] = 0; lineSideAttr[side + 3] = -1;
     lineSideAttr[side + 4] = 0; lineSideAttr[side + 5] = 1;
     lineSideAttr[side + 6] = 1; lineSideAttr[side + 7] = 0;
+    // a-end is along 0, b-end is along 1; caps only exist at polyline ends
+    for (let v = 0; v < 8; v += 1) {
+      lineAlongAttr[side + v] = v === 2 || v === 3 || v === 6 || v === 7 ? 1 : 0;
+      lineCapStartAttr[side + v] = capStart[i] || 0;
+      lineCapEndAttr[side + v] = capEnd[i] || 0;
+    }
     const o = i * 12;
     lineIndex[o + 0] = at + 0; lineIndex[o + 1] = at + 1; lineIndex[o + 2] = at + 2;
     lineIndex[o + 3] = at + 0; lineIndex[o + 4] = at + 2; lineIndex[o + 5] = at + 3;
@@ -2493,11 +2517,17 @@ function createStarLayer(scene) {
   // stops the picture from flashing in unison, this envelope stops it from
   // looking dead when the phases cancel out.
   const lineBreath = sin(uTime.mul(0.21)).mul(0.5).add(0.5).mul(0.8).add(0.6);
+  // A stroke that stops at a hard square leaves a saw-tooth spur beside the star
+  // that is meant to sit there. The outermost legs fade into their dot instead.
+  const lineAlong = attribute('aAlong', 'float');
+  const lineTaper = mix(float(1), smoothstep(0.0, 0.24, lineAlong), attribute('aCapStart', 'float'))
+    .mul(mix(float(1), smoothstep(1.0, 0.76, lineAlong), attribute('aCapEnd', 'float')));
   lineMaterial.colorNode = vec3(0.55, 0.70, 1.0)
     .mul(lineEdge.mul(lineEdge))
     .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.5)
     .mul(float(1).add(lineWobble.mul(uLineTwinkle)))
-    .mul(lineBreath);
+    .mul(lineBreath)
+    .mul(lineTaper);
   const lines = new THREE.Mesh(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
@@ -2578,14 +2608,16 @@ function refreshStarArt(layer) {
     const cut = mag > uStarCut.value;
     // A thick leg that ends in a 1 px dot reads as a broken line, so the dots
     // grow with the stroke instead of ignoring it.
-    const lineBoost = 0.6 + 0.4 * clamp(uLineWidth.value, 0.2, 4);
+    // `clamp` is the node helper: handing it plain numbers returns a node, and
+    // arithmetic on that is NaN. JavaScript clamp for a JavaScript number.
+    const lineBoost = 0.6 + 0.4 * Math.min(4, Math.max(0.2, uLineWidth.value));
     const px = cut ? 0 : starPixelsFor(mag) * lineBoost;
     // spikes reach a couple of dot diameters past the disc; a faint star keeps
     // the same quad but with zero spike length, so it renders as a clean dot
-    const ray = !cut && mag <= spikeLimit ? Math.max(7, px * 2.4) : 0;
+    const ray = !cut && mag <= spikeLimit ? Math.max(14, px * 3.4) : 0;
     // the quad has to cover the halo (1.15 diameters) and the rays; any tighter
     // and the disc gets clipped into a square.
-    const half = Math.max(px * 0.9, ray * 0.75 + 2);
+    const half = Math.max(px * 1.05, ray * 0.85 + 2.5);
     const value = cut ? 0 : starGlowFor(mag);
     // colour modes: 0 = catalogue B-V, 1 = one warm white, 2 = exaggerated split
     const mode = uStarMode.value;
