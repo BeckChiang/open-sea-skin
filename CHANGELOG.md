@@ -1,3 +1,13 @@
+## 1.5.32
+
+修复月相画反的问题：`phase01` 为 0 表示新月，因此 `cos(2*pi*phase)` 在新月时是 +1，
+亮面应出现在 `mx` 大于该余弦值的一侧。原实现用的是相加，等于把明暗界线镜像了一次——
+新月（亮面只有 4%）被画成整轮满月，白天挂在太阳旁边就变成了「两个太阳」。
+
+- 明暗界线改为 `mx - cos(2*pi*phase)`，并在着色器里写明 `phase01` 的取值约定。
+- README / FORK 的记录同步。
+- 新增一条结构测试，锁住「明暗界线减相位余弦」这条不变量。
+
 # Changelog
 
 All notable changes to Open Sea Skin are documented here.

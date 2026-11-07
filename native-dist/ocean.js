@@ -399,7 +399,12 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     // local axis across the disc; computed on the CPU so a moon near the
     // zenith cannot produce a degenerate normalize()
     const mx = dot(d.sub(uMoonDir.mul(md)), uMoonRight).div(MOON_DISC_RADIUS).toVar();
-    const lit = smoothstep(-0.22, 0.22, mx.add(uMoonPhaseCos));
+    // phase01 is 0 at new and 0.5 at full, so cos(2*pi*phase) is +1 at new.
+    // The lit limb is therefore where mx is greater than that cosine: at new the
+    // terminator sits outside the disc (nothing lit), at full it sits behind it
+    // (all lit). Adding instead of subtracting turned every new moon into a
+    // second sun next to the real one.
+    const lit = smoothstep(-0.22, 0.22, mx.sub(uMoonPhaseCos));
     const moonColor = mix(vec3(0.10, 0.12, 0.16), vec3(1, 0.97, 0.9), lit);
     const moonGlow = pow(uMoonVisible, 0.5);
     col.addAssign(moonColor.mul(disc).mul(moonGlow).mul(2.9));
@@ -694,8 +699,9 @@ function syncMoon(now) {
   const ce = Math.cos(el);
   uMoonDir.value.set(ce * Math.sin(az), Math.sin(el), -ce * Math.cos(az));
 
-  // terminator: cos(phase) is +1 at full moon and -1 at new moon. Mirroring it
-  // is the same as mirroring the disc, so the lit limb always faces the sun.
+  // terminator: phase01 runs 0 (new) -> 0.5 (full), so cos(2*pi*phase) is +1 at
+  // new and -1 at full. Mirroring the sign flips which limb is lit, so the lit
+  // side always faces the sun.
   const phaseCos = Math.cos(moon.phase01 * Math.PI * 2);
   let rightX = uMoonDir.value.z;
   let rightZ = -uMoonDir.value.x;
@@ -1593,7 +1599,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.31';
+const OCEAN_BUILD = 'lab-1.5.32';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;

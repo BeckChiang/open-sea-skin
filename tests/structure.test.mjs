@@ -404,3 +404,11 @@ test('the glass pane has six looks and one dial', () => {
   assert.ok(clientSource.includes("const GLASS_STYLES = ['gaussian', 'box', 'double', 'radial', 'frost', 'tile'];"), 'the panel offers the same six')
   assert.ok(clientSource.includes('style: state.glassStyle,'), 'the chosen look is posted with the rects')
 })
+
+test('the moon wears the phase it reports', () => {
+  // phase01 is 0 at new, so cos(2*pi*phase) is +1 there and the lit limb is
+  // where mx sits above it. Adding instead of subtracting mirrored the
+  // terminator and turned a 4% crescent into a second sun next to the real one.
+  assert.ok(source.includes('const lit = smoothstep(-0.22, 0.22, mx.sub(uMoonPhaseCos));'), 'the terminator subtracts the phase cosine')
+  assert.ok(!source.includes('mx.add(uMoonPhaseCos)'), 'the mirrored terminator is gone')
+})
