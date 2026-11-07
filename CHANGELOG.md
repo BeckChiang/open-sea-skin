@@ -1,3 +1,13 @@
+# 2.0.1
+
+## Changed — 打包成可被插件市场收录的形态
+
+- `package.json` 版本 2.0.0 → 2.0.1（渲染代码无改动，只改分发形态与文档）。
+- 安装文档改为「发布包优先」：`dsh plugin add github:BeckChiang/open-sea-skin`，或直接用 Release 上的预构建 tarball；本地 `link:` 退为开发用第二种方式。
+- 克隆地址从已归档的 `open-sea-skin-lab` 更正为本仓库 `open-sea-skin`，本地目录名同步为 `plugins/open-sea-skin`。
+- `cordis.patch.yml` 顶部注释里的安装命令指向本仓库（原先仍写上游 d-dev0101）。
+- 预构建包 `open-sea-skin-2.0.1.tgz`（506 KB，含 `cordis.patch.yml` 与 `dsh.bundle`）挂到 Release，供市场与 `dsh plugin add` 使用。
+
 # 2.0.0
 
 冻结基线。1.5.22 → 1.5.55 的全部改动到此定版，跨机安装包以此为唯一版本。

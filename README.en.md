@@ -1,8 +1,8 @@
-# Open Sea Skin · Lab (2.0.0)
+# Open Sea Skin · Lab (2.0.1)
 
 **A living ocean skin** for DeepSeek Harness Desktop and Web: waves that follow your session load, a sky driven by real ephemeris data, a star field built from a real catalogue, and boats that are your running subagents.
 
-![version](https://img.shields.io/badge/version-2.0.0-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
+![version](https://img.shields.io/badge/version-2.0.1-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
 ---
 
@@ -10,12 +10,12 @@
 
 This project is a **rebuilt fork (Lab branch)** of **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)** (author **d-dev0101**, MIT licence) at version **1.2.7**. It is **not** an official upstream release and is not maintained by upstream.
 
-It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.0.0**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
+It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.0.1**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
 
 - Upstream: [d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · fork point `v1.2.7`
 - Upstream licence: MIT, full text in [`LICENSE`](LICENSE); required third-party notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - Why the fork exists and how to fall back: [`docs/FORK.md`](docs/FORK.md)
-- Current version: **2.0.0** (frozen baseline, tag `v2.0.0`)
+- Current version: **2.0.1** (tag `v2.0.1`; 2.0.0 remains the frozen baseline, tag `v2.0.0`)
 
 ---
 
@@ -42,18 +42,34 @@ Differences worth naming (same integrated-GPU machine):
 
 ## Install
 
-This fork is **not on npm**. It is installed through a local `link:` so edits take effect immediately.
+Two ways to install: the **published package** (normal use) or a **local `link:`** (when you want to edit the renderer).
+
+### Option 1: published package (recommended)
+
+This repository is shaped for the DSH plugin market: `package.json` declares `dsh.bundle` (pointing at `cordis.patch.yml`), a prebuilt tarball is attached to [Releases](https://github.com/BeckChiang/open-sea-skin/releases), and the repo carries the `dsh-plugin` topic.
+
+```powershell
+dsh plugin add github:BeckChiang/open-sea-skin
+```
+
+To skip the source build on your machine, use the prebuilt tarball from the Release (no `allowBuilds` approval needed):
+
+```powershell
+dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.0.1/open-sea-skin-2.0.1.tgz
+```
+
+### Option 2: local link (for development)
 
 1. Clone into the DSH plugin directory:
 
    ```powershell
-   git clone https://github.com/BeckChiang/open-sea-skin-lab.git "$env:USERPROFILE\DSH\plugins\open-sea-skin-lab"
+   git clone https://github.com/BeckChiang/open-sea-skin.git "$env:USERPROFILE\DSH\plugins\open-sea-skin"
    ```
 
 2. Add a `link:` dependency in the DSH profile (`%USERPROFILE%\.dsh\profiles\desktop\package.json`):
 
    ```json
-   "open-sea-skin": "link:C:/Users/<you>/DSH/plugins/open-sea-skin-lab"
+   "open-sea-skin": "link:C:/Users/<you>/DSH/plugins/open-sea-skin"
    ```
 
 3. Restart the desktop app (a change to the host half `plugin/index.js` requires a full restart; client-only changes only need F5).
@@ -61,8 +77,8 @@ This fork is **not on npm**. It is installed through a local `link:` so edits ta
 **Verify**: the console should print
 
 ```text
-[open-sea-skin] client lab-2.0.0
-[open-sea-skin] ocean lab-2.0.0
+[open-sea-skin] client lab-2.0.1
+[open-sea-skin] ocean lab-2.0.1
 ```
 
 ---
