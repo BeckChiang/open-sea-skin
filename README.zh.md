@@ -1,11 +1,11 @@
-# Open Sea Skin · Lab 分支说明（1.5.34）
+# Open Sea Skin · Lab 分支说明（1.5.35）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 
 上游只提供「海面 + 夕阳 + 玻璃界面」；本分支在它的地基上加了四块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**、**可逐项取舍的性能开关**，并把所有能调的参数搬进了设置面板。
 
 - 上游版本：1.2.7（`plugin/client.js` 与 `native-dist/*` 原样起步）
-- 本分支版本：**1.5.34**
+- 本分支版本：**1.5.35**
 - 许可：MIT（见 `LICENSE`）；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`
 - 只在这台机器的 `C:\Users\recko\DSH\plugins\open-sea-skin-lab` 开发，profile 用 `link:` 安装
 
@@ -27,7 +27,7 @@
 ## 2. 安装
 
 ```powershell
-Expand-Archive .\open-sea-skin-lab-1.5.34.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+Expand-Archive .\open-sea-skin-lab-1.5.35.zip -DestinationPath C:\Users\<你>\DSH\plugins\
 ```
 
 然后在 DSH 里安装：
@@ -40,7 +40,7 @@ dsh plugin install C:\Users\<你>\DSH\plugins\open-sea-skin-lab
 
 重启桌面端（或 `F5`），背景应当出现海面。
 
-**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.34` 与 `[open-sea-skin] ocean lab-1.5.34`。
+**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.35` 与 `[open-sea-skin] ocean lab-1.5.35`。
 
 ---
 
@@ -77,7 +77,7 @@ dsh plugin install C:\Users\<你>\DSH\plugins\open-sea-skin-lab
 
 ## 5. 测试
 
-`node:test` 单文件测试（6 个文件，92 条）：
+`node:test` 单文件测试（6 个文件，93 条）：
 
 ```powershell
 node tests/structure.test.mjs
@@ -90,7 +90,7 @@ node tests/sky-astro.test.mjs
 
 注意 `node --test tests/` 在本机会因 spawn 权限失败，逐文件直接跑即可（测试是进程内执行）。
 
-当前：**92 条全绿**（structure 37 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
+当前：**93 条全绿**（structure 37 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
 
 ---
 

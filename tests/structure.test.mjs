@@ -439,5 +439,13 @@ test('the overflow dial is visible at the crest', () => {
   assert.ok(source.includes('const crowns = smoothstep(0.7, 1.02, crestRatio).mul(uOverflow).mul(0.6);'), 'the dial adds crowned tips')
   assert.ok(source.includes('const spray = pow(foamNoise, 5).mul(smoothstep(0.05, 0.55, uOverflow)).mul(0.95);'), 'and blown spray')
   // and the host walks the dial up while the session is merely busy, not at 4x
-  assert.ok(clientSource.includes('overflowValue = Math.min(1, Math.max(0, (ratio - 0.6) / 1.6) * state.overflowGain);'), 'linear from 60% of the ceiling')
+  assert.ok(clientSource.includes('const curve = (value, ceiling) => Math.max(0, (value / ceiling - 0.6) / 1.6);'), 'linear from 60% of the ceiling')
+})
+
+test('over budget counts even while idle', () => {
+  // The caps followed the throughput curve only, so an idle session that had
+  // long passed its cost ceiling showed a calm sea with no caps at all.
+  assert.ok(clientSource.includes('const byBudget = curve(spent, budgetCeiling);'), 'the spend curve always applies')
+  assert.ok(clientSource.includes('overflowValue = Math.min(1, Math.max(byBudget, byRate) * state.overflowGain);'), 'busy rate can only raise it')
+  assert.ok(!clientSource.includes('if (state.waveMode === \'manual\') {\n        overflowValue = 0;'), 'manual mode no longer hides the budget')
 })

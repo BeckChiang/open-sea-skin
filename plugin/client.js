@@ -1348,21 +1348,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         }
       }
 
-      if (state.waveMode === 'manual') {
-        overflowValue = 0;
-      } else {
-        const ceiling = state.waveMode === 'amount'
-          ? Math.max(1, state.amountFull)
-          : Math.max(1, state.r0);
-        const demand = state.waveMode === 'amount'
-          ? Math.max(0, (snapshot && snapshot.costYuan) || 0)
-          : Math.max(0, rate);
-        // 1.5.34: a log curve meant the first visible caps needed ~4x the ceiling.
-        // Linear from 60% of the ceiling to 220% instead: the dial walks up while
-        // the session is still merely busy, which is when it should warn.
-        const ratio = demand / ceiling;
-        overflowValue = Math.min(1, Math.max(0, (ratio - 0.6) / 1.6) * state.overflowGain);
-      }
+      // 1.5.35: Over budget is a fact about the session, not about whether it is
+      // currently producing tokens. In 吞吐 mode an idle session used to report
+      // overflow 0 while the cost had long passed the ceiling, so the caps only
+      // appeared mid-answer and vanished the moment the model stopped.
+      const budgetCeiling = Math.max(1, state.amountFull);
+      const spent = Math.max(0, (snapshot && snapshot.costYuan) || 0);
+      const rateCeiling = Math.max(1, state.r0);
+      const curve = (value, ceiling) => Math.max(0, (value / ceiling - 0.6) / 1.6);
+      // the spend curve always applies; the throughput curve adds to it while busy
+      const byBudget = curve(spent, budgetCeiling);
+      const byRate = state.waveMode === 'manual' ? 0 : curve(Math.max(0, rate), rateCeiling);
+      overflowValue = Math.min(1, Math.max(byBudget, byRate) * state.overflowGain);
 
       // The cost curve is `log1p(yuan)/log1p(amountFull)`, which goes past 1 as soon
       // as the session spends more than the threshold. Sent unclamped, the ocean
@@ -2254,7 +2251,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.34';
+  const SKIN_BUILD = 'lab-1.5.35';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
