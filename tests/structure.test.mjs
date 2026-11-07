@@ -570,3 +570,23 @@ test('the milky way carries its own stars', () => {
   assert.ok(source.includes('.mul(bandDensity);'), 'and the gate uses it')
   assert.ok(source.includes('vec3(0.072, 0.067, 0.090).mul(band)'), 'band body colour')
 })
+
+test('the panel can adopt the current look as its defaults', () => {
+  assert.ok(clientSource.includes('let baseline = null;'), 'a baseline slot exists')
+  assert.ok(clientSource.includes("baseline: 'ossBaseline'"), 'and it is a persisted key, not a private variable')
+  assert.ok(clientSource.includes("const base = baseline ? { ...baseline } : { ...DEFAULTS };"), 'reset prefers the baseline')
+  assert.ok(clientSource.includes('delete base.savedAt;'), 'the stamp never leaks into the settings')
+})
+
+test('the columns can point at themselves', () => {
+  // "left / conversation / right" is meaningless without showing the boxes
+  assert.ok(clientSource.includes('const previewColumns = () => {'), 'a preview exists')
+  assert.ok(clientSource.includes("className = 'oss-colmap'"), 'and draws real boxes')
+  assert.ok(clientSource.includes('const measureAllColumns = () => {'), 'measuring ignores the on/strength gates')
+})
+
+test('every performance dial explains itself', () => {
+  assert.ok(clientSource.includes("qualityMode: '画质档位：高 = 1.5× 像素比"), 'quality tiers are spelled out')
+  assert.ok(clientSource.includes("fpsMode: '帧率上限：显卡每秒最多画多少帧"), 'and so is the frame cap')
+  assert.ok(clientSource.includes("left: '左侧栏（会话/项目列表）。'"), 'columns are named in plain words')
+})

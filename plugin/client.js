@@ -126,7 +126,12 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       enable: '启用海洋皮肤',
       autoCycle: '自动昼夜循环',
       reset: '恢复默认',
-      resetNote: '恢复全部默认设置（波浪 45 / 日光 55 / 玻璃 72 / 自动循环开）',
+      resetNote: '恢复默认：有自己保存的默认就用它，否则回到内置值（波浪 45 / 日光 55 / 玻璃 72 / 自动循环开）',
+      makeDefault: '把当前设置设为默认',
+      defaultBuiltin: '当前默认：内置值。',
+      defaultSaved: '当前默认：{at} 保存的快照。',
+      previewCols: '预览三栏范围（2.6 秒）',
+      colsNote: '强度 0 或关掉开关 = 该栏不模糊。点上面按钮会在屏幕上框出三栏的真实区域。',
       note: '调节即时生效并自动保存。波浪与日照都按下面的设置实时驱动。',
       times: ['黄昏', '金色时刻', '下午', '正午'],
       secSkin: '皮肤',
@@ -144,6 +149,18 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: '毛玻璃',
     frost: '背景模糊',
     hints: {
+      qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 45；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
+      fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
+      glow: '泛光强度：地平线、太阳与月光的高光溢出。0 = 关掉整个 1/4 分辨率泛光 pass。',
+      glassMode: '渲染器内 = 毛玻璃在 WebGPU 里做（可逐栏、可调半径）；CSS 模糊 = 交给浏览器，省 GPU 但只有一档。',
+      glassStyle: '模糊的取样形状：高斯最自然、盒式最省、双层更厚、径向中间清楚边缘糊、磨砂有颗粒、玻璃砖成块。',
+      perf: '性能模式：一键关掉毛玻璃与额外采样，只保留海面与天空。',
+      frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
+      cols: {
+        left: '左侧栏（会话/项目列表）。',
+        center: '交互区（中间的对话与输入）。',
+        right: '右侧栏（文件与预览面板，未打开时不生效）。',
+      },
       skyDist: '把整片天空压进一个更宽的角度；1 倍是真实视场，2 倍能看到更多星座。',
       stars: '星点的总亮度。0 关闭星空，150% 最亮。',
       starSize: '最亮那颗星（星等 0）的直径，暗星按星等缩小。',
@@ -312,7 +329,12 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       enable: 'Enable Open Sea skin',
       autoCycle: 'Automatic day cycle',
       reset: 'Reset to defaults',
-      resetNote: 'Restore all defaults (sea 45 / daylight 55 / glass 72 / auto cycle on)',
+      resetNote: 'Restore: your saved baseline if you have one, otherwise the built-in values (sea 45 / daylight 55 / glass 72 / auto cycle on)',
+      makeDefault: 'Use current settings as defaults',
+      defaultBuiltin: 'Defaults: built-in values.',
+      defaultSaved: 'Defaults: snapshot saved {at}.',
+      previewCols: 'Preview the three columns (2.6 s)',
+      colsNote: 'Strength 0 or the switch off means that column stays sharp. The button above outlines the real areas on screen.',
       note: 'Changes apply immediately and save automatically.',
       times: ['Dusk', 'Golden hour', 'Afternoon', 'Midday'],
       secSkin: 'Skin',
@@ -330,6 +352,18 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: 'Frosted glass',
     frost: 'Background blur',
     hints: {
+      qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 45; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
+      fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
+      glow: 'Bloom strength on the horizon, sun and moon. At 0 the whole quarter-resolution bloom pass is skipped.',
+      glassMode: 'Renderer = blur inside WebGPU (per column, real radius); CSS = the browser does it: cheaper, one radius only.',
+      glassStyle: 'Kernel shape: gaussian is the most natural, box the cheapest, double thicker, radial sharp centre, frost grainy, tile blocky.',
+      perf: 'Performance mode: drops the glass and extra taps, keeps water and sky.',
+      frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
+      cols: {
+        left: 'Left column: the session and project list.',
+        center: 'Conversation: the chat and composer in the middle.',
+        right: 'Right column: files and preview. Has no effect while it is closed.',
+      },
       skyDist: 'Packs the sky into a wider angle; 1x is the real field, 2x folds in more constellations.',
       stars: 'Overall star brightness. 0 hides the sky, 150% is the brightest.',
       starSize: 'Diameter of a magnitude-0 star; fainter ones shrink along the scale.',
@@ -943,6 +977,16 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       surfaceCleanups.push(() => target.removeEventListener(event, listener, settings));
     };
 
+    // A saved baseline: "make what I have now the defaults" without shipping a
+    // release. Reset reads this first and only falls back to the built-in table.
+    let baseline = null;
+    const baselineStamp = () => {
+      if (!baseline || !baseline.savedAt) return '';
+      const at = new Date(baseline.savedAt);
+      const pad = (n) => String(n).padStart(2, '0');
+      return at.getFullYear() + '-' + pad(at.getMonth() + 1) + '-' + pad(at.getDate()) + ' ' + pad(at.getHours()) + ':' + pad(at.getMinutes());
+    };
+
     const save = (patch) => {
       state = normalize({ ...state, ...patch });
       return Promise.resolve(options.storage.set(patch)).catch((error) => {
@@ -1059,6 +1103,45 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         };
       };
       return [pick('colLeft'), pick('colCenter'), pick('colRight')].filter(Boolean).slice(0, 3);
+    };
+
+    // Same selectors as the renderer pass, but ignoring the on/strength gates:
+    // the preview has to show a column even when it is currently switched off.
+    const measureAllColumns = () => {
+      const pick = (key) => {
+        const element = COLUMN_SELECTORS[key]
+          .map((selector) => document.querySelector(selector))
+          .find((candidate) => {
+            if (!(candidate instanceof HTMLElement)) return false;
+            const rect = candidate.getBoundingClientRect();
+            return rect.width > 8 && rect.height > 8;
+          });
+        if (!(element instanceof HTMLElement)) return null;
+        const rect = element.getBoundingClientRect();
+        return { key, x0: rect.left, y0: rect.top, x1: rect.right, y1: rect.bottom };
+      };
+      return ['colLeft', 'colCenter', 'colRight'].map(pick);
+    };
+
+    // One click to see which three boxes the strength dials actually talk about.
+    const previewColumns = () => {
+      for (const node of document.querySelectorAll('.oss-colmap')) node.remove();
+      const labels = { colLeft: copy.cols.left, colCenter: copy.cols.center, colRight: copy.cols.right };
+      for (const rect of measureAllColumns()) {
+        if (!rect) continue;
+        const box = document.createElement('div');
+        box.className = 'oss-colmap';
+        box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483000;border:2px dashed rgba(143,233,228,.85);border-radius:10px;box-shadow:inset 0 0 0 9999px rgba(143,233,228,.06);'
+          + 'left:' + rect.x0 + 'px;top:' + rect.y0 + 'px;width:' + (rect.x1 - rect.x0) + 'px;height:' + (rect.y1 - rect.y0) + 'px;';
+        const chip = document.createElement('span');
+        chip.textContent = labels[rect.key] || rect.key;
+        chip.style.cssText = 'position:absolute;left:8px;top:8px;padding:2px 7px;border-radius:6px;background:rgba(10,20,26,.82);color:#c9fffb;font-size:11px;line-height:1.6;';
+        box.append(chip);
+        document.body.append(box);
+      }
+      window.setTimeout(() => {
+        for (const node of document.querySelectorAll('.oss-colmap')) node.remove();
+      }, 2600);
     };
 
     const postGlass = () => {
@@ -1707,14 +1790,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${colRow(pid('col-left'), 'cols.left')}
           ${colRow(pid('col-center'), 'cols.center')}
           ${colRow(pid('col-right'), 'cols.right')}
-          ${switchRow(pid('perf'), 'perf')}
+          <div class="oss-row"><button type="button" class="oss-reset" id="${pid('cols-preview')}" data-copy="previewCols"></button></div>
+<p class="oss-sub" data-copy="colsNote"></p>
+${switchRow(pid('perf'), 'perf')}
           <p class="oss-sub" data-copy="glassNote"></p>`)}
         ${group('secAdvanced', `
           <p class="oss-sub" data-copy="perfGroup"></p>
           ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
           ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
         ${segRow(pid('fps'), 'fpsMode', [['24', 'fps.24'], ['30', 'fps.30'], ['45', 'fps.45'], ['60', 'fps.60']])}
-          <div class="oss-row"><button type="button" class="oss-reset" data-copy="reset"></button></div>
+          <div class="oss-row"><button type="button" class="oss-reset" id="${pid('make-default')}" data-copy="makeDefault"></button></div>
+          <p class="oss-sub" id="${pid('default-out')}"></p>
+          <div class="oss-row"><button type="button" class="oss-reset" id="${pid('reset')}" data-copy="reset"></button></div>
           <p class="oss-sub" data-copy="resetNote"></p>`)}
         <p class="oss-note" data-copy="note"></p>`;
 
@@ -1733,7 +1820,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const daylightBox = el('stars-daylight');
       const latInput = el('lat');
       const lonInput = el('lon');
-      const resetBtn = panel.querySelector('.oss-reset');
+      const resetBtn = panel.querySelector('#' + pid('reset'));
       const searchBox = el('search');
 
       const segWave = el('wave-mode');
@@ -2083,11 +2170,32 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         updateGlass();
         postGlass();
       });
+      const makeDefaultBtn = el('make-default');
+      const defaultOut = el('default-out');
+      const refreshDefaultOut = () => {
+        if (!defaultOut) return;
+        defaultOut.textContent = baseline
+          ? copy.defaultSaved.replace('{at}', baselineStamp())
+          : copy.defaultBuiltin;
+      };
+      if (makeDefaultBtn) on(makeDefaultBtn, 'click', () => {
+        const snapshot = { ...state, savedAt: Date.now() };
+        baseline = snapshot;
+        void options.storage.set({ baseline: snapshot });
+        refreshDefaultOut();
+      });
+      refreshDefaultOut();
+
+      const colsPreviewBtn = el('cols-preview');
+      if (colsPreviewBtn) on(colsPreviewBtn, 'click', previewColumns);
+
       on(resetBtn, 'click', () => {
         // Resetting should put the look back, not revoke the location the browser
         // already granted: wiping lat/lon sent the sky back to the fallback city
         // and asked for permission again on the next launch.
-        void save({ ...DEFAULTS, lat: state.lat, lon: state.lon }).then(() => {
+        const base = baseline ? { ...baseline } : { ...DEFAULTS };
+        delete base.savedAt;
+        void save({ ...base, lat: state.lat, lon: state.lon }).then(() => {
           seaValue = state.sea;
           refresh();
           applyEnabled();
@@ -2225,6 +2333,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // A reload is a new session: the manual clock re-seeds to the wall clock, so
       // a page that was left on a manual midnight opens on the real time of day.
       if (state.sunMode === 'manual') state.time = nowMinutes();
+      try {
+        const stored = await options.storage.get({ baseline: null });
+        if (stored && stored.baseline && typeof stored.baseline === 'object') baseline = stored.baseline;
+      } catch (error) {
+        console.warn('[Open Sea Skin] Failed to load the saved defaults.', error);
+      }
       seaValue = state.sea;
       applyEnabled();
       // the sea follows the session even when no panel is mounted
@@ -2255,6 +2369,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
 
   const KEYS = Object.freeze({
+    baseline: 'ossBaseline',
     enabled: 'ossEnabled',
     sea: 'ossSea',
     time: 'ossTime',
@@ -2321,7 +2436,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight', 'frost']);
-  const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
+  const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight', 'baseline']);
   const NULLABLE_KEYS = new Set(['lat', 'lon']);
   const TEXT_KEYS = new Set([
     'waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode',
@@ -2399,7 +2514,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.47';
+  const SKIN_BUILD = 'lab-1.5.48';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
