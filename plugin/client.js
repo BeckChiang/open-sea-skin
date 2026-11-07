@@ -771,9 +771,14 @@ ${blurCss(state)}`;
 
   // The panel and its button are glass as well: give them the same radius the
   // columns use, so "blur 0" really means a crisp window everywhere.
+  // The panel always keeps a working blur: it is the control surface, and a
+  // 300px card of text over moving water is not readable without one. The
+  // master switch and the radius still govern the columns and the shell.
+  const PANEL_BLUR_FLOOR = 9;
   function paneBlur(state) {
-    if (!state.frost || state.perf) return 0;
-    return Math.max(0, Math.round(state.glassRadius * 0.85));
+    if (state.perf) return 0;
+    const wanted = Math.max(0, Math.round(state.glassRadius * 0.85));
+    return state.frost ? Math.max(PANEL_BLUR_FLOOR, wanted) : PANEL_BLUR_FLOOR;
   }
 
   function uiCss(state) {
@@ -2389,7 +2394,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.45';
+  const SKIN_BUILD = 'lab-1.5.46';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

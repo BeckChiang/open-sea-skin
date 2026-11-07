@@ -548,3 +548,11 @@ test('the panel CSS builds its own fill alpha', () => {
   assert.ok(clientSource.slice(uiStart, uiStart + 400).includes('const paneAlpha'), 'uiCss declares it')
   assert.ok(!clientSource.slice(glassStart, glassStart + 400).includes('const paneAlpha'), 'glassCss does not')
 })
+
+test('the settings panel keeps a readable floor of blur', () => {
+  // Turning every frosted surface off left the panel with no backdrop filter at
+  // all, so a 300px text card sat directly on moving water.
+  assert.ok(clientSource.includes('const PANEL_BLUR_FLOOR = 9;'), 'the floor exists')
+  assert.ok(clientSource.includes('return state.frost ? Math.max(PANEL_BLUR_FLOOR, wanted) : PANEL_BLUR_FLOOR;'), 'the switch cannot drop it')
+  assert.ok(!clientSource.includes('if (!state.frost || state.perf) return 0;'), 'the old early return is gone')
+})
