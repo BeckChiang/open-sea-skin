@@ -93,6 +93,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: true,
   glassMode: 'render',
     glassRadius: 20,
+    chatFill: 40,
     colLeft: Object.freeze({ on: true, strength: 28 }),
     colRight: Object.freeze({ on: true, strength: 28 }),
     perf: false,
@@ -190,6 +191,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: '云的漂移速度。',
       cloudOpacity: '云的不透明度。',
       glassRadius: '背景模糊的真实半径（像素）。',
+      chatFill: '给中间对话区铺一层底色。0 = 全透明、海面直接透过来；40 左右接近侧栏观感。气泡、代码块、输入框不受影响。',
       glow: '泛光强度，0 关闭，能省一点 GPU。',
       quality: '画质档位：影响像素比与分辨率自适应。',
       fps: '帧率上限，越低越省电。',
@@ -292,6 +294,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: '漂移速度',
       cloudOpacity: '不透明度',
       glassRadius: '模糊半径',
+    chatFill: '对话区底色',
       perfGroup: '性能',
   fpsMode: '帧率上限',
   fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
@@ -396,6 +399,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: 'How fast the cloud drifts.',
       cloudOpacity: 'How solid the cloud looks.',
       glassRadius: 'Real blur radius of the background, in pixels.',
+      chatFill: 'Paints a base under the conversation column. 0 keeps it fully transparent so the sea shows through; ~40 reads like the rails.',
       glow: 'Bloom strength; 0 turns it off and saves a little GPU.',
       quality: 'Pixel ratio and adaptive resolution: high / balanced / saver.',
       fps: 'Frame rate ceiling; lower is cheaper.',
@@ -498,6 +502,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       cloudSpeed: 'Drift speed',
       cloudOpacity: 'Opacity',
       glassRadius: 'Blur radius',
+    chatFill: 'Conversation tint',
       perfGroup: 'Performance',
   fpsMode: 'Frame rate',
   fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
@@ -641,6 +646,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
         24,
         Number.isFinite(LEGACY_GLASS_PX[source.glassLevel]) ? LEGACY_GLASS_PX[source.glassLevel] : DEFAULTS.glassRadius,
       ),
+      chatFill: clamp(source.chatFill, 0, 100, DEFAULTS.chatFill),
       colLeft: normalizeColumn(source.colLeft, DEFAULTS.colLeft),
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
       perf: source.perf === true,
@@ -698,6 +704,7 @@ ${column('body [data-rightbar-col], body .dshDesktopDetailsSurface', 'colRight')
 
   function glassCss(glass, state) {
     const light = glass / 100;
+    const chatFill = clamp((state && state.chatFill) || 0, 0, 100, 0) / 100 * 0.92;
     const dark = Math.max(0.40, light - 0.12);
     return `
 /* Open Sea Skin: one translucent shell; nested fills must not compound.
@@ -796,6 +803,16 @@ body :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]
 }
 body[data-ds-dark-theme] :is([data-shortcut-modal="settings"], [role="dialog"], [role="alertdialog"]):not(#${IDS.panel}) {
   background: rgba(24, 28, 35, .97) !important;
+}
+/* The conversation column is shell, not a card: the rules above clear it so
+   the sea shows through. This paints it back when the dial asks for it, with
+   higher specificity than those clears (two ids), and leaves bubbles, cards
+   and the composer to their own tokens. */
+body:not(#none) #root [data-slot="main.conversation"] {
+  background: rgba(9, 12, 16, ${alpha(chatFill)}) !important;
+}
+body:not(#none):not([data-ds-dark-theme]) #root [data-slot="main.conversation"] {
+  background: rgba(250, 251, 253, ${alpha(chatFill)}) !important;
 }
 /* Legacy Harness builds: these CSS-module hashes are best-effort fallbacks. */
 .wSkVaW_root,
@@ -1819,6 +1836,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
           ${segRow(pid('glass-style'), 'glassStyle', [['gaussian', 'glassStyles.gaussian'], ['box', 'glassStyles.box'], ['double', 'glassStyles.double'], ['radial', 'glassStyles.radial'], ['frost', 'glassStyles.frost'], ['tile', 'glassStyles.tile']])}
           ${rangeRow(pid('glass-range'), 'glass', 0, 100, 1)}
+          ${rangeRow(pid('chat-fill'), 'chatFill', 0, 100, 1)}
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
                     ${colRow(pid('col-left'), 'cols.left')}
                     ${colRow(pid('col-right'), 'cols.right')}
@@ -1933,6 +1951,7 @@ ${switchRow(pid('perf'), 'perf')}
         ['boat-pace', 'boatPace', 1, 'mul'],
         ['boat-scale', 'boatScale', 1, 'mul'],
         ['glass-range', 'glass', 0, 'pct'],
+        ['chat-fill', 'chatFill', 0, 'pct'],
         ['glass-radius', 'glassRadius', 1, 'px'],
         ['glow', 'glow', 0, 'pct'],
       ];
@@ -2044,7 +2063,7 @@ ${switchRow(pid('perf'), 'perf')}
         'lineFadeDeg', 'meteor', 'meteorRate', 'meteorBright', 'clouds', 'cloudSpeed', 'cloudOpacity',
         'tzOffset', 'moon', 'lat', 'lon', 'quality', 'glow', 'fps',
       ]);
-      const GLASS_KEYS = new Set(['glass', 'glassRadius', 'glassMode', 'perf']);
+      const GLASS_KEYS = new Set(['glass', 'glassRadius', 'glassMode', 'perf', 'chatFill']);
       const BOAT_KEYS = new Set(['boats', 'boatSpread', 'boatPace', 'boatScale']);
 
       for (const [id, key, , kind] of RANGE_ROWS) {
@@ -2473,6 +2492,7 @@ ${switchRow(pid('perf'), 'perf')}
     cloudSpeed: 'ossCloudSpeed',
     cloudOpacity: 'ossCloudOpacity',
     glassRadius: 'ossGlassRadius',
+    chatFill: 'ossChatFill',
     tzMode: 'ossTzMode',
     tzOffset: 'ossTzOffset',
     quality: 'ossQuality',
@@ -2559,7 +2579,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.53';
+  const SKIN_BUILD = 'lab-1.5.54';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

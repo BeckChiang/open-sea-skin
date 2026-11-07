@@ -621,3 +621,12 @@ test('glass only dresses the two rails, and nothing draws over the UI', () => {
   assert.ok(clientSource.includes("colLeft: ["), 'the left rail is measured')
   assert.ok(clientSource.includes("colRight: ['[data-rightbar-col]"), 'and the right one')
 })
+
+test('the conversation column can wear a base, and only that column', () => {
+  assert.ok(clientSource.includes('    chatFill: 40,'), 'the dial defaults to a visible tint')
+  assert.ok(clientSource.includes("body:not(#none) #root [data-slot=\"main.conversation\"]"), 'the paint is scoped to the conversation slot')
+  assert.ok(clientSource.includes("['chat-fill', 'chatFill', 0, 'pct'],"), 'it has a dial in the glass group')
+  assert.ok(clientSource.includes("'perf', 'chatFill']"), 'and it redraws on change')
+  assert.ok(clientSource.includes("chatFill: 'ossChatFill',"), 'the choice persists')
+  assert.ok(clientSource.includes('chatFill: clamp(source.chatFill, 0, 100, DEFAULTS.chatFill),'), 'normalise keeps it')
+})
