@@ -1,11 +1,11 @@
-# Open Sea Skin · Lab 分支说明（1.5.49 · 基线版）
+# Open Sea Skin · Lab 分支说明（1.5.50 · 基线版）
 
 这是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT，作者 d-dev0101）1.2.7 的**个人分支**，装在 DSH 桌面版的 `desktop` profile 里。
 
 上游只提供「海面 + 夕阳 + 玻璃界面」；本分支在它的地基上加了五块：**负载驱动的波浪**、**真实天文的天色与星空**、**跟着会话变化的船队**、**可逐项取舍的性能开关**、**可折叠且带解释的设置面板**。
 
 - 上游版本：1.2.7
-- 本分支版本：**1.5.49**（本文档即该版本的完整说明，作为基线）
+- 本分支版本：**1.5.50**（本文档即该版本的完整说明，作为基线）
 - 许可：MIT（见 `LICENSE`）；上游必须保留的署名见 `THIRD_PARTY_NOTICES.md`
 - 开发位置：`C:\Users\recko\DSH\plugins\open-sea-skin-lab`，profile 用 `link:` 安装
 - 默认档：**画质「省电」（0.85× 像素比）+ 24 fps 上限**，夜间核显占用多数时候低于 20%
@@ -29,7 +29,7 @@
 
 1. 解压到 DSH 插件目录（与已有目录合并）：
    ```powershell
-   Expand-Archive .\open-sea-skin-lab-1.5.49.zip -DestinationPath C:\Users\<你>\DSH\plugins\
+   Expand-Archive .\open-sea-skin-lab-1.5.50.zip -DestinationPath C:\Users\<你>\DSH\plugins\
    ```
 2. 在 profile 里 `link:` 指向该目录（`C:\Users\<你>\.dsh\profiles\desktop\package.json`）：
    ```json
@@ -37,7 +37,7 @@
    ```
 3. 重启桌面端或按 F5 刷新窗口。
 
-**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.49` 与 `[open-sea-skin] ocean lab-1.5.49`。
+**确认生效**：控制台第一行有 `[open-sea-skin] client lab-1.5.50` 与 `[open-sea-skin] ocean lab-1.5.50`。
 
 ---
 
@@ -89,7 +89,14 @@
 
 强度 0 或关掉该栏开关 = 那一栏不模糊。总开关关掉后三栏全不糊，但设置面板仍保留 9 px 底模糊，否则面板压在流动海面上读不清。
 
-### 3.4 默认快照
+### 3.4 分栏分割线（新增）
+
+模糊只能让一栏变糊，看不出它到哪儿结束。毛玻璃组的「分栏分割线」会在**左侧栏/交互区**和**交互区/右侧栏**的边界各画一条 1 px 细线，并用「侧栏压暗」把两侧栏压暗一档（0 = 只留线）。
+
+- 交互区定义：中间那块**会话窗口**——对话列表与底部输入框都算；它本身通常没有独立容器，所以边界取左右两栏的边缘（或它们之间的空档）。
+- 这条线不受模糊开关影响：关掉背景模糊，线仍在，用来确认中间和两侧到底是哪三块。
+
+### 3.5 默认快照
 
 高级组 →「把当前设置设为默认」：把眼下的整份设置存成默认（写入 `ossBaseline`），此后「恢复默认」优先读它，下方会显示「当前默认：内置值」或「当前默认：某日某时保存的快照」。重置会保留定位授权，不会清空经纬度。
 
@@ -114,7 +121,7 @@ node scripts/build-runtime.mjs            # shared/ + plugin/ → native-dist/
 node tests/structure.test.mjs             # 每个文件单独跑，node --test 会 EPERM
 ```
 
-`node:test` 单文件测试（6 个文件，110 条）：
+`node:test` 单文件测试（6 个文件，111 条）：
 
 | 文件 | 覆盖 |
 |---|---|
@@ -125,7 +132,7 @@ node tests/structure.test.mjs             # 每个文件单独跑，node --test 
 | `tests/solar.test.mjs` | 14 条：日月星历、暮光次序、档位解析 |
 | `tests/sky-astro.test.mjs` | 12 条：坐标变换与恒星时 |
 
-当前：**110 条全绿**（structure 61 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
+当前：**111 条全绿**（structure 62 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12）。
 
 ---
 

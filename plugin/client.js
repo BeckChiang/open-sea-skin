@@ -91,6 +91,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     glow: 55,
     glassStyle: 'gaussian',
     frost: true,
+    seam: true,
+    seamDim: 55,
   glassMode: 'render',
     glassRadius: 20,
     colLeft: Object.freeze({ on: true, strength: 28 }),
@@ -152,6 +154,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatOff: '已关闭船只',
       secGlass: '毛玻璃',
     frost: '背景模糊',
+    seam: '分栏分割线',
+    seamDim: '侧栏压暗',
     hints: {
       qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 45；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
       fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
@@ -160,6 +164,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassStyle: '模糊的取样形状：高斯最自然、盒式最省、双层更厚、径向中间清楚边缘糊、磨砂有颗粒、玻璃砖成块。',
       perf: '性能模式：一键关掉毛玻璃与额外采样，只保留海面与天空。',
       frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
+      seam: '在左侧栏 / 交互区、交互区 / 右侧栏之间画一条细线，并把两侧栏压暗一档——模糊看不出边界，线可以。',
+      seamDim: '两侧栏压暗的强度。0 只留分割线。',
       cols: {
         left: '左侧栏（会话/项目列表）。',
         center: '交互区（左右两栏之间的对话与输入）。若没有独立容器，预览会按两条侧栏之间的空档估算，用橙色框并标「≈」。',
@@ -359,6 +365,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatOff: 'Boats off',
       secGlass: 'Frosted glass',
     frost: 'Background blur',
+    seam: 'Column dividers',
+    seamDim: 'Dim side rails',
     hints: {
       qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 45; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
       fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
@@ -367,6 +375,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassStyle: 'Kernel shape: gaussian is the most natural, box the cheapest, double thicker, radial sharp centre, frost grainy, tile blocky.',
       perf: 'Performance mode: drops the glass and extra taps, keeps water and sky.',
       frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
+      seam: 'Draws a hairline between the rails and the conversation, and dims the rails a step: blur has no edge, a line does.',
+      seamDim: 'How much the rails are dimmed. 0 leaves only the hairline.',
       cols: {
         left: 'Left column: the session and project list.',
         center: 'Conversation: the chat and composer between the two rails. When it has no container of its own the preview estimates the gap and marks it with a tilde.',
@@ -1145,6 +1155,47 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       return found;
     };
 
+    // Blur alone cannot say where a column ends, so draw the boundary: one line
+    // at each rail edge plus a slight shading of the rails themselves.
+    const SEAM_ID = 'oss-seam';
+    const updateSeam = () => {
+      const existing = document.getElementById(SEAM_ID);
+      const found = measureAllColumns();
+      const left = found[0];
+      const right = found[2];
+      const edges = [];
+      if (left) edges.push(left.x1);
+      if (right) edges.push(right.x0);
+      if (!state.seam || !edges.length) {
+        if (existing) existing.remove();
+        return;
+      }
+      const layer = existing || document.createElement('div');
+      layer.id = SEAM_ID;
+      layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147480000;';
+      const dim = clamp(state.seamDim, 0, 100, 0) / 100;
+      let html = '';
+      for (const x of edges) {
+        html += `<i style="position:absolute;top:0;bottom:0;left:${Math.round(x)}px;width:1px;background:linear-gradient(180deg,rgba(143,233,228,0),rgba(143,233,228,.55) 16%,rgba(143,233,228,.55) 84%,rgba(143,233,228,0));box-shadow:0 0 10px rgba(120,214,232,.35);"></i>`;
+      }
+      if (dim > 0.02) {
+        for (const rail of [left, right]) {
+          if (!rail) continue;
+          const w = Math.max(0, Math.round(rail.x1 - rail.x0));
+          const h = Math.max(0, Math.round(rail.y1 - rail.y0));
+          html += `<b style="position:absolute;left:${Math.round(rail.x0)}px;top:${Math.round(rail.y0)}px;width:${w}px;height:${h}px;border-radius:12px;background:rgba(2,8,14,.85);opacity:${(dim * 0.45).toFixed(2)};"></b>`;
+        }
+      }
+      layer.innerHTML = html;
+      if (!existing) document.body.appendChild(layer);
+    };
+
+    let seamTimer = 0;
+    on(window, 'resize', () => {
+      window.clearTimeout(seamTimer);
+      seamTimer = window.setTimeout(updateSeam, 180);
+    });
+
     // One click to see which three boxes the strength dials actually talk about.
     // What the renderer is actually running at (the dial only asks): the panel
     // should answer "is the cheap tier in effect?" without opening devtools.
@@ -1839,6 +1890,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${segRow(pid('glass-style'), 'glassStyle', [['gaussian', 'glassStyles.gaussian'], ['box', 'glassStyles.box'], ['double', 'glassStyles.double'], ['radial', 'glassStyles.radial'], ['frost', 'glassStyles.frost'], ['tile', 'glassStyles.tile']])}
           ${rangeRow(pid('glass-range'), 'glass', 0, 100, 1)}
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
+          ${switchRow(pid('seam'), 'seam')}
+          ${rangeRow(pid('seam-dim'), 'seamDim', 0, 100, 5)}
           ${colRow(pid('col-left'), 'cols.left')}
           ${colRow(pid('col-center'), 'cols.center')}
           ${colRow(pid('col-right'), 'cols.right')}
@@ -1867,6 +1920,7 @@ ${switchRow(pid('perf'), 'perf')}
       const moonBox = el('moon');
       const perfBox = el('perf');
       const frostBox = el('frost');
+    const seamBox = el('seam');
       const milkyOut = el('milky-out');
       const boatsBox = el('boats');
       const meteorBox = el('meteor');
@@ -1942,6 +1996,7 @@ ${switchRow(pid('perf'), 'perf')}
         ['glass-range', 'glass', 0, 'pct'],
         ['glass-radius', 'glassRadius', 1, 'px'],
         ['glow', 'glow', 0, 'pct'],
+      ['seam-dim', 'seamDim', 0, 'pct'],
       ];
 
       // One formatter per kind of value; the panel never shows a raw float.
@@ -1973,6 +2028,7 @@ ${switchRow(pid('perf'), 'perf')}
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
         if (frostBox) frostBox.checked = state.frost;
+        if (seamBox) seamBox.checked = state.seam !== false;
         if (meteorBox) meteorBox.checked = state.meteor;
       if (daylightBox) daylightBox.checked = state.starsDaylight;
         if (boatsBox) boatsBox.checked = state.boats;
@@ -2218,6 +2274,11 @@ ${switchRow(pid('perf'), 'perf')}
         updateGlass();
         postGlass();
       });
+      on(seamBox, 'change', () => {
+        state = normalize({ ...state, seam: seamBox.checked });
+        void save({ seam: state.seam });
+        updateSeam();
+      });
       on(frostBox, 'change', () => {
         void save({ frost: frostBox.checked });
         updateGlass();
@@ -2242,6 +2303,7 @@ ${switchRow(pid('perf'), 'perf')}
         if (perfOut) perfOut.textContent = perfText();
       };
       refreshPerfOut();
+      updateSeam();
       const perfTimer = window.setInterval(refreshPerfOut, 1500);
       surfaceCleanups.push(() => window.clearInterval(perfTimer));
       const perfTick = (now) => {
@@ -2456,6 +2518,8 @@ ${switchRow(pid('perf'), 'perf')}
     meteor: 'ossMeteor',
     clouds: 'ossClouds',
     frost: 'ossFrost',
+    seam: 'ossSeam',
+    seamDim: 'ossSeamDim',
     glassMode: 'ossGlassMode',
     colLeft: 'ossColLeft',
     colCenter: 'ossColCenter',
@@ -2501,7 +2565,7 @@ ${switchRow(pid('perf'), 'perf')}
     glow: 'ossGlow',
   });
 
-  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight', 'frost']);
+  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight', 'frost', 'seam']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight', 'baseline']);
   const NULLABLE_KEYS = new Set(['lat', 'lon']);
   const TEXT_KEYS = new Set([
@@ -2580,7 +2644,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.49';
+  const SKIN_BUILD = 'lab-1.5.50';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

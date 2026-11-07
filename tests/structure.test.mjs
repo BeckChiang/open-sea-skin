@@ -604,3 +604,12 @@ test('the centre column is measured, or honestly estimated', () => {
   assert.ok(clientSource.includes('if (!found[1] && found[0] && found[2]) {'), 'when none matches, the gap between the rails is used')
   assert.ok(clientSource.includes("rect.guess ? ' ≈' : ''"), 'and the estimate is marked as an estimate')
 })
+
+test('the columns get a drawn boundary, not just a blur', () => {
+  assert.ok(clientSource.includes("    seam: true,"), 'dividers are on by default')
+  assert.ok(clientSource.includes("    seamDim: 55,"), 'and the rails are dimmed a little')
+  assert.ok(clientSource.includes("const SEAM_ID = 'oss-seam';"), 'one fixed overlay holds the lines')
+  assert.ok(clientSource.includes('const updateSeam = () => {'), 'it is recomputed, not drawn once')
+  assert.ok(clientSource.includes("    seam: 'ossSeam',"), 'the choice persists')
+  assert.ok(clientSource.includes("'starsDaylight', 'frost', 'seam']"), 'and a boolean key exists for it')
+})
