@@ -501,7 +501,9 @@ const skyColor = Fn(([dir, cloudMask, astro]) => {
     const proj = d.xz.div(d.y.add(0.18)).mul(0.55);
     // 1.5.23: they drift now, and the dial can stop them dead (0 = frozen) or
     // send them at a walking pace
-    const drift = vec2(uTime.mul(0.006), uTime.mul(0.0025)).mul(uCloudSpeed);
+    // 0.006/s moved the deck by a fraction of a noise cell per minute, which
+    // read as a still image. 0.055/s is a slow but visible drift.
+    const drift = vec2(uTime.mul(0.055), uTime.mul(0.022)).mul(uCloudSpeed);
     const cloudNoise = clamp(fbm(proj.add(drift)).mul(0.5).add(0.5), 0, 1);
     // uCloudCover 0.55 reproduces the 1.2.7 threshold (0.62 -> 0.95) and opacity
     const low = float(0.62).add(float(CLOUD_COVER_BASELINE).sub(uCloudCover).mul(0.55));
@@ -1263,9 +1265,12 @@ function glassLevelOf(level) {
 // accepts both the contract shape ({ mode, perf }) and the host's older
 // { active } shorthand; rects arrive normalised 0..1 but CSS px are tolerated
 function applyGlassMessage(d) {
-  const requested = d.mode === 'css' ? false
-    : d.mode === 'render' ? true
-      : d.active === true;
+  // An explicit false wins over the mode: the master switch has to be able to
+  // stop the pass even when the mode says "in renderer".
+  const requested = d.active === false ? false
+    : d.mode === 'css' ? false
+      : d.mode === 'render' ? true
+        : d.active === true;
   const wanted = requested && d.perf !== true;
   // 1.5.23: one blur radius for the whole frame, in CSS pixels. The render path
   // maps it onto the spread of the blur taps; the CSS path uses it directly.
@@ -1641,7 +1646,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.41';
+const OCEAN_BUILD = 'lab-1.5.42';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;

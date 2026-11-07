@@ -90,7 +90,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   fps: 30,
     glow: 55,
     glassStyle: 'gaussian',
-    glassMode: 'render',
+    frost: true,
+  glassMode: 'render',
     glassRadius: 20,
     colLeft: Object.freeze({ on: true, strength: 28 }),
     colCenter: Object.freeze({ on: true, strength: 46 }),
@@ -141,6 +142,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatStale: '宿主插件还是旧版，先按右上角刷新按钮或重启桌面端',
       boatOff: '已关闭船只',
       secGlass: '毛玻璃',
+    frost: '背景模糊',
     hints: {
       skyDist: '把整片天空压进一个更宽的角度；1 倍是真实视场，2 倍能看到更多星座。',
       stars: '星点的总亮度。0 关闭星空，150% 最亮。',
@@ -326,6 +328,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       boatStale: 'Host plugin is stale: press the header refresh button, or restart',
       boatOff: 'Boats off',
       secGlass: 'Frosted glass',
+    frost: 'Background blur',
     hints: {
       skyDist: 'Packs the sky into a wider angle; 1x is the real field, 2x folds in more constellations.',
       stars: 'Overall star brightness. 0 hides the sky, 150% is the brightest.',
@@ -591,7 +594,8 @@ const FPS_LEVELS = [24, 30, 45, 60];
       quality: QUALITY_LEVELS.includes(source.quality) ? source.quality : DEFAULTS.quality,
     fps: FPS_LEVELS.includes(Number(source.fps)) ? Number(source.fps) : DEFAULTS.fps,
       glow: clamp(source.glow, 0, 100, DEFAULTS.glow),
-      glassMode: source.glassMode === 'css' ? 'css' : 'render',
+      frost: source.frost !== false,
+    glassMode: source.glassMode === 'css' ? 'css' : 'render',
       glassRadius: clamp(
         source.glassRadius,
         0,
@@ -639,7 +643,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
   }
 
   function blurCss(state) {
-    if (state.glassMode !== 'css' || state.perf) return '';
+    if (!state.frost || state.glassMode !== 'css' || state.perf) return '';
     const column = (selector, key) => {
       const entry = state[key];
       // one radius for the frame, each column takes a share of it
@@ -768,7 +772,7 @@ ${blurCss(state)}`;
   // The panel and its button are glass as well: give them the same radius the
   // columns use, so "blur 0" really means a crisp window everywhere.
   function paneBlur(state) {
-    if (state.perf) return 0;
+    if (!state.frost || state.perf) return 0;
     return Math.max(0, Math.round(state.glassRadius * 0.85));
   }
 
@@ -1050,9 +1054,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const postGlass = () => {
       // The in-renderer pass only runs in `render` mode; CSS mode blurs itself
       // and must leave the water sharp so the two do not fight.
-      const active = state.enabled && !state.perf && state.glassMode === 'render';
+      const active = state.enabled && state.frost && !state.perf && state.glassMode === 'render';
       post({
         type: 'oss-glass',
+        active,
         mode: state.glassMode,
         perf: state.perf,
         radius: state.glassRadius,
@@ -1684,6 +1689,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           <p class="oss-sub" id="${pid('boat-out')}"></p>
           <p class="oss-sub" data-copy="boatNote"></p>`)}
         ${group('secGlass', `
+          ${switchRow(pid('frost'), 'frost')}
           ${segRow(pid('glass-mode'), 'glassMode', [['render', 'glassModes.render'], ['css', 'glassModes.css']])}
           ${segRow(pid('glass-style'), 'glassStyle', [['gaussian', 'glassStyles.gaussian'], ['box', 'glassStyles.box'], ['double', 'glassStyles.double'], ['radial', 'glassStyles.radial'], ['frost', 'glassStyles.frost'], ['tile', 'glassStyles.tile']])}
           ${rangeRow(pid('glass-range'), 'glass', 40, 90, 1)}
@@ -1710,6 +1716,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       const enabledBox = el('enabled');
       const moonBox = el('moon');
       const perfBox = el('perf');
+      const frostBox = el('frost');
       const milkyOut = el('milky-out');
       const boatsBox = el('boats');
       const meteorBox = el('meteor');
@@ -1815,6 +1822,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         enabledBox.checked = state.enabled;
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
+        if (frostBox) frostBox.checked = state.frost;
         if (meteorBox) meteorBox.checked = state.meteor;
       if (daylightBox) daylightBox.checked = state.starsDaylight;
         if (boatsBox) boatsBox.checked = state.boats;
@@ -2056,6 +2064,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       });
       on(perfBox, 'change', () => {
         void save({ perf: perfBox.checked });
+        updateGlass();
+        postGlass();
+      });
+      on(frostBox, 'change', () => {
+        void save({ frost: frostBox.checked });
+        updateGlass();
         postGlass();
       });
       on(resetBtn, 'click', () => {
@@ -2236,6 +2250,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     cross: 'ossCross',
     meteor: 'ossMeteor',
     clouds: 'ossClouds',
+    frost: 'ossFrost',
     glassMode: 'ossGlassMode',
     colLeft: 'ossColLeft',
     colCenter: 'ossColCenter',
@@ -2281,7 +2296,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     glow: 'ossGlow',
   });
 
-  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight']);
+  const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight', 'frost']);
   const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight']);
   const NULLABLE_KEYS = new Set(['lat', 'lon']);
   const TEXT_KEYS = new Set([
@@ -2360,7 +2375,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.41';
+  const SKIN_BUILD = 'lab-1.5.42';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
