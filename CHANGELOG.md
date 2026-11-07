@@ -1,5 +1,10 @@
 # 变更记录
 
+## 1.5.45
+
+- **设置面板回来了**：1.5.43 我把 `paneAlpha` 声明在了 `glassCss()` 里，但用到它的面板/按钮 CSS 在 `uiCss()` 里——两个不同的函数作用域，渲染时抛 `ReferenceError: paneAlpha is not defined`，`mountUi()` 直接中断，入口按钮与面板一个都没建出来。声明移到 `uiCss()`。
+- 加了一条静态断言钉住这个作用域（`uiCss` 里必须有 `const paneAlpha`，`glassCss` 里不许有），避免再把 `${}` 变量放到拿不到它的函数里。
+
 ## 1.5.44
 
 - **先画海，再挂面板**：`applyEnabled()` 原来先 `mountUi()` 再 `mountOcean()`，面板里任何一处抛错都会让海面永远不挂载，表现出来就是「皮肤丢失」。现在海面先挂，面板包在 try/catch 里，失败只打一条警告。

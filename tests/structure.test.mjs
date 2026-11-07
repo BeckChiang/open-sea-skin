@@ -537,3 +537,14 @@ test('cloud is a deck, and the paper is not frosted at blur zero', () => {
   assert.ok(clientSource.includes('function paneBlur(state) {'), 'one dial drives the chrome too')
   assert.ok(clientSource.includes('backdrop-filter:blur(${panePx}px) saturate(140%);'), 'panel blur follows it')
 })
+
+test('the panel CSS builds its own fill alpha', () => {
+  // paneAlpha lived in glassCss() while the panel CSS is written by uiCss():
+  // the ReferenceError killed mountUi() and the settings entry never appeared.
+  const uiStart = clientSource.indexOf('function uiCss(state) {');
+  const uiEnd = clientSource.indexOf('function paneBlur(state)');
+  const glassStart = clientSource.indexOf('function glassCss(glass, state) {');
+  assert.ok(uiStart >= 0 && glassStart >= 0, 'both builders exist')
+  assert.ok(clientSource.slice(uiStart, uiStart + 400).includes('const paneAlpha'), 'uiCss declares it')
+  assert.ok(!clientSource.slice(glassStart, glassStart + 400).includes('const paneAlpha'), 'glassCss does not')
+})
