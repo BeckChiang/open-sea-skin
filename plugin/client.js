@@ -74,7 +74,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     cross: 100,
     lineWidth: 1,
     lineFadeDeg: 14,
-    lineTwinkle: 0.18,
+    lineTwinkle: 0.7,
     // meteors
     meteor: true,
     meteorRate: 1,
@@ -489,7 +489,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
       cross: clamp(dialFrom(source.cross, { off: 0, low: 55, mid: 100, high: 175 }), 0, 200, DEFAULTS.cross),
       lineWidth: clamp(source.lineWidth, 0.2, 4, DEFAULTS.lineWidth),
       lineFadeDeg: clamp(source.lineFadeDeg, 3, 45, DEFAULTS.lineFadeDeg),
-      lineTwinkle: clamp(source.lineTwinkle, 0, 0.6, DEFAULTS.lineTwinkle),
+      lineTwinkle: clamp(source.lineTwinkle, 0, 1.5, DEFAULTS.lineTwinkle),
       starBias: clamp(source.starBias, -0.3, 0.3, DEFAULTS.starBias),
       starMode: STAR_MODES.includes(source.starMode) ? source.starMode : DEFAULTS.starMode,
       starCut: clamp(source.starCut, 1.5, 6, DEFAULTS.starCut),
@@ -1559,7 +1559,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('star-spikes'), 'starSpikes', 0, 6, 0.1)}
           ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
           ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}
-          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 0.6, 0.01)}`)}
+          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 1.5, 0.01)}`)}
         ${group('secMeteor', `
           ${switchRow(pid('meteor'), 'meteor')}
           ${rangeRow(pid('meteor-rate'), 'meteorRate', 0.1, 6, 0.1)}
@@ -2251,7 +2251,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.36';
+  const SKIN_BUILD = 'lab-1.5.37';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

@@ -205,7 +205,7 @@ const uStarDaylight = uniform(0);
 const uStarBias = uniform(0);
 const uStarMode = uniform(0);
 const uStarCut = uniform(5.5);
-const uLineTwinkle = uniform(0.18);
+const uLineTwinkle = uniform(0.7);
 const uMilkyVisible = uniform(0);
 const uOverflow = uniform(0);
 // The dial is a budget verdict, and a verdict can flip in one tick: a session
@@ -831,7 +831,7 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.starColor))) uStarColor.value = Math.max(0, Math.min(2.2, Number(d.starColor)));
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
   if (d.starDaylight !== undefined) uStarDaylight.value = d.starDaylight ? 1 : 0;
-  if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(0.6, Number(d.lineTwinkle)));
+  if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(1.5, Number(d.lineTwinkle)));
   if (Number.isFinite(Number(d.overflow))) overflowTarget = Math.max(0, Math.min(1, Number(d.overflow)));
   let repaint = false;
   if (Number.isFinite(Number(d.starBias))) { uStarBias.value = Math.max(-0.3, Math.min(0.3, Number(d.starBias))); repaint = true; }
@@ -1632,7 +1632,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.36';
+const OCEAN_BUILD = 'lab-1.5.37';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2477,12 +2477,18 @@ function createStarLayer(scene) {
   // Two incommensurate rates make each constellation breathe on its own clock,
   // and the per-edge phase keeps neighbouring legs from pulsing together. The
   // result never flashes as one sky; it drifts.
-  const lineWobble = sin(uTime.mul(0.9).add(linePhase)).mul(0.62)
-    .add(sin(uTime.mul(2.3).add(linePhase.mul(1.73))).mul(0.38));
+  // 0.55 rad/s is an 11 s breath; 2.1 rad/s rides on top as a shimmer.
+  const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.62)
+    .add(sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.38));
+  // 0.21 rad/s is a ~30 s swell shared by every line: the constellation phase
+  // stops the picture from flashing in unison, this envelope stops it from
+  // looking dead when the phases cancel out.
+  const lineBreath = sin(uTime.mul(0.21)).mul(0.5).add(0.5).mul(0.8).add(0.6);
   lineMaterial.colorNode = vec3(0.55, 0.70, 1.0)
     .mul(lineEdge.mul(lineEdge))
     .mul(attribute('aLineGlow', 'float')).mul(uStarGlow).mul(uConstellation).mul(1.5)
-    .mul(float(1).add(lineWobble.mul(uLineTwinkle)));
+    .mul(float(1).add(lineWobble.mul(uLineTwinkle)))
+    .mul(lineBreath);
   const lines = new THREE.Mesh(lineGeometry, lineMaterial);
   lines.frustumCulled = false;
   lines.renderOrder = 2;
