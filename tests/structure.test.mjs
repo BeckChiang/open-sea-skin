@@ -436,8 +436,8 @@ test('the overflow dial is visible at the crest', () => {
   // reaches in a storm — so the dial had nothing to thicken. They gate on the
   // crest relative to the current sea now, and the dial adds crowns and spray.
   assert.ok(source.includes('const crestRatio = clamp(crest.div(max(sea.mul(1.55), 0.25)), 0, 1.4);'), 'caps compare against the sea state')
-  assert.ok(source.includes('const crowns = smoothstep(0.7, 1.02, crestRatio).mul(uOverflow).mul(0.6);'), 'the dial adds crowned tips')
-  assert.ok(source.includes('const spray = pow(foamNoise, 5).mul(smoothstep(0.05, 0.55, uOverflow)).mul(0.95);'), 'and blown spray')
+  assert.ok(source.includes('const crowns = smoothstep(0.7, 1.02, crestRatio).mul(smoothstep(0.15, 0.85, uOverflow)).mul(0.6);'), 'the dial adds crowned tips')
+  assert.ok(source.includes('const spray = pow(foamNoise, 5).mul(smoothstep(0.15, 0.7, uOverflow)).mul(0.95);'), 'and blown spray')
   // and the host walks the dial up while the session is merely busy, not at 4x
   assert.ok(clientSource.includes('const curve = (value, ceiling) => Math.max(0, (value / ceiling - 0.6) / 1.6);'), 'linear from 60% of the ceiling')
 })
@@ -448,4 +448,13 @@ test('over budget counts even while idle', () => {
   assert.ok(clientSource.includes('const byBudget = curve(spent, budgetCeiling);'), 'the spend curve always applies')
   assert.ok(clientSource.includes('overflowValue = Math.min(1, Math.max(byBudget, byRate) * state.overflowGain);'), 'busy rate can only raise it')
   assert.ok(!clientSource.includes('if (state.waveMode === \'manual\') {\n        overflowValue = 0;'), 'manual mode no longer hides the budget')
+})
+
+test('the overflow dial fades instead of switching', () => {
+  // A budget verdict can flip in one tick; feeding it straight to the surface
+  // made the white caps appear and vanish between frames.
+  assert.ok(source.includes('let overflowTarget = 0;'), 'writers move a target')
+  assert.ok(source.includes('uOverflow.value += (overflowTarget - uOverflow.value) * Math.min(1, dt * 1.3);'), 'the frame loop eases toward it')
+  assert.ok(source.includes('smoothstep(0.15, 0.85, uOverflow)'), 'the caps bloom in over a band')
+  assert.ok(source.includes('smoothstep(0.15, 0.7, uOverflow)'), 'the spray does too')
 })

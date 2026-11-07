@@ -208,6 +208,11 @@ const uStarCut = uniform(5.5);
 const uLineTwinkle = uniform(0.18);
 const uMilkyVisible = uniform(0);
 const uOverflow = uniform(0);
+// The dial is a budget verdict, and a verdict can flip in one tick: a session
+// crosses the ceiling, or a cost window resets. Routing the value straight into
+// the surface made the white caps pop in and out, so the shader reads a smoothed
+// copy and every writer below only moves the target.
+let overflowTarget = 0;
 // Milky Way band: normal of the galactic plane in world space, plus its dial.
 const uGalNormal = uniform(new THREE.Vector3(0, 1, 0));
 const uMilky = uniform(0.35);
@@ -566,8 +571,8 @@ const oceanColor = Fn(() => {
     const capBand = smoothstep(0.72, 1.02, crestRatio);
     const foamBase = smoothstep(0.45, 0.9, foamNoise).mul(capBand);
     const angry = float(1).add(uOverflow.mul(1.4));
-    const spray = pow(foamNoise, 5).mul(smoothstep(0.05, 0.55, uOverflow)).mul(0.95);
-    const crowns = smoothstep(0.7, 1.02, crestRatio).mul(uOverflow).mul(0.6);
+    const spray = pow(foamNoise, 5).mul(smoothstep(0.15, 0.7, uOverflow)).mul(0.95);
+    const crowns = smoothstep(0.7, 1.02, crestRatio).mul(smoothstep(0.15, 0.85, uOverflow)).mul(0.6);
     foam.assign(foamBase.mul(angry).add(spray).add(crowns));
   });
 
@@ -827,7 +832,7 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
   if (d.starDaylight !== undefined) uStarDaylight.value = d.starDaylight ? 1 : 0;
   if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(0.6, Number(d.lineTwinkle)));
-  if (Number.isFinite(Number(d.overflow))) uOverflow.value = Math.max(0, Math.min(1, Number(d.overflow)));
+  if (Number.isFinite(Number(d.overflow))) overflowTarget = Math.max(0, Math.min(1, Number(d.overflow)));
   let repaint = false;
   if (Number.isFinite(Number(d.starBias))) { uStarBias.value = Math.max(-0.3, Math.min(0.3, Number(d.starBias))); repaint = true; }
   if (d.starMode !== undefined) { uStarMode.value = Math.max(0, Math.min(2, Number(d.starMode) || 0)); repaint = true; }
@@ -1369,7 +1374,7 @@ if (SKIN) {
         seaGoal = 0.25 + (Math.max(0, Math.min(100, sea)) / 100) * 1.5;
       }
       if (Number.isFinite(Number(d.overflow))) {
-        uOverflow.value = Math.max(0, Math.min(1, Number(d.overflow)));
+        overflowTarget = Math.max(0, Math.min(1, Number(d.overflow)));
       }
       // In `real` mode the sky is driven by solar.js; a host that keeps
       // posting t (sea updates arrive at 4 Hz) must not overwrite it.
@@ -1627,7 +1632,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.35';
+const OCEAN_BUILD = 'lab-1.5.36';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2695,6 +2700,9 @@ function applyStarDials() {
 
 function updateStarDome(nowRaw, dt) {
   const now = skyInstant(nowRaw).getTime();
+  // ~0.75 s to cover 63% of the gap: fast enough to feel like weather, slow
+  // enough that a threshold crossing reads as the sea getting angry.
+  uOverflow.value += (overflowTarget - uOverflow.value) * Math.min(1, dt * 1.3);
   if (!starLayer) return;
   const layer = starLayer;
   const grade = starLevelOf(starsSetting);
