@@ -394,7 +394,7 @@ test('the sky follows the sun instead of a switch', () => {
 test('the constellation lines breathe one constellation at a time', () => {
   // A global pulse reads as a flicker; per-edge phases read as air moving.
   assert.ok(source.includes("lineGeometry.setAttribute('aLinePhase', new THREE.BufferAttribute(linePhaseAttr, 1));"), 'each edge carries its own phase')
-  assert.ok(source.includes('const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.72)'), 'two incommensurate rates')
+  assert.ok(source.includes('const lineWobble = sin(uTime.mul(uLineSpeed).add(linePhase)).mul(0.72)'), 'two incommensurate rates')
   assert.ok(source.includes('function hashName(text) {'), 'the phase is deterministic per constellation name')
 })
 
@@ -460,10 +460,10 @@ test('the overflow dial fades instead of switching', () => {
 })
 
 test('the breath is slow enough to read', () => {
-  // The first beat is an 11 s period (0.55 rad/s); the 2.1 rad/s shimmer rides on
+  // The first beat is an 11 s period at the default 0.55 rad/s; the shimmer rides on
   // top. A 0.9 rad/s-only mix was too even to notice at 1 px.
-  assert.ok(source.includes('sin(uTime.mul(0.55).add(linePhase)).mul(0.72)'), 'slow beat')
-  assert.ok(source.includes('sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.28)'), 'fast shimmer')
+  assert.ok(source.includes('sin(uTime.mul(uLineSpeed).add(linePhase)).mul(0.72)'), 'slow beat')
+  assert.ok(source.includes('sin(uTime.mul(uLineSpeed).mul(3.82).add(linePhase.mul(1.73))).mul(0.28)'), 'fast shimmer')
   assert.ok(source.includes('const uLineTwinkle = uniform(0.8);'), 'default is a visible swing')
   assert.ok(!source.includes('Math.min(0.6, Number(d.lineTwinkle))'), 'the dial can reach 1')
 })
@@ -482,4 +482,13 @@ test('a constellation blinks as one figure', () => {
   // each breathed on their own and the figure looked like it was tearing.
   assert.ok(source.includes('const phase = namePhase.get(owner) * 2.399963;'), 'phase comes from the name only')
   assert.ok(!source.includes('namePhase.get(owner) + ((i * 2.399963) % 6.283)'), 'no per-polyline offset')
+})
+
+test('the breath speed is a dial', () => {
+  assert.ok(source.includes('const uLineSpeed = uniform(0.55);'), 'speed has a default')
+  assert.ok(source.includes('sin(uTime.mul(uLineSpeed).add(linePhase)).mul(0.72)'), 'the beat follows the dial')
+})
+
+test('star dots grow with the stroke', () => {
+  assert.ok(source.includes('const lineBoost = 0.6 + 0.4 * clamp(uLineWidth.value, 0.2, 4);'), 'dots ride the stroke width')
 })

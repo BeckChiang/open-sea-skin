@@ -75,6 +75,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     lineWidth: 1,
     lineFadeDeg: 14,
     lineTwinkle: 0.8,
+  lineSpeed: 0.55,
     // meteors
     meteor: true,
     meteorRate: 1,
@@ -218,6 +219,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   starModes: { real: '真实', mono: '单色', vivid: '夸张' },
   starsDaylight: '白天也显示星空',
   lineTwinkle: '连线闪烁',
+  lineSpeed: '闪烁速度',
   overflowGain: '超限敏感度',
   glassStyle: '模糊形状',
   magSuffix: ' 等',
@@ -362,6 +364,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   starModes: { real: 'Real', mono: 'Mono', vivid: 'Vivid' },
   starsDaylight: 'Stars in daylight',
   lineTwinkle: 'Line twinkle',
+  lineSpeed: 'Twinkle speed',
   overflowGain: 'Overflow gain',
   glassStyle: 'Blur shape',
   magSuffix: ' mag',
@@ -490,6 +493,7 @@ const FPS_LEVELS = [24, 30, 45, 60];
       lineWidth: clamp(source.lineWidth, 0.2, 4, DEFAULTS.lineWidth),
       lineFadeDeg: clamp(source.lineFadeDeg, 3, 45, DEFAULTS.lineFadeDeg),
       lineTwinkle: clamp(source.lineTwinkle, 0, 1.5, DEFAULTS.lineTwinkle),
+      lineSpeed: clamp(source.lineSpeed, 0.1, 3, DEFAULTS.lineSpeed),
       starBias: clamp(source.starBias, -0.3, 0.3, DEFAULTS.starBias),
       starMode: STAR_MODES.includes(source.starMode) ? source.starMode : DEFAULTS.starMode,
       starCut: clamp(source.starCut, 1.5, 6, DEFAULTS.starCut),
@@ -909,6 +913,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         lineWidth: state.lineWidth,
         lineFadeDeg: state.lineFadeDeg,
         lineTwinkle: state.lineTwinkle,
+        lineSpeed: state.lineSpeed,
         overflow: seaOverflow(),
         quality: state.quality,
     fps: state.fps,
@@ -1559,7 +1564,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('star-spikes'), 'starSpikes', 0, 6, 0.1)}
           ${rangeRow(pid('line-width'), 'lineWidth', 0.2, 4, 0.05)}
           ${rangeRow(pid('line-fade'), 'lineFadeDeg', 3, 45, 0.5)}
-          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 1.5, 0.05)}`)}
+          ${rangeRow(pid('line-twinkle'), 'lineTwinkle', 0, 1.5, 0.01)}
+          ${rangeRow(pid('line-speed'), 'lineSpeed', 0.1, 3, 0.05)}`)}
         ${group('secMeteor', `
           ${switchRow(pid('meteor'), 'meteor')}
           ${rangeRow(pid('meteor-rate'), 'meteorRate', 0.1, 6, 0.1)}
@@ -1666,7 +1672,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         ['cross', 'cross', 0, 'pct'],
         ['line-width', 'lineWidth', 2, 'f2'],
         ['line-fade', 'lineFadeDeg', 1, 'deg'],
-        ['line-twinkle', 'lineTwinkle', 0, 'pct'],
+        ['line-twinkle', 'lineTwinkle', 0, 'factor'],
+    ['line-speed', 'lineSpeed', 2, 'x'],
         ['meteor-rate', 'meteorRate', 1, 'f1'],
         ['meteor-bright', 'meteorBright', 2, 'f2'],
         ['clouds', 'clouds', 0, 'pct'],
@@ -2154,6 +2161,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     lineWidth: 'ossLineWidth',
     lineFadeDeg: 'ossLineFadeDeg',
     lineTwinkle: 'ossLineTwinkle',
+    lineSpeed: 'ossLineSpeed',
     starBias: 'ossStarBias',
     starMode: 'ossStarMode',
     starCut: 'ossStarCut',
@@ -2251,7 +2259,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.38';
+  const SKIN_BUILD = 'lab-1.5.39';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

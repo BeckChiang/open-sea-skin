@@ -206,6 +206,9 @@ const uStarBias = uniform(0);
 const uStarMode = uniform(0);
 const uStarCut = uniform(5.5);
 const uLineTwinkle = uniform(0.8);
+// How fast the figures breathe. 0.55 rad/s was the fixed rate; exposing it lets
+// a calm sky slow down and a lively one speed up without touching the strength.
+const uLineSpeed = uniform(0.55);
 const uMilkyVisible = uniform(0);
 const uOverflow = uniform(0);
 // The dial is a budget verdict, and a verdict can flip in one tick: a session
@@ -832,6 +835,7 @@ function applySunMessage(d) {
   if (Number.isFinite(Number(d.starSpikes))) uStarSpikes.value = Math.max(0, Math.min(6, Number(d.starSpikes)));
   if (d.starDaylight !== undefined) uStarDaylight.value = d.starDaylight ? 1 : 0;
   if (Number.isFinite(Number(d.lineTwinkle))) uLineTwinkle.value = Math.max(0, Math.min(1.5, Number(d.lineTwinkle)));
+  if (Number.isFinite(Number(d.lineSpeed))) uLineSpeed.value = Math.max(0.1, Math.min(3, Number(d.lineSpeed)));
   if (Number.isFinite(Number(d.overflow))) overflowTarget = Math.max(0, Math.min(1, Number(d.overflow)));
   let repaint = false;
   if (Number.isFinite(Number(d.starBias))) { uStarBias.value = Math.max(-0.3, Math.min(0.3, Number(d.starBias))); repaint = true; }
@@ -1632,7 +1636,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.38';
+const OCEAN_BUILD = 'lab-1.5.39';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
@@ -2483,8 +2487,8 @@ function createStarLayer(scene) {
   // 0.55 rad/s is an 11 s breath; 2.1 rad/s rides on top as a shimmer.
   // 0.72 + 0.28: the slow beat dominates, the fast one only roughens it. A
   // symmetric 50/50 mix cancelled itself out and read as flicker, not breath.
-  const lineWobble = sin(uTime.mul(0.55).add(linePhase)).mul(0.72)
-    .add(sin(uTime.mul(2.1).add(linePhase.mul(1.73))).mul(0.28));
+  const lineWobble = sin(uTime.mul(uLineSpeed).add(linePhase)).mul(0.72)
+    .add(sin(uTime.mul(uLineSpeed).mul(3.82).add(linePhase.mul(1.73))).mul(0.28));
   // 0.21 rad/s is a ~30 s swell shared by every line: the constellation phase
   // stops the picture from flashing in unison, this envelope stops it from
   // looking dead when the phases cancel out.
@@ -2572,7 +2576,10 @@ function refreshStarArt(layer) {
     const mag = layer.starMag[i];
     // magnitude cut: stars past the limit keep their slot but cost nothing
     const cut = mag > uStarCut.value;
-    const px = cut ? 0 : starPixelsFor(mag);
+    // A thick leg that ends in a 1 px dot reads as a broken line, so the dots
+    // grow with the stroke instead of ignoring it.
+    const lineBoost = 0.6 + 0.4 * clamp(uLineWidth.value, 0.2, 4);
+    const px = cut ? 0 : starPixelsFor(mag) * lineBoost;
     // spikes reach a couple of dot diameters past the disc; a faint star keeps
     // the same quad but with zero spike length, so it renders as a clean dot
     const ray = !cut && mag <= spikeLimit ? Math.max(7, px * 2.4) : 0;
