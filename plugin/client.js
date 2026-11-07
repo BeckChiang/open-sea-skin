@@ -934,6 +934,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const controllerCleanups = [];
 
     const on = (target, event, listener, settings) => {
+      if (!target) return;
       target.addEventListener(event, listener, settings);
       surfaceCleanups.push(() => target.removeEventListener(event, listener, settings));
     };
@@ -2173,8 +2174,15 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // host page that saved disabled) still offers the enable switch
       // (2026-08-23: previously the button was created only on first enable,
       // leaving a disabled-after-reload skin with no entry point at all).
-      if (!document.getElementById(IDS.button)) mountUi();
+      const mountPanel = () => {
+        try {
+          if (!document.getElementById(IDS.button)) mountUi();
+        } catch (error) {
+          console.warn('[Open Sea Skin] Panel failed to mount.', error);
+        }
+      };
       if (!state.enabled) {
+        mountPanel();
         // Tear down only the ocean surface (frame + glass), keeping the
         // button/panel so the skin can be re-enabled from the same page.
         stopWaveEngine();
@@ -2190,8 +2198,11 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       // The extension and both native paths intentionally share the same ids.
       // Whichever implementation mounted first owns the surface; later ones
       // leave it untouched instead of double-rendering WebGPU.
-      if (document.getElementById(IDS.frame)) return;
-      if (mountOcean()) mountUi();
+      if (document.getElementById(IDS.frame)) {
+        mountPanel();
+        return;
+      }
+      if (mountOcean()) mountPanel();
     };
 
     const ready = () => new Promise((resolve) => {
@@ -2380,7 +2391,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.43';
+  const SKIN_BUILD = 'lab-1.5.44';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
