@@ -430,3 +430,14 @@ test('the sea follows the session with no panel mounted', () => {
   assert.ok(clientSource.includes('// the sea follows the session even when no panel is mounted'), 'started from the controller')
   assert.ok(clientSource.includes('} catch { /* no panel mounted */ }'), 'panel readouts are optional')
 })
+
+test('the overflow dial is visible at the crest', () => {
+  // The caps used to gate on crest 1..2 — an absolute height the surface only
+  // reaches in a storm — so the dial had nothing to thicken. They gate on the
+  // crest relative to the current sea now, and the dial adds crowns and spray.
+  assert.ok(source.includes('const crestRatio = clamp(crest.div(max(sea.mul(1.55), 0.25)), 0, 1.4);'), 'caps compare against the sea state')
+  assert.ok(source.includes('const crowns = smoothstep(0.7, 1.02, crestRatio).mul(uOverflow).mul(0.6);'), 'the dial adds crowned tips')
+  assert.ok(source.includes('const spray = pow(foamNoise, 5).mul(smoothstep(0.05, 0.55, uOverflow)).mul(0.95);'), 'and blown spray')
+  // and the host walks the dial up while the session is merely busy, not at 4x
+  assert.ok(clientSource.includes('overflowValue = Math.min(1, Math.max(0, (ratio - 0.6) / 1.6) * state.overflowGain);'), 'linear from 60% of the ceiling')
+})

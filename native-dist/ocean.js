@@ -558,9 +558,17 @@ const oceanColor = Fn(() => {
     const foamNoise = clamp(gradNoise(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
     // Past the wave ceiling the sea cannot rise any further, so it gets angrier
   // instead: thicker caps plus a spray of glints. Both are pure shader work.
-  const foamBase = smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest));
-  const spray = pow(foamNoise, 8).mul(smoothstep(0.15, 0.85, uOverflow)).mul(0.65);
-  foam.assign(foamBase.mul(float(0.85).add(uOverflow.mul(0.45))).add(spray));
+    // 1.5.34: crest was compared against an absolute height of 1..2, which the
+    // surface only reaches in the worst storm — so caps almost never appeared and
+    // the overflow dial had nothing to thicken. Compare against the current sea
+    // state instead, and let the overflow add crowns and blown spray on top.
+    const crestRatio = clamp(crest.div(max(sea.mul(1.55), 0.25)), 0, 1.4);
+    const capBand = smoothstep(0.72, 1.02, crestRatio);
+    const foamBase = smoothstep(0.45, 0.9, foamNoise).mul(capBand);
+    const angry = float(1).add(uOverflow.mul(1.4));
+    const spray = pow(foamNoise, 5).mul(smoothstep(0.05, 0.55, uOverflow)).mul(0.95);
+    const crowns = smoothstep(0.7, 1.02, crestRatio).mul(uOverflow).mul(0.6);
+    foam.assign(foamBase.mul(angry).add(spray).add(crowns));
   });
 
   // base water color + backlit crest glow
@@ -1619,7 +1627,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.33';
+const OCEAN_BUILD = 'lab-1.5.34';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
