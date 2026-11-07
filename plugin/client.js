@@ -87,7 +87,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     // 1.5.26: frame budget. The scene is fill bound, so the quality preset is
     // the lever that matters; glow is the one remaining full-screen pass.
     quality: 'low',
-  fps: 24,
+  fps: 30,
     glow: 55,
     glassStyle: 'gaussian',
     frost: true,
@@ -152,7 +152,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: '毛玻璃',
     frost: '背景模糊',
     hints: {
-      qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 45；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
+      qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 40；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
       fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
       glow: '泛光强度：地平线、太阳与月光的高光溢出。0 = 关掉整个 1/4 分辨率泛光 pass。',
       glassMode: '渲染器内 = 毛玻璃在 WebGPU 里做（可逐栏、可调半径）；CSS 模糊 = 交给浏览器，省 GPU 但只有一档。',
@@ -294,7 +294,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassRadius: '模糊半径',
       perfGroup: '性能',
   fpsMode: '帧率上限',
-  fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
+  fps: { 30: '30 fps', 60: '60 fps', 90: '90 fps', 120: '120 fps' },
       qualityMode: '画质档位',
       quality: {
         high: '高',
@@ -358,7 +358,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: 'Frosted glass',
     frost: 'Background blur',
     hints: {
-      qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 45; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
+      qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 40; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
       fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
       glow: 'Bloom strength on the horizon, sun and moon. At 0 the whole quarter-resolution bloom pass is skipped.',
       glassMode: 'Renderer = blur inside WebGPU (per column, real radius); CSS = the browser does it: cheaper, one radius only.',
@@ -500,7 +500,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       glassRadius: 'Blur radius',
       perfGroup: 'Performance',
   fpsMode: 'Frame rate',
-  fps: { 24: '24 fps', 30: '30 fps', 45: '45 fps', 60: '60 fps' },
+  fps: { 30: '30 fps', 60: '60 fps', 90: '90 fps', 120: '120 fps' },
       qualityMode: 'Quality',
       quality: {
         high: 'High',
@@ -556,7 +556,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   const SKY_TONES = ['real', 'blue', 'warm'];
   const TZ_MODES = ['system', 'longitude', 'manual'];
 const QUALITY_LEVELS = ['high', 'balanced', 'low'];
-const FPS_LEVELS = [24, 30, 45, 60];
+const FPS_LEVELS = [30, 60, 90, 120];
 
   // A column used to store a blur letter. It now stores a 0..100 strength, and
   // a saved letter is folded into one so old profiles keep their look.
@@ -1130,7 +1130,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     // should answer "is the cheap tier in effect?" without opening devtools.
     // The number comes from the ocean frame, never from a requestAnimationFrame
     // meter running here — this document's clock stays at the display rate even
-    // when the scene is deliberately capped lower, which is how a 24 fps cap
+    // when the scene is deliberately capped lower, which is how a 30 fps cap
     // came to be reported as "55 fps".
 
     const perfText = () => {
@@ -1835,7 +1835,7 @@ ${switchRow(pid('perf'), 'perf')}
           <p class="oss-sub" data-copy="perfGroup"></p>
           ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
           ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
-        ${segRow(pid('fps'), 'fpsMode', [['24', 'fps.24'], ['30', 'fps.30'], ['45', 'fps.45'], ['60', 'fps.60']])}
+        ${segRow(pid('fps'), 'fpsMode', [['30', 'fps.30'], ['60', 'fps.60'], ['90', 'fps.90'], ['120', 'fps.120']])}
 <p class="oss-sub" id="${pid('perf-out')}"></p>
           <div class="oss-row"><button type="button" class="oss-reset" id="${pid('make-default')}" data-copy="makeDefault"></button></div>
           <p class="oss-sub" id="${pid('default-out')}"></p>
@@ -2562,7 +2562,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-2.0.2';
+  const SKIN_BUILD = 'lab-2.0.3';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

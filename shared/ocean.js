@@ -1519,11 +1519,17 @@ const QUALITY_PRESETS = {
 // 1.5.27: the frame budget is a first-class dial. A wallpaper does not need
 // 60 fps, and every frame is a full-screen fill: halving the rate halves the
 // GPU time. SKIN defaults to 30; the standalone demo keeps its old cap.
-const FPS_OPTIONS = [24, 30, 45, 60];
+const FPS_OPTIONS = [30, 60, 90, 120];
 let fpsCap = SKIN ? 30 : 60;
 
 function applyFpsCap(cap) {
-  const next = FPS_OPTIONS.includes(cap) ? cap : 60;
+  // A profile saved by 2.0.2 or earlier can carry 24 or 45: snap it to the
+  // nearest offered rate rather than jumping to whatever the fallback was, and
+  // never round up past what the display can hold.
+  const next = FPS_OPTIONS.reduce(
+    (best, option) => (Math.abs(option - cap) < Math.abs(best - cap) ? option : best),
+    FPS_OPTIONS[0],
+  );
   fpsCap = next;
   FRAME_RATE_CAP = REDUCED_MOTION ? Math.min(next, 20) : next;
   FRAME_MS = 1000 / FRAME_RATE_CAP;
@@ -1658,7 +1664,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-2.0.2';
+const OCEAN_BUILD = 'lab-2.0.3';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;

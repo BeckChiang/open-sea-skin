@@ -367,10 +367,12 @@ test('the surface takes every new dial instead of a fixed look', () => {
 
 test('the frame rate is a budget dial, not a fixed 60', () => {
   // a wallpaper does not need 60 fps, and every frame is a full-screen fill
-  assert.ok(source.includes('const FPS_OPTIONS = [24, 30, 45, 60];'), 'the cap has a fixed option list')
+  assert.ok(source.includes('const FPS_OPTIONS = [30, 60, 90, 120];'), 'the cap follows the rates displays actually use')
   assert.ok(source.includes('let fpsCap = SKIN ? 30 : 60;'), 'the skin starts at half rate')
   assert.ok(source.includes('if (Number.isFinite(Number(d.fps))) applyFpsCap(Number(d.fps));'), 'the host can retune the cap live')
-  assert.ok(clientSource.includes("const FPS_LEVELS = [24, 30, 45, 60];"), 'the panel offers the same four rates')
+  assert.ok(clientSource.includes("const FPS_LEVELS = [30, 60, 90, 120];"), 'the panel offers the same four rates')
+  assert.ok(clientSource.includes('  fps: 30,'), 'and 30 fps is the floor, which is also the default')
+  assert.ok(!clientSource.includes('24 fps'), 'nothing still offers 24')
   assert.ok(clientSource.includes("case pid('fps'): return { fps: Number(value) };"), 'picking a rate posts the number, not a string')
 })
 
@@ -593,7 +595,7 @@ test('every performance dial explains itself', () => {
 
 test('the panel reports the tier it is actually running', () => {
   assert.ok(clientSource.includes("    quality: 'low',"), 'saver is the shipping default')
-  assert.ok(clientSource.includes('  fps: 24,'), 'and so is the 24 fps cap')
+  assert.ok(clientSource.includes('  fps: 30,'), 'and so is the 30 fps cap')
   assert.ok(clientSource.includes('const perfText = () => {'), 'the readout exists')
   assert.ok(!clientSource.includes('const meterFps = (now) => {'), 'no requestAnimationFrame meter in the panel: it times the display, not the scene')
   assert.ok(!clientSource.includes('const perfTick = (now) => {'), 'and no rAF loop driving one')

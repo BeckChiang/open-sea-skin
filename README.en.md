@@ -1,8 +1,8 @@
-# Open Sea Skin · Lab (2.0.2)
+# Open Sea Skin · Lab (2.0.3)
 
 **A living ocean skin** for DeepSeek Harness Desktop and Web: waves that follow your session load, a sky driven by real ephemeris data, a star field built from a real catalogue, and boats that are your running subagents.
 
-![version](https://img.shields.io/badge/version-2.0.2-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
+![version](https://img.shields.io/badge/version-2.0.3-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
 ---
 
@@ -10,12 +10,12 @@
 
 This project is a **rebuilt fork (Lab branch)** of **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)** (author **d-dev0101**, MIT licence) at version **1.2.7**. It is **not** an official upstream release and is not maintained by upstream.
 
-It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.0.2**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
+It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.0.3**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
 
 - Upstream: [d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · fork point `v1.2.7`
 - Upstream licence: MIT, full text in [`LICENSE`](LICENSE); required third-party notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - Why the fork exists and how to fall back: [`docs/FORK.md`](docs/FORK.md)
-- Current version: **2.0.2** (tag `v2.0.2`; 2.0.0 remains the frozen baseline, tag `v2.0.0`)
+- Current version: **2.0.3** (tag `v2.0.3`; 2.0.0 remains the frozen baseline, tag `v2.0.0`)
 
 ---
 
@@ -27,7 +27,7 @@ It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clou
 | 2 | **Real astronomical sky** | Local NOAA ephemeris recomputes solar altitude/azimuth every second; sunrise/sunset, moon phase and illumination, three twilight lines (Belt of Venus, Earth's shadow, dawn/dusk asymmetry). A single `skyLight` curve keeps the sky continuous all day |
 | 3 | **Real star field** | 2,851 real stars (HYG subset with magnitude and B−V): size by magnitude, colour by temperature, four-point spikes on bright stars, 88 constellations over 150 polylines that breathe as a whole; the Milky Way visibility follows galactic-centre altitude; meteors advance every frame |
 | 4 | **Boats tied to sessions** | One boat per **running subagent**, re-laid out immediately when you switch sessions; boat speed comes from the waves, not a stopwatch, and the exit side is frozen at the moment of departure |
-| 5 | **Tunable performance and a real panel** | Quality tiers (high/balanced/power-saver) + frame caps (24/30/45/60) + quarter-resolution 9-tap bloom; eleven collapsible groups with search, one-line explanations per row, per-row persistence and baseline snapshots. Headless measurement: **126 ms → 70 ms** per frame |
+| 5 | **Tunable performance and a real panel** | Quality tiers (high/balanced/power-saver) + frame caps (30/60/90/120) + quarter-resolution 9-tap bloom; eleven collapsible groups with search, one-line explanations per row, per-row persistence and baseline snapshots. Headless measurement: **126 ms → 70 ms** per frame |
 
 Differences worth naming (same integrated-GPU machine):
 
@@ -55,7 +55,7 @@ dsh plugin add github:BeckChiang/open-sea-skin
 To skip the source build on your machine, use the prebuilt tarball from the Release (no `allowBuilds` approval needed):
 
 ```powershell
-dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.0.2/open-sea-skin-2.0.2.tgz
+dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.0.3/open-sea-skin-2.0.3.tgz
 ```
 
 ### Option 2: local link (for development)
@@ -77,8 +77,8 @@ dsh plugin add https://github.com/BeckChiang/open-sea-skin/releases/download/v2.
 **Verify**: the console should print
 
 ```text
-[open-sea-skin] client lab-2.0.2
-[open-sea-skin] ocean lab-2.0.2
+[open-sea-skin] client lab-2.0.3
+[open-sea-skin] ocean lab-2.0.3
 ```
 
 ---
@@ -111,7 +111,7 @@ Open it from the round button in the top-right corner. The search box filters ro
 The frame cap and the quality tier are independent; whichever is cheaper wins, and the render ratio additionally scales with measured frame cost. The **live readout** in the Advanced group shows the renderer's real state, not the requested one:
 
 ```text
-running: tier power-saver · cap 24 fps · render scale 0.58× (screen 1.0×) · measured 30 fps
+running: tier power-saver · cap 30 fps · render scale 0.58× (screen 1.0×) · measured 30 fps
 ```
 
 ---
