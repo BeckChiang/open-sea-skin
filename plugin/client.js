@@ -93,11 +93,9 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: true,
     seam: true,
     seamDim: 55,
-    seamFill: 45,
   glassMode: 'render',
     glassRadius: 20,
     colLeft: Object.freeze({ on: true, strength: 28 }),
-    colCenter: Object.freeze({ on: true, strength: 46 }),
     colRight: Object.freeze({ on: true, strength: 28 }),
     perf: false,
     boats: true,
@@ -137,8 +135,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       perfFps: '实测 {fps} fps',
       defaultBuiltin: '当前默认：内置值。',
       defaultSaved: '当前默认：{at} 保存的快照。',
-      previewCols: '预览三栏范围（2.6 秒）',
-      colsNote: '强度 0 或关掉开关 = 该栏不模糊。点上面按钮会在屏幕上框出三栏的真实区域。',
+      previewCols: '预览左右栏范围（2.6 秒）',
+      colsNote: '强度 0 或关掉开关 = 该栏不模糊。点上面按钮会在屏幕上框出左右两栏的真实区域。',
       note: '调节即时生效并自动保存。波浪与日照都按下面的设置实时驱动。',
       times: ['黄昏', '金色时刻', '下午', '正午'],
       secSkin: '皮肤',
@@ -157,7 +155,6 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: '背景模糊',
     seam: '分栏分割线',
     seamDim: '侧栏压暗',
-    seamFill: '交互区底色',
     hints: {
       qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 45；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
       fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
@@ -168,10 +165,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
       seam: '在左侧栏 / 交互区、交互区 / 右侧栏之间画一条细线，并把两侧栏压暗一档——模糊看不出边界，线可以。',
       seamDim: '两侧栏压暗的强度。0 只留分割线。',
-      seamFill: '给中间会话窗口加一层半透明底色，让它像侧栏那样成为一块独立面板。0 = 透明。',
       cols: {
         left: '左侧栏（会话/项目列表）。',
-        center: '交互区（左右两栏之间的对话与输入）。若没有独立容器，预览会按两条侧栏之间的空档估算，用橙色框并标「≈」。',
         right: '右侧栏（文件与预览面板，未打开时不生效）。',
       },
       skyDist: '把整片天空压进一个更宽的角度；1 倍是真实视场，2 倍能看到更多星座。',
@@ -350,8 +345,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       perfFps: 'measured {fps} fps',
       defaultBuiltin: 'Defaults: built-in values.',
       defaultSaved: 'Defaults: snapshot saved {at}.',
-      previewCols: 'Preview the three columns (2.6 s)',
-      colsNote: 'Strength 0 or the switch off means that column stays sharp. The button above outlines the real areas on screen.',
+      previewCols: 'Preview both rails (2.6 s)',
+      colsNote: 'Strength 0 or the switch off means that rail stays sharp. The button above outlines both rails on screen.',
       note: 'Changes apply immediately and save automatically.',
       times: ['Dusk', 'Golden hour', 'Afternoon', 'Midday'],
       secSkin: 'Skin',
@@ -370,7 +365,6 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
     frost: 'Background blur',
     seam: 'Column dividers',
     seamDim: 'Dim side rails',
-    seamFill: 'Conversation pane',
     hints: {
       qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 45; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
       fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
@@ -381,10 +375,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
       seam: 'Draws a hairline between the rails and the conversation, and dims the rails a step: blur has no edge, a line does.',
       seamDim: 'How much the rails are dimmed. 0 leaves only the hairline.',
-      seamFill: 'Gives the conversation its own translucent pane so it reads as a panel like the rails. 0 = transparent.',
       cols: {
         left: 'Left column: the session and project list.',
-        center: 'Conversation: the chat and composer between the two rails. When it has no container of its own the preview estimates the gap and marks it with a tilde.',
         right: 'Right column: files and preview. Has no effect while it is closed.',
       },
       skyDist: 'Packs the sky into a wider angle; 1x is the real field, 2x folds in more constellations.',
@@ -654,7 +646,6 @@ const FPS_LEVELS = [24, 30, 45, 60];
       frost: source.frost !== false,
       seam: source.seam !== false,
       seamDim: clamp(source.seamDim, 0, 100, DEFAULTS.seamDim),
-      seamFill: clamp(source.seamFill, 0, 100, DEFAULTS.seamFill),
     glassMode: source.glassMode === 'css' ? 'css' : 'render',
       glassRadius: clamp(
         source.glassRadius,
@@ -663,7 +654,6 @@ const FPS_LEVELS = [24, 30, 45, 60];
         Number.isFinite(LEGACY_GLASS_PX[source.glassLevel]) ? LEGACY_GLASS_PX[source.glassLevel] : DEFAULTS.glassRadius,
       ),
       colLeft: normalizeColumn(source.colLeft, DEFAULTS.colLeft),
-      colCenter: normalizeColumn(source.colCenter, DEFAULTS.colCenter),
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
       perf: source.perf === true,
       boats: source.boats !== false,
@@ -715,7 +705,6 @@ const FPS_LEVELS = [24, 30, 45, 60];
 /* CSS fallback: the browser blurs what sits behind each column. Slower than
    the in-renderer pass, so it is opt-in from the settings panel. */
 ${column('body [data-slot="sidebar"], body .dshDesktopSidebarSurface', 'colLeft')}
-${column('body [data-slot="main.conversation"], body .dshDesktopConversationSurface', 'colCenter')}
 ${column('body [data-rightbar-col], body .dshDesktopDetailsSurface', 'colRight')}`;
   }
 
@@ -1099,13 +1088,6 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     const COLUMN_SELECTORS = {
       colLeft: ['[data-slot="sidebar"]', '.dshDesktopSidebarSurface', '#root > div:first-child > :first-child'],
-      colCenter: [
-        '[data-slot="main.conversation"]',
-        '[data-slot="main"]',
-        '.dshDesktopConversationSurface',
-        '[data-conversation]',
-        'main',
-      ],
       colRight: ['[data-rightbar-col]', '.dshDesktopDetailsSurface'],
     };
 
@@ -1134,7 +1116,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           level,
         };
       };
-      return [pick('colLeft'), pick('colCenter'), pick('colRight')].filter(Boolean).slice(0, 3);
+      // only the two side rails are dressed; the conversation stays untouched
+      return [pick('colLeft'), pick('colRight')].filter(Boolean);
     };
 
     // Same selectors as the renderer pass, but ignoring the on/strength gates:
@@ -1152,15 +1135,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         const rect = element.getBoundingClientRect();
         return { key, x0: rect.left, y0: rect.top, x1: rect.right, y1: rect.bottom };
       };
-      const found = ['colLeft', 'colCenter', 'colRight'].map(pick);
-      // The chat column often has no stable hook; when it is missing, the space
-      // between the side rails is the honest answer to "where is it?".
-      if (!found[1] && found[0] && found[2]) {
-        const left = found[0];
-        const right = found[2];
-        found[1] = { key: 'colCenter', x0: left.x1, y0: left.y0, x1: right.x0, y1: left.y1, guess: true };
-      }
-      return found;
+      return ['colLeft', 'colRight'].map(pick).filter(Boolean);
     };
 
     // Blur alone cannot say where a column ends, so draw the boundary: one line
@@ -1168,17 +1143,10 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     const SEAM_ID = 'oss-seam';
     const seamRects = () => {
       const found = measureAllColumns();
-      const left = found[0] || null;
-      const right = found[2] || null;
-      const width = window.innerWidth || 1;
-      const height = window.innerHeight || 1;
-      let centre = found[1] || null;
-      if (!centre) {
-        const x0 = left ? left.x1 : 0;
-        const x1 = right ? right.x0 : width;
-        if (x1 - x0 > 120) centre = { key: 'colCenter', x0, x1, y0: 0, y1: height, guess: true };
-      }
-      return { left, right, centre };
+      return {
+        left: found.find((rect) => rect.key === 'colLeft') || null,
+        right: found.find((rect) => rect.key === 'colRight') || null,
+      };
     };
 
     const updateSeam = () => {
@@ -1187,24 +1155,16 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         if (existing) existing.remove();
         return;
       }
-      const { left, right, centre } = seamRects();
+      const { left, right } = seamRects();
       if (!left && !right) {
         if (existing) existing.remove();
         return;
       }
       const dim = clamp(state.seamDim, 0, 100, 0) / 100;
-      const fill = clamp(state.seamFill, 0, 100, 0) / 100;
       const layer = existing || document.createElement('div');
       layer.id = SEAM_ID;
       layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147480000;';
       let html = '';
-      // the conversation gets its own pane, like the rails do in the stock UI
-      if (centre && fill > 0.02) {
-        const pad = 6;
-        const w = Math.max(0, Math.round(centre.x1 - centre.x0) - pad * 2);
-        const h = Math.max(0, Math.round(centre.y1 - centre.y0) - pad * 2);
-        html += `<b style="position:absolute;left:${Math.round(centre.x0) + pad}px;top:${Math.round(centre.y0) + pad}px;width:${w}px;height:${h}px;border-radius:18px;background:linear-gradient(180deg,rgba(8,16,24,.92),rgba(6,12,20,.86));box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);opacity:${(fill * 0.42).toFixed(2)};"></b>`;
-      }
       for (const x of [left ? left.x1 : null, right ? right.x0 : null]) {
         if (x === null) continue;
         html += `<i style="position:absolute;top:0;bottom:0;left:${Math.round(x)}px;width:1px;background:linear-gradient(180deg,rgba(143,233,228,0),rgba(143,233,228,.6) 14%,rgba(143,233,228,.6) 86%,rgba(143,233,228,0));box-shadow:0 0 12px rgba(120,214,232,.4);"></i>`;
@@ -1258,7 +1218,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 
     const previewColumns = () => {
       for (const node of document.querySelectorAll('.oss-colmap')) node.remove();
-      const labels = { colLeft: copy.cols.left, colCenter: copy.cols.center, colRight: copy.cols.right };
+      const labels = { colLeft: copy.cols.left, colRight: copy.cols.right };
       for (const rect of measureAllColumns()) {
         if (!rect) continue;
         const box = document.createElement('div');
@@ -1923,10 +1883,8 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
           ${rangeRow(pid('glass-radius'), 'glassRadius', 0, 24, 0.5)}
           ${switchRow(pid('seam'), 'seam')}
           ${rangeRow(pid('seam-dim'), 'seamDim', 0, 100, 5)}
-          ${rangeRow(pid('seam-fill'), 'seamFill', 0, 100, 5)}
-          ${colRow(pid('col-left'), 'cols.left')}
-          ${colRow(pid('col-center'), 'cols.center')}
-          ${colRow(pid('col-right'), 'cols.right')}
+                    ${colRow(pid('col-left'), 'cols.left')}
+                    ${colRow(pid('col-right'), 'cols.right')}
           <div class="oss-row"><button type="button" class="oss-reset" id="${pid('cols-preview')}" data-copy="previewCols"></button></div>
 <p class="oss-sub" data-copy="colsNote"></p>
 ${switchRow(pid('perf'), 'perf')}
@@ -1984,7 +1942,6 @@ ${switchRow(pid('perf'), 'perf')}
       const segGlassMode = el('glass-mode');
       const columns = {
         colLeft: { root: el('col-left'), on: el('col-left-on'), range: el('col-left-strength'), out: out('col-left') },
-        colCenter: { root: el('col-center'), on: el('col-center-on'), range: el('col-center-strength'), out: out('col-center') },
         colRight: { root: el('col-right'), on: el('col-right-on'), range: el('col-right-strength'), out: out('col-right') },
       };
 
@@ -2044,7 +2001,6 @@ ${switchRow(pid('perf'), 'perf')}
         ['glass-radius', 'glassRadius', 1, 'px'],
         ['glow', 'glow', 0, 'pct'],
       ['seam-dim', 'seamDim', 0, 'pct'],
-      ['seam-fill', 'seamFill', 0, 'pct'],
       ];
 
       // One formatter per kind of value; the panel never shows a raw float.
@@ -2554,10 +2510,8 @@ ${switchRow(pid('perf'), 'perf')}
     frost: 'ossFrost',
     seam: 'ossSeam',
     seamDim: 'ossSeamDim',
-    seamFill: 'ossSeamFill',
     glassMode: 'ossGlassMode',
     colLeft: 'ossColLeft',
-    colCenter: 'ossColCenter',
     colRight: 'ossColRight',
     perf: 'ossPerf',
     boats: 'ossBoats',
@@ -2601,7 +2555,7 @@ ${switchRow(pid('perf'), 'perf')}
   });
 
   const BOOLEAN_KEYS = new Set(['enabled', 'autoCycle', 'moon', 'meteor', 'perf', 'boats', 'starsDaylight', 'frost', 'seam']);
-  const JSON_KEYS = new Set(['colLeft', 'colCenter', 'colRight', 'baseline']);
+  const JSON_KEYS = new Set(['colLeft', 'colRight', 'baseline']);
   const NULLABLE_KEYS = new Set(['lat', 'lon']);
   const TEXT_KEYS = new Set([
     'waveMode', 'sunMode', 'stars', 'constellation', 'cross', 'clouds', 'glassMode',
@@ -2679,7 +2633,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-1.5.51';
+  const SKIN_BUILD = 'lab-1.5.52';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];

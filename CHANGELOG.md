@@ -1,3 +1,17 @@
+# 1.5.52
+
+## Changed
+
+- The conversation column is out of scope. 1.5.51 tried to give the middle a
+  translucent pane; it read as a veil over the text rather than a surface, so the
+  pane, its dial and the middle blur pass are gone. Glass, dimming and the seam
+  hairlines now only touch the two side rails.
+
+## Fixed
+
+- The seam still survives a reload (`seam` / `seamDim` stay in the normalise
+  whitelist), and the runtime readout is still built on mount.
+
 # 1.5.51
 
 ## Fixed

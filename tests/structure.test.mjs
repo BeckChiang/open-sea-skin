@@ -599,11 +599,6 @@ test('the panel reports the tier it is actually running', () => {
   assert.ok(clientSource.includes("copy.perfScale.replace('{scale}', scale.toFixed(2))"), 'and the render scale is shown, not the requested one')
 })
 
-test('the centre column is measured, or honestly estimated', () => {
-  assert.ok(clientSource.includes("'[data-slot=\"main\"]'"), 'more than one hook is tried for the chat column')
-  assert.ok(clientSource.includes('if (!found[1] && found[0] && found[2]) {'), 'when none matches, the gap between the rails is used')
-  assert.ok(clientSource.includes("rect.guess ? ' ≈' : ''"), 'and the estimate is marked as an estimate')
-})
 
 test('the columns get a drawn boundary, not just a blur', () => {
   assert.ok(clientSource.includes("    seam: true,"), 'dividers are on by default')
@@ -614,18 +609,17 @@ test('the columns get a drawn boundary, not just a blur', () => {
   assert.ok(clientSource.includes("'starsDaylight', 'frost', 'seam']"), 'and a boolean key exists for it')
 })
 
-test('the seam survives a reload, and the conversation gets its own pane', () => {
+test('the seam survives a reload, and it only dresses the two rails', () => {
   // normalize() re-builds state from a whitelist; a field missing there is
   // silently dropped on every load, which is exactly how the seam vanished.
   assert.ok(clientSource.includes('seam: source.seam !== false'), 'seam is normalised')
   assert.ok(clientSource.includes('seamDim: clamp(source.seamDim'), 'dim is normalised')
-  assert.ok(clientSource.includes('seamFill: clamp(source.seamFill'), 'pane fill is normalised')
-  assert.ok(clientSource.includes("seamFill: 'ossSeamFill'"), 'pane fill persists')
-  assert.ok(clientSource.includes("pid('seam-fill')"), 'and has a dial')
-  // the centre pane is what makes the middle read as a panel, like the rails do
-  assert.ok(clientSource.includes('border-radius:18px'), 'the centre pane is drawn')
-  assert.ok(clientSource.includes('let centre = found[1] || null;'), 'measured centre wins')
-  assert.ok(clientSource.includes('x1 - x0 > 120'), 'the rails gap stands in for it')
+  assert.ok(clientSource.includes("seam: 'ossSeam'"), 'and persists')
+  assert.ok(clientSource.includes("pid('seam-dim')"), 'dim has a dial')
+  // the middle column is out of scope: no fill, no blur, no control
+  assert.ok(!clientSource.includes('seamFill'), 'no conversation pane')
+  assert.ok(!clientSource.includes('colCenter'), 'no middle column anywhere')
+  assert.ok(clientSource.includes("return [pick('colLeft'), pick('colRight')].filter(Boolean);"), 'blur only dresses the rails')
 })
 
 test('the runtime readout is built on mount, not on a button press', () => {

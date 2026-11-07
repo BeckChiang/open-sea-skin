@@ -1649,7 +1649,7 @@ function animate(now) {
   }
 }
 
-const OCEAN_BUILD = 'lab-1.5.51';
+const OCEAN_BUILD = 'lab-1.5.52';
 
 // How often the frame reports its own state to the host page.
 const STATE_POST_MS = 400;
