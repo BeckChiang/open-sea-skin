@@ -658,3 +658,20 @@ test('glass only dresses the two rails, and nothing draws over the UI', () => {
   assert.ok(clientSource.includes("colLeft: ["), 'the left rail is measured')
   assert.ok(clientSource.includes("colRight: ['[data-rightbar-col]"), 'and the right one')
 })
+
+test('picking a quality tier moves the frame-rate dial with it', () => {
+  // 2.0.4: the tier used to change the pixel ratio only, so the rate dial below
+  // stayed where it was until the user clicked it a second time.
+  assert.ok(
+    clientSource.includes('const PRESET_FPS = { high: 90, balanced: 60, low: 30 };'),
+    'each tier carries a suggested cap',
+  )
+  assert.ok(
+    clientSource.includes("case pid('quality'): return { quality: value, fps: PRESET_FPS[value] || state.fps };"),
+    'the tier click posts the suggested cap along with the tier',
+  )
+  assert.ok(
+    clientSource.includes("setSeg(el('fps'), String(patch.fps))"),
+    'and the rate buttons light up in the same click',
+  )
+})

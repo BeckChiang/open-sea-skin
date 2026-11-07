@@ -152,8 +152,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: '毛玻璃',
     frost: '背景模糊',
     hints: {
-      qualityMode: '画质档位：高 = 1.5× 像素比 / 60 fps；平衡 = 1.0× / 40；省电 = 0.85× / 30。只改内部渲染分辨率与目标帧率，面板本身不变。',
-      fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。与上面画质档位独立，取两者中更省的那个。',
+      qualityMode: '画质档位：高 = 1.5× 像素比 / 建议 90 fps；平衡 = 1.0× / 60；省电 = 0.85× / 30。点档位会把下面的帧率一起设成该档建议值，之后仍可单独调帧率。',
+      fpsMode: '帧率上限：显卡每秒最多画多少帧，越低越省电。选画质档位会给一个建议值，之后随时可以单独改；上限高于屏幕刷新率时按刷新率跑。',
       glow: '泛光强度：地平线、太阳与月光的高光溢出。0 = 关掉整个 1/4 分辨率泛光 pass。',
       glassMode: '渲染器内 = 毛玻璃在 WebGPU 里做（可逐栏、可调半径）；CSS 模糊 = 交给浏览器，省 GPU 但只有一档。',
       glassStyle: '模糊的取样形状：高斯最自然、盒式最省、双层更厚、径向中间清楚边缘糊、磨砂有颗粒、玻璃砖成块。',
@@ -358,8 +358,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
       secGlass: 'Frosted glass',
     frost: 'Background blur',
     hints: {
-      qualityMode: 'Quality: high = 1.5x pixel ratio / 60 fps; balanced = 1.0x / 40; saver = 0.85x / 30. It only changes the internal render size and frame target, never the panel.',
-      fpsMode: 'Frame cap: how many frames per second the GPU draws. Independent of quality; the lower of the two wins.',
+      qualityMode: 'Quality: high = 1.5x pixel ratio / suggests 90 fps; balanced = 1.0x / 60; saver = 0.85x / 30. Picking a tier also sets the frame-rate dial below to that suggestion; you can still change the rate on its own afterwards.',
+      fpsMode: 'Frame cap: how many frames per second the GPU draws. A quality tier suggests one and you can always change it on its own; a cap above your display rate just runs at the display rate.',
       glow: 'Bloom strength on the horizon, sun and moon. At 0 the whole quarter-resolution bloom pass is skipped.',
       glassMode: 'Renderer = blur inside WebGPU (per column, real radius); CSS = the browser does it: cheaper, one radius only.',
       glassStyle: 'Kernel shape: gaussian is the most natural, box the cheapest, double thicker, radial sharp centre, frost grainy, tile blocky.',
@@ -557,6 +557,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin", factory: (require) => {
   const TZ_MODES = ['system', 'longitude', 'manual'];
 const QUALITY_LEVELS = ['high', 'balanced', 'low'];
 const FPS_LEVELS = [30, 60, 90, 120];
+
+// 2.0.4: a tier carries a suggested cap so the two dials never disagree on the
+// first click. The cap stays its own dial: changing it afterwards does not move
+// the tier back, and the suggestion is only applied by the panel's click.
+const PRESET_FPS = { high: 90, balanced: 60, low: 30 };
 
   // A column used to store a blur letter. It now stores a 0..100 strength, and
   // a saved letter is folded into one so old profiles keep their look.
@@ -2152,13 +2157,14 @@ ${switchRow(pid('perf'), 'perf')}
             case pid('glass-mode'): return { glassMode: value };
       case pid('star-mode'): return { starMode: value };
       case pid('glass-style'): return { glassStyle: value };
-            case pid('quality'): return { quality: value };
+            case pid('quality'): return { quality: value, fps: PRESET_FPS[value] || state.fps };
       case pid('fps'): return { fps: Number(value) };
             default: return null;
           }
         })();
         if (!patch) return;
         setSeg(group, value);
+        if (Number.isFinite(patch.fps)) setSeg(el('fps'), String(patch.fps));
         void save(patch);
         refresh();
       });
@@ -2562,7 +2568,7 @@ ${switchRow(pid('perf'), 'perf')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-2.0.3';
+  const SKIN_BUILD = 'lab-2.0.4';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
