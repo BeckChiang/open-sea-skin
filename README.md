@@ -15,7 +15,7 @@
 - 上游项目：[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · 分叉起点：`v1.2.7`
 - 上游许可：MIT，全文见 [`LICENSE`](LICENSE)；必须保留的第三方署名见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - 为什么分叉、改了什么、怎么回退上游：[`docs/FORK.md`](docs/FORK.md)
-- 当前版本：**2.0.4**（tag `v2.0.4`；2.0.0 是冻结基线，tag `v2.0.0` 仍可安装）
+- 当前版本：**2.0.4**（tag `v2.0.4`）。2.0.0 是冻结基线，tag 仍可检出源码；2.0.0–2.0.3 的发布包与 Release 已下架，只保留最新一版的可安装包
 
 ---
 

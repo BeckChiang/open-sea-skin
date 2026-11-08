@@ -15,7 +15,7 @@ It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clou
 - Upstream: [d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · fork point `v1.2.7`
 - Upstream licence: MIT, full text in [`LICENSE`](LICENSE); required third-party notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - Why the fork exists and how to fall back: [`docs/FORK.md`](docs/FORK.md)
-- Current version: **2.0.4** (tag `v2.0.4`; 2.0.0 remains the frozen baseline, tag `v2.0.0`)
+- Current version: **2.0.4** (tag `v2.0.4`). 2.0.0 stays the frozen baseline and its tag still resolves to the source; the 2.0.0–2.0.3 releases are off the shelf, so only the newest installable package is published
 
 ---
 
