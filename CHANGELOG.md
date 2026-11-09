@@ -1,3 +1,11 @@
+# 2.0.6
+
+## Fixed — 浏览器模块 id 改为 npm 包名
+
+- `plugin/client.js` 里 `window.__ModuleLoader__.load({ id })` 的 id 必须是包名，之前仍是 `open-sea-skin`；装上 `open-sea-skin-dsh` 后前端模块注册不上，Host 路由虽在（`/open-sea-skin/fleet` 可达）但皮肤不出现。
+- 与 2.0.5 的 `cordis.patch.yml` `name` 修正同一类问题：一行是 Host 侧的包 specifier，一行是浏览器侧的模块 id，两处都得跟包名走。
+- 面板 id、DOM 类名、slot 注册名与日志前缀保持 `open-sea-skin`，视觉与设置存档不受影响。
+
 # 2.0.5
 
 ## Fixed — 包名改为 npm 上的 open-sea-skin-dsh
