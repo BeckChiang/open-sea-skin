@@ -3,4 +3,4 @@
 # route and the matching browser module without modifying Harness source.
 - insert:
     - id: open-sea-skin
-      name: open-sea-skin
+      name: open-sea-skin-dsh

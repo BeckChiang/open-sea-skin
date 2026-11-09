@@ -1,3 +1,11 @@
+# 2.0.5
+
+## Fixed — 包名改为 npm 上的 open-sea-skin-dsh
+
+- npm 上的 `open-sea-skin` 属于上游 d-dev0101，本仓库改名 `open-sea-skin-dsh` 发布；bundle patch 里的 `name` 必须同步成新包名，否则装好之后 loader 解析模块时找不到 `open-sea-skin`。
+- `id` 仍是 `open-sea-skin`，与上游互斥这一点不变。
+- 渲染代码未改。
+
 # 2.0.4
 
 ## Changed — 点画质档位时，帧率跟着走
