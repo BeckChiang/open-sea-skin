@@ -48,7 +48,15 @@
 
 ### 方式一：插件发布包（推荐）
 
-本仓库符合 DSH 插件市场的收录形态：`package.json` 声明了 `dsh.bundle`（指向 `cordis.patch.yml`），预构建 tarball 挂在 [Releases](https://github.com/BeckChiang/open-sea-skin/releases) 上，仓库带 `dsh-plugin` topic。
+本仓库符合 DSH 插件市场的收录形态：`package.json` 声明了 `dsh.bundle`（指向 `cordis.patch.yml`），已发布到 npm（包名 `open-sea-skin-dsh`），预构建 tarball 也挂在 [Releases](https://github.com/BeckChiang/open-sea-skin/releases) 上，仓库带 `dsh-plugin` topic。
+
+从 npm 安装：
+
+```powershell
+dsh plugin add open-sea-skin-dsh
+```
+
+从 GitHub 装（走本仓库源码构建）：
 
 ```powershell
 dsh plugin add github:BeckChiang/open-sea-skin

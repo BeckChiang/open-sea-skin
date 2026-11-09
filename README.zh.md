@@ -29,7 +29,10 @@
 
 1. 装到 DSH 插件目录，二选一：
    ```powershell
-   # 发布包（推荐）
+   # npm 发布包（推荐）
+   dsh plugin add open-sea-skin-dsh
+
+   # 或从 GitHub 装（走源码构建）
    dsh plugin add github:BeckChiang/open-sea-skin
 
    # 或者从源码 clone（要改渲染代码时）

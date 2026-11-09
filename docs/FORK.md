@@ -38,7 +38,7 @@ node --check shared/ocean.js            # 语法检查（ES module 按 --input-t
 ## 安装与回退
 
 ```sh
-# 装本 fork（同一包名 open-sea-skin，profile 里的 cordis.patch.yml insert id 不变）
+# 装本 fork（npm 包名 open-sea-skin-dsh；cordis.patch.yml 的 insert id 仍是 open-sea-skin，所以与上游互斥）
 plugin_manager remove_bundle  open-sea-skin
 plugin_manager install_bundle link:C:/Users/<你>/DSH/plugins/open-sea-skin-lab
 ```

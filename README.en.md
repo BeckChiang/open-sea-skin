@@ -46,7 +46,13 @@ Two ways to install: the **published package** (normal use) or a **local `link:`
 
 ### Option 1: published package (recommended)
 
-This repository is shaped for the DSH plugin market: `package.json` declares `dsh.bundle` (pointing at `cordis.patch.yml`), a prebuilt tarball is attached to [Releases](https://github.com/BeckChiang/open-sea-skin/releases), and the repo carries the `dsh-plugin` topic.
+This repository is shaped for the DSH plugin market: `package.json` declares `dsh.bundle` (pointing at `cordis.patch.yml`), it is published to npm as `open-sea-skin-dsh`, a prebuilt tarball is attached to [Releases](https://github.com/BeckChiang/open-sea-skin/releases), and the repo carries the `dsh-plugin` topic.
+
+```powershell
+dsh plugin add open-sea-skin-dsh
+```
+
+Or install straight from GitHub (builds from this source tree):
 
 ```powershell
 dsh plugin add github:BeckChiang/open-sea-skin
