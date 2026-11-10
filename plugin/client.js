@@ -96,6 +96,13 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
     colLeft: Object.freeze({ on: true, strength: 28 }),
     colRight: Object.freeze({ on: true, strength: 28 }),
     perf: false,
+    // 2.0.7 performance switches: every one of these can be turned off and the
+    // 2.0.6 frame comes back unchanged
+    perfScheduler: true,
+    pauseWhenObscured: 'pause',
+    webgl2Adaptive: true,
+    resizeDebounce: true,
+    glassBlurMode: 'live',
     boats: true,
     boatSpread: 2,
     boatPace: 1,
@@ -158,6 +165,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       glassMode: '渲染器内 = 毛玻璃在 WebGPU 里做（可逐栏、可调半径）；CSS 模糊 = 交给浏览器，省 GPU 但只有一档。',
       glassStyle: '模糊的取样形状：高斯最自然、盒式最省、双层更厚、径向中间清楚边缘糊、磨砂有颗粒、玻璃砖成块。',
       perf: '性能模式：一键关掉毛玻璃与额外采样，只保留海面与天空。',
+      perfScheduler: '智能帧调度：把整帧逻辑（星点朝向、船只、相机）也按帧率上限节流，不再在 144Hz 屏上空跑；时间仍按真实时钟推进，海面不会跳。',
+      pauseWhenObscured: '后台停止渲染：DSH 窗口被别的窗口盖住时停画或降频。停止最省电，降频保留 10fps 让天色继续走，关闭则一直满帧。',
+      webgl2Adaptive: '无 WebGPU 时自适应：没有 WebGPU 的机器不再被死钉在 30fps / 0.6×，而是按画质档位跑并由自适应调节；关掉即回到旧的固定降级。',
+      resizeDebounce: '窗口缩放防抖：拖动窗口边缘时先拉伸旧画面，停手 150ms 后再按新尺寸重建渲染目标，避免每像素重建一次。',
+      glassBlurMode: '毛玻璃刷新方式：实时 = backdrop-filter 每帧重新取样（最好看也最贵）；静态 = 只保留底色、不再实时取样；关闭 = 连接底色一起去掉。仅在「CSS 模糊」模式下生效。',
       frost: '背景模糊总开关。关掉后三栏与外壳都不再糊，但设置面板仍保留 9px 底模糊以便阅读。',
       cols: {
         left: '左侧栏（会话/项目列表）。',
@@ -255,6 +267,13 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       secMeteor: '流星',
       secClouds: '云',
       secAdvanced: '高级',
+      secPerf: '性能',
+      perfScheduler: '智能帧调度',
+      pauseWhenObscured: '后台停止渲染',
+      webgl2Adaptive: '无 WebGPU 时自适应',
+      resizeDebounce: '窗口缩放防抖',
+      glassBlurMode: '毛玻璃刷新方式',
+      perfNote: '这一组只管「什么时候不画」与「画多快」，不改画面本身；想改像素预算用下面的画质档位，想改帧率上限用帧率档。',
       skyTone: '夜色倾向',
       domeAmount: '穹顶弧度',
       starSize: '星点大小',
@@ -316,6 +335,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       sunModes: { real: '真实时钟', manual: '手动' },
       grades: { off: '关', low: '少', mid: '中', high: '多' },
       glassModes: { render: '渲染器内', css: 'CSS 模糊' },
+      pauseModes: { pause: '停止', throttle: '降频', off: '关闭' },
+      glassBlurModes: { live: '实时', static: '静态', off: '关闭' },
       levels: { off: '关', weak: '弱', medium: '中', strong: '强' },
     },
     en: {
@@ -364,6 +385,11 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       glassMode: 'Renderer = blur inside WebGPU (per column, real radius); CSS = the browser does it: cheaper, one radius only.',
       glassStyle: 'Kernel shape: gaussian is the most natural, box the cheapest, double thicker, radial sharp centre, frost grainy, tile blocky.',
       perf: 'Performance mode: drops the glass and extra taps, keeps water and sky.',
+      perfScheduler: 'Smart frame scheduler: the per-frame logic (star billboards, boats, camera) runs at the frame cap too, instead of 144 times a second on a 144 Hz panel to present 30 frames. Time still advances on the wall clock, so the sea never jumps.',
+      pauseWhenObscured: 'Stop in background: when another window covers DSH, stop drawing or slow down. Stop saves the most; throttle keeps 10 fps so the sky keeps moving; off always runs at full rate.',
+      webgl2Adaptive: 'Adaptive without WebGPU: a machine without WebGPU is no longer pinned to 30 fps / 0.6x; it runs the chosen tier and lets the governor adjust. Off restores the old fixed fallback.',
+      resizeDebounce: 'Debounce resize: while you drag a window edge the old frame is stretched; the render targets are rebuilt 150 ms after you let go, not once per pixel.',
+      glassBlurMode: 'Glass blur refresh: live = backdrop-filter re-samples every frame (best looking, most expensive); static = keep the fill, drop the live sample; off = drop the fill too. Only applies in CSS blur mode.',
       frost: 'Master background blur. Off leaves all columns sharp, while the settings panel keeps a 9px floor so it stays readable.',
       cols: {
         left: 'Left column: the session and project list.',
@@ -461,6 +487,13 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       secMeteor: 'Meteors',
       secClouds: 'Clouds',
       secAdvanced: 'Advanced',
+      secPerf: 'Performance',
+      perfScheduler: 'Smart frame scheduler',
+      pauseWhenObscured: 'Stop in background',
+      webgl2Adaptive: 'Adaptive without WebGPU',
+      resizeDebounce: 'Debounce resize',
+      glassBlurMode: 'Glass blur refresh',
+      perfNote: 'This group only decides when to stop drawing and how fast to draw; it never changes the picture itself. Pixel budget stays on the quality tier below, the frame cap stays on its own dial.',
       skyTone: 'Night tint',
       domeAmount: 'Dome curve',
       starSize: 'Star size',
@@ -522,6 +555,8 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
       sunModes: { real: 'Real clock', manual: 'Manual' },
       grades: { off: 'Off', low: 'Low', mid: 'Mid', high: 'High' },
       glassModes: { render: 'In renderer', css: 'CSS blur' },
+      pauseModes: { pause: 'Stop', throttle: 'Throttle', off: 'Off' },
+      glassBlurModes: { live: 'Live', static: 'Static', off: 'Off' },
       levels: { off: 'Off', weak: 'Weak', medium: 'Mid', strong: 'Strong' },
     },
   });
@@ -557,6 +592,10 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
   const TZ_MODES = ['system', 'longitude', 'manual'];
 const QUALITY_LEVELS = ['high', 'balanced', 'low'];
 const FPS_LEVELS = [30, 60, 90, 120];
+// 2.0.7: how the surface behaves while it is in the background, and how the CSS
+// glass fallback refreshes itself
+const PAUSE_MODES = ['pause', 'throttle', 'off'];
+const GLASS_BLUR_MODES = ['live', 'static', 'off'];
 
 // 2.0.4: a tier carries a suggested cap so the two dials never disagree on the
 // first click. The cap stays its own dial: changing it afterwards does not move
@@ -649,6 +688,11 @@ const PRESET_FPS = { high: 90, balanced: 60, low: 30 };
       colLeft: normalizeColumn(source.colLeft, DEFAULTS.colLeft),
       colRight: normalizeColumn(source.colRight, DEFAULTS.colRight),
       perf: source.perf === true,
+      perfScheduler: source.perfScheduler !== false,
+      pauseWhenObscured: PAUSE_MODES.includes(source.pauseWhenObscured) ? source.pauseWhenObscured : DEFAULTS.pauseWhenObscured,
+      webgl2Adaptive: source.webgl2Adaptive !== false,
+      resizeDebounce: source.resizeDebounce !== false,
+      glassBlurMode: GLASS_BLUR_MODES.includes(source.glassBlurMode) ? source.glassBlurMode : DEFAULTS.glassBlurMode,
       boats: source.boats !== false,
       boatSpread: clamp(source.boatSpread, 0.2, 3, DEFAULTS.boatSpread),
       boatPace: clamp(source.boatPace, 0.3, 2.5, DEFAULTS.boatPace),
@@ -687,6 +731,19 @@ const PRESET_FPS = { high: 90, balanced: 60, low: 30 };
 
   function blurCss(state) {
     if (!state.frost || state.glassMode !== 'css' || state.perf) return '';
+    const columns = 'body [data-slot="sidebar"], body .dshDesktopSidebarSurface, body [data-rightbar-col], body .dshDesktopDetailsSurface';
+    // 2.0.7: a backdrop-filter is re-sampled by the compositor every frame the
+    // scene under it changes, which is every frame. `static` keeps the frosted
+    // fill (painted by glassCss) but stops re-sampling; `off` also drops the
+    // column fill, so the columns read as plain windows.
+    if (state.glassBlurMode === 'static') {
+      return `/* static glass: fill stays, the live backdrop sample does not */
+${columns} { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }`;
+    }
+    if (state.glassBlurMode === 'off') {
+      return `/* glass blur off: no live sample and no column fill */
+${columns} { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background-color: transparent !important; }`;
+    }
     const column = (selector, key) => {
       const entry = state[key];
       // one radius for the frame, each column takes a share of it
@@ -1075,6 +1132,12 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         overflow: seaOverflow(),
         quality: state.quality,
     fps: state.fps,
+        // 2.0.7 performance switches; glassBlurMode stays on this side, it only
+        // rewrites our own CSS and never reaches the renderer
+        perfScheduler: state.perfScheduler,
+        pauseWhenObscured: state.pauseWhenObscured,
+        webgl2Adaptive: state.webgl2Adaptive,
+        resizeDebounce: state.resizeDebounce,
         glow: state.glow,
       });
     };
@@ -1709,6 +1772,11 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       frame.addEventListener('load', () => {
         postSun();
         postGlass();
+        // a fresh frame boots believing it is on screen; correct that at once
+        if (typeof postActive === 'function') {
+          lastActive = null;
+          postActive();
+        }
         postBoats();
           postToOcean(state.waveMode === 'manual' ? state.sea : seaValue);
         // The frame boots with one boat on the water; the poll below reposts the
@@ -1718,6 +1786,34 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         if (glassTimer) window.clearInterval(glassTimer);
         glassTimer = window.setInterval(postGlass, 1500);
       }, { once: true });
+      // 2.0.7: forward whether this window is actually the one on screen. The
+      // surface lives in an iframe, which is never a tab: it sees neither
+      // visibilitychange (that one it does see) nor focus (that one it never
+      // gets), so a covered DSH window looked identical to an idle one and the
+      // sea kept drawing at full rate behind whatever was on top. Debounced,
+      // because alt-tabbing flickers focus and stopping/starting per flicker
+      // would cost more than it saves.
+      let activeTimer = 0;
+      let lastActive = null;
+      const postActive = () => {
+        const active = !document.hidden && document.hasFocus();
+        if (active === lastActive) return;
+        lastActive = active;
+        post({ type: 'oss-active', active });
+      };
+      const scheduleActive = () => {
+        if (activeTimer) window.clearTimeout(activeTimer);
+        activeTimer = window.setTimeout(postActive, 500);
+      };
+      window.addEventListener('focus', scheduleActive);
+      window.addEventListener('blur', scheduleActive);
+      document.addEventListener('visibilitychange', scheduleActive);
+      surfaceCleanups.push(() => {
+        window.removeEventListener('focus', scheduleActive);
+        window.removeEventListener('blur', scheduleActive);
+        document.removeEventListener('visibilitychange', scheduleActive);
+        if (activeTimer) window.clearTimeout(activeTimer);
+      });
       ownsSurface = true;
       return true;
     };
@@ -1836,11 +1932,18 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
 <p class="oss-sub" data-copy="colsNote"></p>
 ${switchRow(pid('perf'), 'perf')}
           <p class="oss-sub" data-copy="glassNote"></p>`)}
+        ${group('secPerf', `
+          ${switchRow(pid('perf-scheduler'), 'perfScheduler')}
+          ${segRow(pid('pause-mode'), 'pauseWhenObscured', [['pause', 'pauseModes.pause'], ['throttle', 'pauseModes.throttle'], ['off', 'pauseModes.off']])}
+          ${switchRow(pid('webgl2-adaptive'), 'webgl2Adaptive')}
+          <p class="oss-sub" data-copy="perfNote"></p>`)}
         ${group('secAdvanced', `
           <p class="oss-sub" data-copy="perfGroup"></p>
           ${segRow(pid('quality'), 'qualityMode', [['high', 'quality.high'], ['balanced', 'quality.balanced'], ['low', 'quality.low']])}
           ${rangeRow(pid('glow'), 'glow', 0, 100, 1)}
         ${segRow(pid('fps'), 'fpsMode', [['30', 'fps.30'], ['60', 'fps.60'], ['90', 'fps.90'], ['120', 'fps.120']])}
+${switchRow(pid('resize-debounce'), 'resizeDebounce')}
+          ${segRow(pid('glass-blur-mode'), 'glassBlurMode', [['live', 'glassBlurModes.live'], ['static', 'glassBlurModes.static'], ['off', 'glassBlurModes.off']])}
 <p class="oss-sub" id="${pid('perf-out')}"></p>
           <div class="oss-row"><button type="button" class="oss-reset" id="${pid('make-default')}" data-copy="makeDefault"></button></div>
           <p class="oss-sub" id="${pid('default-out')}"></p>
@@ -1857,6 +1960,9 @@ ${switchRow(pid('perf'), 'perf')}
       const moonBox = el('moon');
       const perfBox = el('perf');
       const frostBox = el('frost');
+      const schedulerBox = el('perf-scheduler');
+      const webgl2Box = el('webgl2-adaptive');
+      const resizeDebounceBox = el('resize-debounce');
       const milkyOut = el('milky-out');
       const boatsBox = el('boats');
       const meteorBox = el('meteor');
@@ -1970,6 +2076,9 @@ ${switchRow(pid('perf'), 'perf')}
         moonBox.checked = state.moon;
         perfBox.checked = state.perf;
         if (frostBox) frostBox.checked = state.frost;
+        if (schedulerBox) schedulerBox.checked = state.perfScheduler;
+        if (webgl2Box) webgl2Box.checked = state.webgl2Adaptive;
+        if (resizeDebounceBox) resizeDebounceBox.checked = state.resizeDebounce;
         if (meteorBox) meteorBox.checked = state.meteor;
       if (daylightBox) daylightBox.checked = state.starsDaylight;
         if (boatsBox) boatsBox.checked = state.boats;
@@ -1984,6 +2093,8 @@ ${switchRow(pid('perf'), 'perf')}
       // every performance button unlit even though one of them was in effect
       setSeg(el('quality'), state.quality);
       setSeg(el('fps'), String(state.fps));
+      setSeg(el('pause-mode'), state.pauseWhenObscured);
+      setSeg(el('glass-blur-mode'), state.glassBlurMode);
       if (milkyOut) milkyOut.textContent = milkyText();
         for (const [key, entry] of Object.entries(columns)) {
           const entryState = state[key];
@@ -2159,6 +2270,8 @@ ${switchRow(pid('perf'), 'perf')}
       case pid('glass-style'): return { glassStyle: value };
             case pid('quality'): return { quality: value, fps: PRESET_FPS[value] || state.fps };
       case pid('fps'): return { fps: Number(value) };
+            case pid('pause-mode'): return { pauseWhenObscured: value };
+            case pid('glass-blur-mode'): return { glassBlurMode: value };
             default: return null;
           }
         })();
@@ -2225,6 +2338,24 @@ ${switchRow(pid('perf'), 'perf')}
         updateGlass();
         postGlass();
       });
+      if (schedulerBox) {
+        on(schedulerBox, 'change', () => {
+          void save({ perfScheduler: schedulerBox.checked });
+          postSun();
+        });
+      }
+      if (webgl2Box) {
+        on(webgl2Box, 'change', () => {
+          void save({ webgl2Adaptive: webgl2Box.checked });
+          postSun();
+        });
+      }
+      if (resizeDebounceBox) {
+        on(resizeDebounceBox, 'change', () => {
+          void save({ resizeDebounce: resizeDebounceBox.checked });
+          postSun();
+        });
+      }
       const makeDefaultBtn = el('make-default');
       const defaultOut = el('default-out');
       const refreshDefaultOut = () => {

@@ -871,6 +871,17 @@ function applySunMessage(d) {
   if (typeof d.quality === 'string') applyQuality(d.quality);
   // 1.5.27: frame rate is a budget dial of its own, on top of the resolution one
   if (Number.isFinite(Number(d.fps))) applyFpsCap(Number(d.fps));
+  // 2.0.7 performance switches (panel: "性能" group + advanced rows)
+  if (d.perfScheduler !== undefined) perfScheduler = d.perfScheduler !== false;
+  if (d.webgl2Adaptive !== undefined) webgl2Adaptive = d.webgl2Adaptive !== false;
+  if (d.resizeDebounce !== undefined) resizeDebounce = d.resizeDebounce !== false;
+  if (typeof d.pauseWhenObscured === 'string' && PAUSE_MODES.includes(d.pauseWhenObscured)) {
+    const modeChanged = pauseMode !== d.pauseWhenObscured;
+    pauseMode = d.pauseWhenObscured;
+    // the switch may flip while the window is already in the background, so the
+    // loop state has to be re-evaluated now, not on the next occlude event
+    if (modeChanged && loopStarted && renderer) applyObscuredLoop();
+  }
   const t = Number(d.t);
   if (sunMode === 'manual') {
     manualTimeOfDay = d.auto !== true;
@@ -1400,6 +1411,13 @@ if (SKIN) {
       // daylight is carried by oss-sun now; a sea tick must never move the sun
     }
     if (d && d.type === 'oss-sun') applySunMessage(d);
+    if (d && d.type === 'oss-active') {
+      // The panel watches its own window: a covered browser window never tells
+      // the iframe (it is not a tab) and never takes focus, so this is the only
+      // signal that the skin went to the background.
+      obscured = d.active === false;
+      applyObscuredLoop();
+    }
     if (d && d.type === 'oss-glass') applyGlassMessage(d);
     if (d && d.type === 'oss-boats') applyBoatsMessage(d);
     if (d && d.type === 'oss-fleet') {
@@ -1503,6 +1521,18 @@ let renderScale = 1;
 // contract §3.4: the frosted glass caps the adaptive scale, it never raises it
 let SCALE_CAP = 1;
 
+// 2.0.7 performance switches. Every one of them defaults to the shape the user
+// already knows, so a profile written by 2.0.6 keeps the 2.0.6 frame.
+let perfScheduler = true;
+let pauseMode = 'pause'; // pause | throttle | off
+let webgl2Adaptive = true;
+let resizeDebounce = true;
+let webglFallback = false;
+let webglLatchUntil = 0;
+let obscured = false;
+let nextDue = 0;
+let currentQuality = 'balanced';
+
 function applyResolutionScale(scale) {
   renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1520,6 +1550,7 @@ const QUALITY_PRESETS = {
 // 60 fps, and every frame is a full-screen fill: halving the rate halves the
 // GPU time. SKIN defaults to 30; the standalone demo keeps its old cap.
 const FPS_OPTIONS = [30, 60, 90, 120];
+const PAUSE_MODES = ['pause', 'throttle', 'off'];
 let fpsCap = SKIN ? 30 : 60;
 
 function applyFpsCap(cap) {
@@ -1541,6 +1572,7 @@ function applyFpsCap(cap) {
 function applyQuality(level) {
   const preset = QUALITY_PRESETS[level];
   if (!preset || !renderer) return;
+  currentQuality = level;
   PIXEL_RATIO_CAP = REDUCED_MOTION ? Math.min(preset.pixelRatio, 0.9) : preset.pixelRatio;
   BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
   TARGET_FPS = REDUCED_MOTION ? 18 : preset.targetFps;
@@ -1551,7 +1583,40 @@ function applyQuality(level) {
   applyFpsCap(fpsCap);
 }
 
+// 2.0.7: one place that decides whether the loop should be running. `throttle`
+// keeps the loop alive and lets the gate in animate() stretch the step to 10 fps,
+// so the sky keeps advancing and coming back does not jump; `pause` stops it
+// outright, which is what actually drops the GPU to idle when DSH is covered.
+function applyObscuredLoop() {
+  if (!loopStarted || !renderer) return;
+  // Never pause before the first frame is on screen: the loader is only taken
+  // down by a rendered frame, so a pause here would read as a broken skin.
+  if (!firstFrameShown) return;
+  if (obscured && pauseMode === 'pause') {
+    renderer.setAnimationLoop(null);
+    return;
+  }
+  if (document.hidden) return;
+  lastFrameTime = performance.now();
+  lastRenderAt = 0;
+  nextDue = 0;
+  renderer.setAnimationLoop(animate);
+}
+
 function animate(now) {
+  // 2.0.7: the whole tick is gated, not just the draw. On a 144 Hz panel the
+  // star billboards, the orbit controls and the fleet used to run 144 times a
+  // second so that 30 frames could be presented. The due time is advanced in
+  // whole frame steps (nextDue += step) instead of being snapped to `now`, and
+  // that matters: a 30 Hz budget sampled on a 144 Hz vsync grid lands on 6.9
+  // ticks, and resetting the anchor to `now` turned that into an alternating
+  // 2/1 cadence. A long stall resyncs instead of trying to catch up in a burst.
+  if (perfScheduler) {
+    const step = obscured && pauseMode === 'throttle' ? Math.max(FRAME_MS, 100) : FRAME_MS;
+    if (now + 0.5 < nextDue) return;
+    if (now - nextDue > step * 4) nextDue = now;
+    nextDue += step;
+  }
   // high-resolution timestamp -> delta, clamped so hitches never cause jumps
   const dt = Math.min((now - lastFrameTime) / 1000, 0.1);
   lastFrameTime = now;
@@ -1588,8 +1653,11 @@ function animate(now) {
     }
   }
 
-  // frame cap: skip work when the display fires faster than 60 Hz
-  if (now - lastRenderAt < FRAME_MS - 0.5) return;
+  // frame cap: with the smart scheduler the work above is already gated, so
+  // only the legacy path still needs the mid-tick early return
+  if (!perfScheduler) {
+    if (now - lastRenderAt < FRAME_MS - 0.5) return;
+  }
   lastRenderAt = now;
 
   postProcessing.render();
@@ -1632,7 +1700,15 @@ function animate(now) {
         renderScale = Math.max(MIN_SCALE, +(renderScale * 0.97).toFixed(3));
         applyResolutionScale(renderScale);
         adaptHold = 4;
-      } else if (fpsNow > TARGET_FPS + 6 && renderScale < SCALE_CAP) {
+        // 2.0.7: a WebGL2 post chain is dearer than the WebGPU one, so once the
+        // governor has walked down there it is not allowed to walk straight
+        // back up and oscillate. The latch only gates the climb, never the drop.
+        if (webglFallback) webglLatchUntil = now + 30000;
+      } else if (
+        fpsNow > TARGET_FPS + 6
+        && renderScale < SCALE_CAP
+        && (!webglFallback || now > webglLatchUntil)
+      ) {
         renderScale = Math.min(SCALE_CAP, +(renderScale * 1.015).toFixed(3));
         applyResolutionScale(renderScale);
         adaptHold = 4;
@@ -1853,10 +1929,30 @@ async function boot() {
     }
 
     // --- lifecycle: resize ---------------------------------------------------
-    window.addEventListener('resize', () => {
+    const rebuildForResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       applyResolutionScale(renderScale);
+    };
+    // 2.0.7: dragging a window edge fires resize every pixel, and every one of
+    // them reallocated the render targets. The old canvas is stretched over the
+    // viewport while the drag is in flight (no gap, no black band) and the
+    // targets are rebuilt once, 150 ms after the drag settles.
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+      if (!resizeDebounce) {
+        rebuildForResize();
+        return;
+      }
+      if (!resizeTimer && renderer && renderer.domElement && renderer.domElement.style) {
+        renderer.domElement.style.width = '100%';
+        renderer.domElement.style.height = '100%';
+      }
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = 0;
+        rebuildForResize();
+      }, 150);
     });
 
     // --- lifecycle: pause when the tab is hidden -------------------------------
@@ -1864,11 +1960,11 @@ async function boot() {
       if (!loopStarted) return;
       if (document.hidden) {
         renderer.setAnimationLoop(null);
-      } else {
-        lastFrameTime = performance.now();
-        lastRenderAt = 0;
-        renderer.setAnimationLoop(animate);
+        return;
       }
+      // a minimized window is hidden first and covered second; coming back
+      // re-runs the same decision the panel's activity signal uses
+      applyObscuredLoop();
     });
 
     // --- initialize the GPU and start rendering --------------------------------
@@ -1877,13 +1973,23 @@ async function boot() {
     if (renderer.backend.isWebGPUBackend !== true) {
       // WebGPU 不可用时 three 自动回退 WebGL2 backend：两种 backend 都允许渲染
       // （2026-08-23 webgui 冒烟测试：用户浏览器无 WebGPU → 纯 WebGPU 检查导致初始化失败）。
-      PIXEL_RATIO_CAP = 1.0;
-      BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
-      FRAME_RATE_CAP = 30;
-      FRAME_MS = 1000 / FRAME_RATE_CAP;
-      TARGET_FPS = 28;
-      renderScale = 0.6;
-      applyResolutionScale(renderScale);
+      webglFallback = true;
+      if (webgl2Adaptive) {
+        // 2.0.7: no hardcoded 30 fps / 0.6 any more. The panel's tier is applied
+        // as-is and the governor walks it down if WebGL2 cannot hold it; the
+        // 30 s latch in the governor stops it from climbing back immediately.
+        webglLatchUntil = performance.now() + 30000;
+        if (QUALITY_PRESETS[currentQuality]) applyQuality(currentQuality);
+        else applyQuality('balanced');
+      } else {
+        PIXEL_RATIO_CAP = 1.0;
+        BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
+        FRAME_RATE_CAP = 30;
+        FRAME_MS = 1000 / FRAME_RATE_CAP;
+        TARGET_FPS = 28;
+        renderScale = 0.6;
+        applyResolutionScale(renderScale);
+      }
     }
 
     loopStarted = true;
