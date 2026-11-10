@@ -1533,6 +1533,17 @@ let obscured = false;
 let nextDue = 0;
 let currentQuality = 'balanced';
 
+// 2.0.7: under a frame cap the meter can never climb above the cap, so "did the
+// GPU have headroom?" cannot be read from fps alone. The governor therefore
+// spends one window at a higher scale and watches whether that window costs
+// frames; a failed probe walks the scale back and doubles the wait before the
+// next attempt, so a machine that is genuinely at its limit is not prodded.
+let probeState = 0; // 0 = idle, 1 = one window raised, waiting for the verdict
+let probeBackoff = 4; // windows to wait after a failed probe (4 → 64 s)
+let probeBaseScale = 1;
+const PROBE_STEP = 1.03;
+const PROBE_BACKOFF_MAX = 32;
+
 function applyResolutionScale(scale) {
   renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1573,6 +1584,9 @@ function applyQuality(level) {
   const preset = QUALITY_PRESETS[level];
   if (!preset || !renderer) return;
   currentQuality = level;
+  // a quality switch re-clamps the scale: any probe in flight is meaningless now
+  probeState = 0;
+  probeBackoff = 4;
   PIXEL_RATIO_CAP = REDUCED_MOTION ? Math.min(preset.pixelRatio, 0.9) : preset.pixelRatio;
   BASE_PIXEL_RATIO = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
   TARGET_FPS = REDUCED_MOTION ? 18 : preset.targetFps;
@@ -1700,6 +1714,10 @@ function animate(now) {
         renderScale = Math.max(MIN_SCALE, +(renderScale * 0.97).toFixed(3));
         applyResolutionScale(renderScale);
         adaptHold = 4;
+        // a real drop cancels any running probe and resets the backoff: next
+        // time the frame is healthy we start probing from the near end again
+        probeState = 0;
+        probeBackoff = 4;
         // 2.0.7: a WebGL2 post chain is dearer than the WebGPU one, so once the
         // governor has walked down there it is not allowed to walk straight
         // back up and oscillate. The latch only gates the climb, never the drop.
@@ -1709,9 +1727,38 @@ function animate(now) {
         && renderScale < SCALE_CAP
         && (!webglFallback || now > webglLatchUntil)
       ) {
+        // uncapped headroom: the meter itself proved there is room
         renderScale = Math.min(SCALE_CAP, +(renderScale * 1.015).toFixed(3));
         applyResolutionScale(renderScale);
         adaptHold = 4;
+        probeState = 0;
+        probeBackoff = 4;
+      } else if (probeState === 1) {
+        // verdict on the probe we started last window: holding the target under
+        // a cap means the extra pixels were free, so the step is kept
+        if (fpsNow >= TARGET_FPS - 4) {
+          probeState = 0;
+          probeBackoff = 4;
+          adaptHold = 2;
+        } else {
+          renderScale = probeBaseScale;
+          applyResolutionScale(renderScale);
+          probeState = 0;
+          probeBackoff = Math.min(PROBE_BACKOFF_MAX, probeBackoff * 2);
+          adaptHold = probeBackoff;
+        }
+      } else if (
+        fpsNow >= TARGET_FPS - 2
+        && renderScale < SCALE_CAP
+        && (!webglFallback || now > webglLatchUntil)
+      ) {
+        probeBaseScale = renderScale;
+        renderScale = Math.min(SCALE_CAP, +(renderScale * PROBE_STEP).toFixed(3));
+        applyResolutionScale(renderScale);
+        probeState = 1;
+        adaptHold = 1; // judge it in the very next window
+      } else {
+        adaptHold = 1; // between the dead bands: look again in two seconds
       }
     }
   }
