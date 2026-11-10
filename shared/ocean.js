@@ -1538,11 +1538,17 @@ let currentQuality = 'balanced';
 // spends one window at a higher scale and watches whether that window costs
 // frames; a failed probe walks the scale back and doubles the wait before the
 // next attempt, so a machine that is genuinely at its limit is not prodded.
+// Every verdict reallocates the drawing buffer (setPixelRatio + setSize), which
+// reads as a one-frame blink on the water. That blink is why a proven step is
+// followed by a long hold: the governor climbs in a few visible steps and then
+// stops, instead of pulsing the sharpness every couple of seconds.
 let probeState = 0; // 0 = idle, 1 = one window raised, waiting for the verdict
 let probeBackoff = 4; // windows to wait after a failed probe (4 → 64 s)
 let probeBaseScale = 1;
 const PROBE_STEP = 1.03;
 const PROBE_BACKOFF_MAX = 32;
+const PROBE_HOLD = 12; // 24 s of quiet after a step is kept
+const PROBE_CAP_EPS = 0.015; // do not hunt the last 1.5 % of the cap
 
 function applyResolutionScale(scale) {
   renderer.setPixelRatio(BASE_PIXEL_RATIO * scale);
@@ -1739,7 +1745,7 @@ function animate(now) {
         if (fpsNow >= TARGET_FPS - 4) {
           probeState = 0;
           probeBackoff = 4;
-          adaptHold = 2;
+          adaptHold = PROBE_HOLD;
         } else {
           renderScale = probeBaseScale;
           applyResolutionScale(renderScale);
@@ -1749,7 +1755,7 @@ function animate(now) {
         }
       } else if (
         fpsNow >= TARGET_FPS - 2
-        && renderScale < SCALE_CAP
+        && renderScale < SCALE_CAP - PROBE_CAP_EPS
         && (!webglFallback || now > webglLatchUntil)
       ) {
         probeBaseScale = renderScale;
