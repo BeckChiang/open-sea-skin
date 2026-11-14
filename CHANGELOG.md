@@ -6,6 +6,12 @@
 - 星空淡出窗口从（+6° → −2°）提前到（+1° → −6°）：星座线与银河带的加色白线会在天色变亮之前退场，不再和亮天空、光晕叠在同一个窗口里。
 - 这两处正是「负载突然变高、掉帧」的重叠区：整片天空进 bloom + 全量星空仍在绘制，集中在日出后约半小时内。
 
+## Fixed — 船队的子智能体列表一直为空
+
+- DSH v0.2.1-rc.2 把 `ctx.subagents.listChildren(parentSessionId, signal?)` 从 subagent 服务里移除了（升级指南 *Subagent service method removal*）。船队接口原来靠它枚举子会话，`typeof` 守卫一失败就整段跳过，于是无论会话里有多少子智能体，海面永远只有那条留守船，面板也一直显示「本会话无子智能体」。
+- 现在优先读父会话的 `subagentCatalog` 投影（`sessionQuery.observeSession(sessionId, { projectionMode: 'all' })`，条目形如 `{ id, createdAt, mode, name?, label? }`），读不到再回退到旧服务方法，两边都兼容。
+- `tests/fleet.test.mjs` 的测试替身改成新 Host 形态（`subagents` 服务不再有 `listChildren`），并补了「旧 Host 仍可用」一条，锁住这条链。
+
 # 2.0.8
 
 ## Changed — 设置按钮改挂窗口右下角

@@ -85,6 +85,36 @@ async function childRunning(ctx, childId, signal) {
   }
 }
 
+// The direct-child roster moved. Hosts before v0.2.1-rc.2 list it through
+// `ctx.subagents.listChildren(parentSessionId)`; that method is gone from the
+// subagent service now, and the catalog lives in the parent's `subagentCatalog`
+// projection instead (`SubagentCatalogEntry = { id, createdAt, mode, name?, label? }`).
+// Read the live projection first and keep the removed call only as a fallback,
+// because a host that no longer exports it would otherwise report zero boats on
+// a session that does have children.
+async function listChildren(ctx, sessionId, signal) {
+  const query = readService(ctx, 'sessionQuery')
+  if (query && typeof query.observeSession === 'function') {
+    let observation
+    try {
+      observation = await query.observeSession(sessionId, { signal, projectionMode: 'all' })
+      const catalog = observation?.projections?.values?.subagentCatalog
+      if (Array.isArray(catalog)) return catalog
+    } catch {
+      // fall through to the legacy service: a projection that refuses to open
+      // must not be the reason the fleet goes blank
+    } finally {
+      disposeObservation(observation)
+    }
+  }
+  const subagents = readService(ctx, 'subagents')
+  if (subagents && typeof subagents.listChildren === 'function') {
+    const listed = await subagents.listChildren(sessionId, signal)
+    if (Array.isArray(listed)) return listed
+  }
+  return []
+}
+
 function describeShip(entry, fallbackId) {
   const id = entry?.sessionId ?? entry?.id ?? entry?.childId ?? fallbackId ?? null
   const raw = entry?.status ?? entry?.state ?? entry?.activity ?? ''
@@ -120,9 +150,9 @@ async function serveFleet(ctx, req, res) {
       agentTeams: Boolean(teams),
     }
 
-    if (sessionId && subagents && typeof subagents.listChildren === 'function') {
+    if (sessionId) {
       const signal = AbortSignal.timeout(2500)
-      const listed = await subagents.listChildren(sessionId, signal)
+      const listed = await listChildren(ctx, sessionId, signal)
       const entries = Array.isArray(listed) ? listed.slice(0, 40) : []
       payload.children = entries.map((entry, index) => describeShip(entry, `child-${index}`))
       payload.childStates = await Promise.all(

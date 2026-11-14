@@ -5,17 +5,19 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { apply } from '../plugin/index.js'
 
-function harness({ children = [], timings = {}, members = [] } = {}) {
+function harness({ children = [], timings = {}, members = [], legacy = false } = {}) {
   let spec
   const ctx = {
     effect: (fn) => fn(),
     webServer: { register: (next) => { spec = next; return () => {} } },
     get: (key) => {
-      if (key === 'subagents') return { listChildren: async () => children }
+      // Current hosts keep the roster in the parent's `subagentCatalog`
+      // projection; `subagents.listChildren` was removed from the service.
+      if (key === 'subagents') return legacy ? { listChildren: async () => children } : {}
       if (key === 'sessionQuery') {
         return {
           observeSession: async (id) => ({
-            projections: { values: { subagentTiming: timings[id] } },
+            projections: { values: { subagentTiming: timings[id], subagentCatalog: children } },
             [Symbol.dispose]() {},
           }),
         }
@@ -97,4 +99,32 @@ test('the roster reports which services the profile mounts', async () => {
   assert.deepEqual(Object.keys(payload.services).sort(), ['agentTeams', 'agents', 'sessionQuery', 'subagents'])
   assert.equal(payload.services.sessionQuery, true)
   assert.equal(payload.running, 0)
+})
+
+test('the catalog projection is the roster on a host that dropped listChildren', async () => {
+  // v0.2.1-rc.2 removed `subagents.listChildren`; a child that is still open
+  // must keep its boat, otherwise the count silently sticks at zero.
+  const spec = harness({
+    children: [{ id: 'child-live', name: 'worker', mode: 'continuable' }, { id: 'child-done' }],
+    timings: {
+      'child-live': { settledMs: 800, active: { since: 1, through: 2 } },
+      'child-done': { settledMs: 700, lastTurnCompleted: true },
+    },
+  })
+  const { payload } = await readFleet(spec, 'session-parent-f')
+  assert.equal(payload.services.subagents, true)
+  assert.deepEqual(payload.children.map((child) => child.id), ['child-live', 'child-done'])
+  assert.equal(payload.running, 1)
+  assert.deepEqual(payload.ships.map((ship) => ship.id), ['child-live'])
+})
+
+test('a host that still exports listChildren keeps working', async () => {
+  const spec = harness({
+    legacy: true,
+    children: [{ id: 'child-legacy' }],
+    timings: { 'child-legacy': { settledMs: 300, active: { since: 5, through: 9 } } },
+  })
+  const { payload } = await readFleet(spec, 'session-parent-g')
+  assert.equal(payload.running, 1)
+  assert.deepEqual(payload.ships.map((ship) => ship.id), ['child-legacy'])
 })
