@@ -562,7 +562,7 @@ window.__ModuleLoader__.load({ id: "open-sea-skin-dsh", factory: (require) => {
   });
 
   const WAVE_ICON = `
-<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M1.5 8.5c1.2-1.7 2.4-1.7 3.6 0s2.4 1.7 3.6 0 1.9-1.2 3-0.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
   <path d="M1.5 12c1.2-1.4 2.4-1.4 3.6 0s2.4 1.4 3.6 0 1.9-1 3-.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.55"/>
 </svg>`;
@@ -887,9 +887,9 @@ ${blurCss(state)}`;
     const paneAlpha = Math.max(0.18, Math.min(1, state.glass / 100)).toFixed(3);
     return `
 #${IDS.button} {
-  position: fixed; z-index: 6000; width: 34px; height: 34px;
+  position: fixed; z-index: 6000; right: 12px; bottom: 4px; width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 10px; border: 1px solid rgba(255,255,255,.22);
+  border-radius: 7px; border: 1px solid rgba(255,255,255,.22);
   background: rgba(12,16,22,${paneAlpha}); backdrop-filter: blur(${panePx}px) saturate(130%);
   color: #c5dce3; cursor: pointer; padding: 0;
   transition: color .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .1s ease;
@@ -1031,8 +1031,6 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
     let ownsSurface = false;
     let panelOpen = false;
     let previousFocus = null;
-    let placementObserver = null;
-    let placementFrame = 0;
     const surfaceCleanups = [];
     const controllerCleanups = [];
 
@@ -1691,31 +1689,17 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
       waveTimer = 0;
     };
 
-    const placeButton = () => {
+    // The button lives in the window's bottom-right corner (CSS owns the spot),
+    // so it no longer has to chase the sidebar settings trigger or be re-placed
+    // on every DOM mutation. The panel keeps hanging off the button: right edges
+    // aligned, sitting just above it.
+    const anchorPanel = () => {
       const button = document.getElementById(IDS.button);
-      if (!(button instanceof HTMLElement)) return;
-      const selectors = [
-        '[data-slot="sidebar.settings"] button',
-        '[data-testid="settings-trigger"]',
-        '.VOzbGW_trigger',
-      ];
-      const trigger = selectors.map((selector) => document.querySelector(selector))
-        .find((candidate) => candidate instanceof HTMLElement && candidate.getBoundingClientRect().width > 0);
-      if (trigger instanceof HTMLElement) {
-        const rect = trigger.getBoundingClientRect();
-        button.style.left = `${Math.round(rect.right + 8)}px`;
-        button.style.top = `${Math.round(rect.top + rect.height / 2 - 17)}px`;
-        button.style.bottom = 'auto';
-      } else {
-        button.style.left = '16px';
-        button.style.bottom = '16px';
-        button.style.top = 'auto';
-      }
-    };
-
-    const schedulePlace = () => {
-      cancelAnimationFrame(placementFrame);
-      placementFrame = requestAnimationFrame(placeButton);
+      const panel = document.getElementById(IDS.panel);
+      if (!(button instanceof HTMLElement) || !(panel instanceof HTMLElement)) return;
+      const rect = button.getBoundingClientRect();
+      panel.style.left = `${Math.min(Math.max(12, rect.right - panel.offsetWidth), window.innerWidth - panel.offsetWidth - 12)}px`;
+      panel.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 8)}px`;
     };
 
     const setPanelOpen = (open) => {
@@ -1737,9 +1721,7 @@ body:not([data-ds-dark-theme]) #${IDS.button}.active { color:#0a4f4d; border-col
         const filter = panel.querySelector('.oss-search input');
         if (filter instanceof HTMLInputElement) filter.value = '';
         previousFocus = document.activeElement;
-        const rect = button.getBoundingClientRect();
-        panel.style.left = `${Math.min(Math.max(12, rect.left - panel.offsetWidth + 34), window.innerWidth - panel.offsetWidth - 12)}px`;
-        panel.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 10)}px`;
+        anchorPanel();
         panel.querySelector('input')?.focus();
       } else if (previousFocus instanceof HTMLElement) {
         previousFocus.focus();
@@ -2436,11 +2418,7 @@ ${switchRow(pid('resize-debounce'), 'resizeDebounce')}
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       });
-      on(window, 'resize', () => { if (!panelOpen) schedulePlace(); });
-
-      placementObserver = new MutationObserver(schedulePlace);
-      placementObserver.observe(host, { childList: true, subtree: true });
-      schedulePlace();
+      on(window, 'resize', () => { if (panelOpen) anchorPanel(); });
 
       // Never located before: try once, quietly. Declining the browser prompt is
       // not an error — the field stays empty and the sky keeps its fallback city.
@@ -2453,9 +2431,6 @@ ${switchRow(pid('resize-debounce'), 'resizeDebounce')}
       stopFleetEngine();
       if (glassTimer) window.clearInterval(glassTimer);
       glassTimer = 0;
-      placementObserver?.disconnect();
-      placementObserver = null;
-      cancelAnimationFrame(placementFrame);
       while (surfaceCleanups.length > 0) surfaceCleanups.pop()();
       if (ownsSurface) {
         document.getElementById(IDS.frame)?.remove();
