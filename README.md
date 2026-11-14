@@ -1,8 +1,8 @@
-# Open Sea Skin · Lab（2.0.7）
+# Open Sea Skin · Lab（2.1.0）
 
 **实时海洋皮肤** —— 给 DeepSeek Harness 桌面版 / Web 用的一层会呼吸的海面：浪跟着你的会话负载起伏，天光按真实星历走，星空是真的星表，船是你正在跑的子智能体。
 
-![version](https://img.shields.io/badge/version-2.0.7-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
+![version](https://img.shields.io/badge/version-2.1.0-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
 ---
 
@@ -10,12 +10,12 @@
 
 本项目是基于 **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)**（作者 **d-dev0101**，MIT 许可）**1.2.7** 版本**重新构建的 Lab 分支（fork）**，**不是上游官方版本**，也不由上游维护。
 
-它沿用了上游的渲染底座（three.js WebGPU + TSL 的海面、天空、云与毛玻璃思路），在底座之上重做了海浪驱动、天文日照、星空、船队与整块设置面板，演进到 **2.0.7**。原生代码、着色器、面板与测试都由本仓库维护，出现的问题请提到**本仓库**而不是上游。
+它沿用了上游的渲染底座（three.js WebGPU + TSL 的海面、天空、云与毛玻璃思路），在底座之上重做了海浪驱动、天文日照、星空、船队与整块设置面板，演进到 **2.1.0**。原生代码、着色器、面板与测试都由本仓库维护，出现的问题请提到**本仓库**而不是上游。
 
 - 上游项目：[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · 分叉起点：`v1.2.7`
 - 上游许可：MIT，全文见 [`LICENSE`](LICENSE)；必须保留的第三方署名见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - 为什么分叉、改了什么、怎么回退上游：[`docs/FORK.md`](docs/FORK.md)
-- 当前版本：**2.0.7**（tag `v2.0.7`）。2.0.0 是冻结基线，tag 仍可检出源码；2.0.0–2.0.3 的发布包与 Release 已下架，只保留最新一版的可安装包
+- 当前版本：**2.1.0**（tag `v2.1.0`）。2.0.0 是冻结基线，tag 仍可检出源码；2.0.0–2.0.3 的发布包与 Release 已下架，只保留最新一版的可安装包
 
 ---
 
@@ -38,7 +38,24 @@
 - 画质：上游固定渲染比例 → 本分支三档画质 × 四档帧率上限，且按帧耗时自适应缩放
 - 玻璃：只作用于**左右侧栏**，中间会话区不参与（不做估算式覆盖、不画分割线、不压暗界面）
 
-> 完整逐项说明与 113 条测试覆盖见 [`README.zh.md`](README.zh.md)。
+> 完整逐项说明与 120 条测试覆盖见 [`README.zh.md`](README.zh.md)。
+
+---
+
+## 2.1.0 有什么变化
+
+修的是三个「看得见的错」，不是新功能：
+
+| 问题 | 表现 | 修法 |
+|---|---|---|
+| 光晕把亮天空洗白 | 白天/暮光整片天空发白，中间浮出一层 4×4 的方块网格，切换时段掉帧 | 泛光按太阳高程门控（`uGlowGate`）：−14° 以下满强度、−4° 以上归零，只在天真正暗下来时当镜头眩光用 |
+| 星座线退得太晚 | 日出前天空已经亮到 140+，星座线与银河白线还挂在上面 | 星空淡出窗口从（+6°→−2°）提前到（+1°→−6°），在天亮之前退场 |
+| 船队一直是零 | 不管会话里有多少子智能体，海面只有那条留守船，面板写「本会话无子智能体」 | DSH 新版移除了 `ctx.subagents.listChildren`，改为读父会话的 `subagentCatalog` 投影（旧接口保留为回退） |
+
+另外从 2.0.8 起，设置按钮改挂窗口右下角（`right: 12px / bottom: 4px`，26×26），并去掉了监听整棵 DOM 的重定位逻辑。
+
+> 2.0.9 没有单独发布，这三条修复合并在 **2.1.0** 里。
+
 
 ---
 
@@ -81,8 +98,8 @@ dsh plugin add github:BeckChiang/open-sea-skin
 **确认生效**：控制台第一行会出现
 
 ```text
-[open-sea-skin] client lab-2.0.7
-[open-sea-skin] ocean lab-2.0.7
+[open-sea-skin] client lab-2.1.0
+[open-sea-skin] ocean lab-2.1.0
 ```
 
 ---
@@ -127,7 +144,7 @@ node scripts/build-runtime.mjs     # shared/ + plugin/ → native-dist/
 node tests/structure.test.mjs      # 单文件跑（node --test 整目录在本机会 EPERM）
 ```
 
-六个 `node:test` 文件、**113 条断言**：结构 62 / 船队 5 / 星表 6 / 天色 14 / 星历 14 / 坐标 12。
+六个 `node:test` 文件、**120 条断言**：结构 67 / 船队 7 / 星表 6 / 天色 14 / 星历 14 / 坐标 12。
 
 星表是静态派生文件，不联网：`node scripts/gen-stars-catalog.mjs` 从 `d3-celestial` 的 HYG 重新生成，再跑 `build-runtime.mjs`。
 

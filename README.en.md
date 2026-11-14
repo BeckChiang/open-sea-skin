@@ -1,8 +1,8 @@
-# Open Sea Skin · Lab (2.0.7)
+# Open Sea Skin · Lab (2.1.0)
 
 **A living ocean skin** for DeepSeek Harness Desktop and Web: waves that follow your session load, a sky driven by real ephemeris data, a star field built from a real catalogue, and boats that are your running subagents.
 
-![version](https://img.shields.io/badge/version-2.0.7-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
+![version](https://img.shields.io/badge/version-2.1.0-138b8b) ![license](https://img.shields.io/badge/license-MIT-138b8b) ![upstream](https://img.shields.io/badge/upstream-d--dev0101%2Fopen--sea--skin-6c7f8a)
 
 ---
 
@@ -10,12 +10,12 @@
 
 This project is a **rebuilt fork (Lab branch)** of **[d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin)** (author **d-dev0101**, MIT licence) at version **1.2.7**. It is **not** an official upstream release and is not maintained by upstream.
 
-It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.0.7**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
+It keeps upstream's rendering foundation (three.js WebGPU + TSL ocean, sky, clouds, glass approach) and rebuilds the wave driver, astronomical sky, star field, boat fleet and the whole settings panel on top of it, up to **2.1.0**. All current code, shaders, panel and tests are maintained here — please file issues against **this** repository, not upstream.
 
 - Upstream: [d-dev0101/open-sea-skin](https://github.com/d-dev0101/open-sea-skin) · fork point `v1.2.7`
 - Upstream licence: MIT, full text in [`LICENSE`](LICENSE); required third-party notices in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - Why the fork exists and how to fall back: [`docs/FORK.md`](docs/FORK.md)
-- Current version: **2.0.7** (tag `v2.0.7`). 2.0.0 stays the frozen baseline and its tag still resolves to the source; the 2.0.0–2.0.3 releases are off the shelf, so only the newest installable package is published
+- Current version: **2.1.0** (tag `v2.1.0`). 2.0.0 stays the frozen baseline and its tag still resolves to the source; the 2.0.0–2.0.3 releases are off the shelf, so only the newest installable package is published
 
 ---
 
@@ -36,7 +36,24 @@ Differences worth naming (same integrated-GPU machine):
 - Quality: fixed render ratio upstream → three quality tiers × four frame caps, plus adaptive scaling by real frame cost
 - Glass: only the **two side rails**; the conversation column is never estimated, never painted over, and no dividers or dimming are drawn
 
-> Per-feature detail and the 113 assertions live in [`README.zh.md`](README.zh.md) (Chinese).
+> Per-feature detail and the 120 assertions live in [`README.zh.md`](README.zh.md) (Chinese).
+
+---
+
+## What changed in 2.1.0
+
+Three visible defects, no new features:
+
+| Problem | Symptom | Fix |
+|---|---|---|
+| Bloom washed out lit skies | Day and twilight skies turned milky white with a 4×4 tile grid floating mid-frame, and the switch window dropped frames | Bloom is now gated by solar elevation (`uGlowGate`): full strength below −14°, zero above −4°, so it only acts as a lens flare once the sky is genuinely dark |
+| Constellations lingered too long | By sunrise the sky was already at 140+ brightness while constellation lines and the Milky Way stayed painted on it | The star fade window moved from (+6° → −2°) to (+1° → −6°), so the white additive lines leave before the sky lights up |
+| The fleet was always empty | However many subagents a session had, the sea showed only the lone idle boat and the panel said “no subagent in this session” | Current DSH removed `ctx.subagents.listChildren`; the roster is read from the parent session's `subagentCatalog` projection now, with the old call kept as a fallback |
+
+Since 2.0.8 the settings button also sits in the window's bottom-right corner (`right: 12px / bottom: 4px`, 26×26), and the DOM-wide reposition observer is gone.
+
+> 2.0.9 was never published on its own; these fixes ship together in **2.1.0**.
+
 
 ---
 
@@ -77,8 +94,8 @@ dsh plugin add github:BeckChiang/open-sea-skin
 **Verify**: the console should print
 
 ```text
-[open-sea-skin] client lab-2.0.7
-[open-sea-skin] ocean lab-2.0.7
+[open-sea-skin] client lab-2.1.0
+[open-sea-skin] ocean lab-2.1.0
 ```
 
 ---
@@ -123,7 +140,7 @@ node scripts/build-runtime.mjs     # shared/ + plugin/ → native-dist/
 node tests/structure.test.mjs      # run files individually (node --test on the directory hits EPERM here)
 ```
 
-Six `node:test` files, **113 assertions**: structure 62 / fleet 5 / stars 6 / sky 14 / solar 14 / sky-astro 12.
+Six `node:test` files, **120 assertions**: structure 67 / fleet 7 / stars 6 / sky 14 / solar 14 / sky-astro 12.
 
 The star catalogue is a static derived file and never fetches at runtime: `node scripts/gen-stars-catalog.mjs` regenerates it from `d3-celestial`'s HYG, then rerun `build-runtime.mjs`.
 

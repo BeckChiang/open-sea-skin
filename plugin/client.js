@@ -2674,7 +2674,7 @@ ${switchRow(pid('resize-debounce'), 'resizeDebounce')}
   // Stamped into both halves so a report can name which copy the browser is
   // actually running: the panel and the frame are loaded by different paths and
   // a stale one looks exactly like a bug.
-  const SKIN_BUILD = 'lab-2.0.9';
+  const SKIN_BUILD = 'lab-2.1.0';
 
   exports.name = 'open-sea-skin-client';
   exports.inject = ['slots'];
