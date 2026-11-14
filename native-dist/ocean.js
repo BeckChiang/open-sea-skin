@@ -241,6 +241,12 @@ const uGlassStyle = uniform(0);
 // 1.5.26: the soft glow that replaced the mip-chain bloom
 const uGlowThreshold = uniform(0.62);
 const uGlowStrength = uniform(0.28);
+// 2.0.9: the glow is a night-time glare, not a wash. Above civil twilight the
+// sky is already brighter than the brightpass threshold, so the blurred copy
+// added back over a lit sky only read as a white plate (and its quarter-res
+// upsampling as a 4x4 grid). The gate rides the sun elevation: full glare by
+// deep twilight, nothing from civil dawn on.
+const uGlowGate = uniform(1);
 
 // ----------------------------------------------------------------------------
 // SECTION 2 · GERSTNER SWELL (identical to the standalone site)
@@ -686,6 +692,9 @@ function applyElevation(elevationDeg, azimuthDeg, viewElDeg, viewAzDeg) {
   uSunColor.value.set(sky.sun[0], sky.sun[1], sky.sun[2]);
   uSkyLight.value = sky.skyLight;
   uNightF.value = 1 - sky.horizonF;
+  // glow gate: 1 by -14 deg (deep twilight and night), 0 from -4 deg on, so the
+  // bloom never lights up a sky that no longer needs it
+  uGlowGate.value = Math.max(0, Math.min(1, (-4 - elevationDeg) / 10));
 
   // 1.5.23 twilight axes: the warm band, the twilight glow, the belt of Venus,
   // the earth shadow, and the airglow all come from the same elevation curve.
@@ -1885,7 +1894,7 @@ async function boot() {
             skyLight: uSkyLight, nightF: uNightF, tone: uSkyTone, stars: uStars, airglow: uAirglow,
             warm: uTwilightWarm, belt: uBeltOfVenus, shadow: uEarthShadow, cloudOpacity: uCloudOpacity,
             fold: uSkyFold, milky: uMilky, moonVisible: uMoonVisible,
-            constellation: uConstellation, cross: uCrossGlow, starSize: uStarSize,
+            constellation: uConstellation, cross: uCrossGlow, starSize: uStarSize, glowGate: uGlowGate,
           },
         };
       }
@@ -1910,7 +1919,7 @@ async function boot() {
       console.warn('[OPEN SEA SKIN] soft glow disabled:', err);
     }
     glowNodeRef = glowNode;
-    const sceneGlow = glowNode ? glowNode.getTextureNode().sample(uv()).rgb.mul(uGlowStrength) : vec3(0);
+    const sceneGlow = glowNode ? glowNode.getTextureNode().sample(uv()).rgb.mul(uGlowStrength).mul(uGlowGate) : vec3(0);
     if (SKIN) {
       // contract §3.5: any failure here must keep the clear image on screen
       try {
@@ -2959,7 +2968,11 @@ function updateStarDome(nowRaw, dt) {
   // gone by -2 deg, so dusk never pops. "Keep stars in daylight" pins the fade
   // at 1 for people who want to read the chart at noon (and pay the fill for it).
   const daylight = uStarDaylight.value > 0.5;
-  const targetFade = daylight ? 1 : smoothstepRange(6, -2, sunElevationDeg);
+  // 2.0.9: the old window (+6 -> -2) kept the dome at full brightness until the
+  // sun was 2 deg under, but the palette is already lit at -5, so the additive
+  // star and constellation lines washed over a bright sky exactly while the glow
+  // was ramping. The dome is now only out below -10 and is gone by -6.
+  const targetFade = daylight ? 1 : smoothstepRange(-6, -10, sunElevationDeg);
   layer.starFade += (targetFade - layer.starFade) * Math.min(1, Math.max(0.02, dt * 1.6));
   // a bright moon still washes the faint end out, as it does in life
   // in daylight mode the sun is not allowed to veto the layer, or the switch

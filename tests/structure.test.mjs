@@ -391,10 +391,20 @@ test('the sky follows the sun instead of a switch', () => {
   // Dusk used to pop: the layer went from full to nothing on one frame. The fade
   // is now a function of solar altitude, and a fully faded dome is dropped from
   // the draw list so the courtesy costs nothing.
-  assert.ok(source.includes('const targetFade = daylight ? 1 : smoothstepRange(6, -2, sunElevationDeg);'), 'the fade is a smoothstep of the sun height')
+  // 2.0.9: the window ends at -6 deg instead of -2, because the palette is
+  // already bright by -6 and the dome's additive lines were washing over it.
+  assert.ok(source.includes('const targetFade = daylight ? 1 : smoothstepRange(-6, -10, sunElevationDeg);'), 'the fade is a smoothstep of the sun height, closing before the sky lights up')
   assert.ok(source.includes('layer.stars.visible = shown;'), 'a faded dome is skipped, not drawn at zero alpha')
   assert.ok(source.includes('const skyVeto = daylight ? 1 :'), 'daylight mode is not vetoed by the night factor')
   assert.ok(source.includes('uMilkyVisible.value = shown ? 0.55 + 0.45 * smoothstepRange(-10, 14, galacticCentreAlt) : 0;'), 'the band follows the galactic centre')
+})
+
+test('the glow is gated by the sun so it cannot wash a lit sky', () => {
+  // 2.0.9: a whole lit sky passes the brightpass, so the blurred copy added back
+  // on top read as a white plate with a 4x4 grid. The gate takes it away by day.
+  assert.ok(source.includes('const uGlowGate = uniform(1);'), 'the gate is a uniform')
+  assert.ok(source.includes('.mul(uGlowStrength).mul(uGlowGate)'), 'the composite respects the gate')
+  assert.ok(source.includes('uGlowGate.value = Math.max(0, Math.min(1, (-4 - elevationDeg) / 10));'), 'the gate rides the sun elevation')
 })
 
 test('the constellation lines breathe one constellation at a time', () => {
